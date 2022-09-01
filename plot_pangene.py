@@ -14,11 +14,6 @@ import dash
 import time
 from Bio import Phylo
 from scipy import signal
-#from Bio import Phylo
-#import dash_cytoscape
-#import itertools
-#import dash_core_components as dcc
-#import dash_html_components as html
 from dash import Dash, dcc, html, Input, Output, ctx
 import math
 #plt.rcParams["figure.figsize"] = (40,40)
@@ -29,22 +24,13 @@ sns.set_palette('viridis', 9)
 
 #/Users/katiejenike/Desktop/Lab_notes/PanSol/PANGEN/DEBUG/QC_PLOTS/SQUI2_PANGEN_PLOTS
 #python plot_chr_interactive.py result_SQUI2.chr1.txt SQUI2
-#Adding another line 
+
 in_file=sys.argv[1]
 sample = sys.argv[2]
-count_file = "SQUI2.chr1.txt"
-rep_file = "Solqui2.repeats.chr1.txt"
-gene_file = "Squi2.exons.genes.cds.txt"
-tree_file = "all.alns.aug5.2022.fa.treefile"
-
-##### Make the naming index
-#names = {}
-#allowed_nums = [0, 1, 3, 4, 5, 6, 8, 9]
-#for i in allowed_nums:
-#    for j in allowed_nums:
-#        for k in allowed_nums:
-#            this_name = str(int((str(i) + str(j) + str(k))))
-#            names["pos_"+this_name] = []
+count_file = "test_data/SQUI2.chr1.txt"
+rep_file = "test_data/Solqui2.repeats.chr1.txt"
+gene_file = "test_data/Squi2.exons.genes.cds.txt"
+tree_file = "test_data/all.alns.aug5.2022.fa.treefile"
 
 sample_labels_1s   =  {
     "0": [""],
@@ -165,59 +151,7 @@ sample_labels = {
         300: "Solmur2hap2",
         500: "Solpri1"
         }
-
-#print(len(cnts_tmp))
-def parse_counts_1():
-    cntr = 0
-    cnts = []
-    colors = []
-    y = []
-    last = 0
-    for this in cnts_tmp:
-        #if cntr % 1000 == 1:
-        if this > 1:    
-            if len(x) > 1 :
-                #last = #cnts[-1]
-                if this != last:
-                    x.append(cntr)
-                    #y.append(1)
-                    cnts.append(sample_counts[this])
-                    colors.append(sample_colors[this])
-                #last = this
-            else:
-                x.append(cntr)
-                #y.append(1)
-                cnts.append(sample_counts[this])
-                colors.append(sample_colors[this])
-        cntr += 1
-        last = this
-
-def parse_counts_2():
-    
-    cntr = 0
-    for this in cnts_tmp:
-        if this == 1:
-            ones.append(cntr)
-            ones_n.append("One")
-        elif this == 4:
-            fours.append(cntr)
-            fours_n.append("Four")
-        elif this == 6:
-            sixs.append(cntr)
-            sixs_n.append("Six")
-        elif this == 9:
-            nines.append(cntr)
-            nines_n.append("Nine")
-        cntr += 1
-
-def parse_counts_3():
-    cntr = 0
-    for this in cnts_tmp:
-        name = "pos_"+this
-        #name_n = "name_" + this
-        names[name].append(cntr)
-        #name_n.append(this)
-        cntr += 1
+tree_fig = {}
 
 def parse_counts_simple(cnts_tmp):
     names_simp = []
@@ -236,22 +170,6 @@ def get_index(j, bin_size, x_start):
 def get_index_0_based(j, bin_size):
     indx = int(j/bin_size)
     return indx
-
-def read_count_file_old(count_file):
-    xs = []
-    ys = []
-    ys_tmp = []
-    with open(count_file, "r") as f:
-        line = f.readline()
-        while line:
-            ys_tmp = line.strip().split(":")[1].split(',')[:-1]
-            line = f.readline()
-    avg_y = 0
-    for i in range(0, len(ys_tmp)):
-        xs.append(i)
-        ys.append(int(ys_tmp[i]))
-
-    return xs, ys
 
 def read_count_file(count_file, y_indx ):
     with open(count_file, "r") as f:
@@ -280,9 +198,63 @@ def parse_counts(zs_tmp, zs, bin_size_x, y_indx, x_start, x_stop):
 
     return zs
 
-tree_fig = {}
+def read_annotations(ann_file, ann_types):
+    with open(ann_file, "r") as f:
+        line = f.readline()
+        while line:
+            tmp = line.split('\t')
+            this_type = tmp[1].strip()
+            ann_types[this_type].append(int(tmp[2]))
+            ann_types[this_type].append(int(tmp[3]))
+            ann_types[this_type].append('None')
+            line = f.readline()
+    return ann_types
+
+def perc_universal(start,stop, countme):
+    univ = float(names_simp[start:stop].count(countme))
+    #print(names_simp[start:stop])
+    #if univ != 0:
+    #    print(univ)
+    return float(univ/(stop-start))*100
+
+def read_gene_annotations(ann_file, gene_names, gene_locals, exon_locals, exon_names, cds_locals):
+    #rep_file = "Solqui2.repeats.chr1.100k.txt"
+    gene_content = {"Names":[],"Universal":[], "Unique":[]}
+    with open(ann_file, "r") as f:
+        line = f.readline()
+        while line:
+            tmp = line.strip().split('\t')
+            this_name = tmp[1]#line.split('\t')[1].strip()
+            if this_name.split(":")[0] == "ID=gene":
+                gene_locals.append(int(tmp[2]))
+                gene_locals.append(int(tmp[3]))
+                gene_locals.append('None')
+                tmp_name = this_name.split(';')[0].split(":")[1]
+                gene_names.append(tmp_name)
+                gene_names.append(tmp_name)
+                gene_names.append('None')
+                gene_content["Names"].append(tmp_name)#perc_universal(int(tmp[2]), int(tmp[3]))
+                gene_content["Universal"].append(perc_universal(int(tmp[2]), int(tmp[3]), 9))
+                gene_content["Unique"].append(perc_universal(int(tmp[2]), int(tmp[3]), 1))
+            elif this_name.split(":")[0] == "ID=exon":
+                exon_locals.append(int(tmp[2]))
+                exon_locals.append(int(tmp[3]))
+                exon_locals.append('None')
+                tmp_name = this_name.split(';')[0].split(":")[1]
+                exon_names.append(tmp_name)
+                exon_names.append(tmp_name)
+                exon_names.append('None')
+            elif this_name.split(":")[0] == "ID=CDS":
+                cds_locals.append(int(tmp[2]))
+                cds_locals.append(int(tmp[3]))
+                cds_locals.append('None')
+
+            line = f.readline()
+    return gene_locals, gene_names, exon_locals, exon_names, cds_locals, gene_content
 
 def get_x_coordinates(tree):
+    #Adapted from:
+    #https://github.com/plotly/dash-phylogeny
     """Associates to  each clade an x-coord.
        returns dict {clade: x-coord}
     """
@@ -295,6 +267,8 @@ def get_x_coordinates(tree):
         xcoords = tree.depths(unit_branch_lengths=True)
     return xcoords
 def get_y_coordinates(tree, dist=1.3):
+    #Adapted from:
+    #https://github.com/plotly/dash-phylogeny
     """
        returns  dict {clade: y-coord}
        The y-coordinates are  (float) multiple of integers (i*dist below)
@@ -314,6 +288,8 @@ def get_y_coordinates(tree, dist=1.3):
     return ycoords
 def get_clade_lines(orientation='horizontal', y_curr=0, x_start=0, x_curr=0, y_bot=0, y_top=0,
                     line_color='rgb(25,25,25)', line_width=0.5):
+    #Adapted from:
+    #https://github.com/plotly/dash-phylogeny
     """define a shape of type 'line', for branch
     """
     branch_line = dict(type='line',
@@ -350,6 +326,8 @@ def biggest_num_in_clade(clade, kmer_num):
         return clade_num
 
 def draw_clade(color_code, total_kmers, kmer_num, palette, clade, x_start, line_shapes, line_color="grey", line_width=5, x_coords=0, y_coords=0):
+    #Adapted from:
+    #https://github.com/plotly/dash-phylogeny
     """Recursively draw the tree branches, down from the given clade"""
     x_curr = x_coords[clade]
     y_curr = y_coords[clade]
@@ -393,6 +371,8 @@ def parse_counts_complex(raw_counts):
     return kmer_num
 
 def create_tree(tree_file, x_start_init, x_stop_init, raw_counts):
+    #Adapted from:
+    #https://github.com/plotly/dash-phylogeny
     kmer_num_tmp = parse_counts_complex(raw_counts[x_start_init:x_stop_init])
     palette = sns.color_palette("RdPu_r", 160).as_hex()
     total_kmers = kmer_num_tmp["Solqui2"]
@@ -525,32 +505,8 @@ def create_tree(tree_file, x_start_init, x_stop_init, raw_counts):
             r=10))
     return fig
 
-def get_global_info(colors, exon_comp, gene_comp, bar_sum_names, bar_sum_regional, bar_sum_global):
-
-    fig = make_subplots(
-        rows=1, cols=5,
-        specs=[[{"type": "pie"}, {"type": "pie"}, {"type": "pie"} , {"type": "pie"} ]],
-        subplot_titles=("This region","CDS","Exons","Genes", "Whole chromosome")
-    )
-    fig.add_trace(go.Pie(labels=bar_sum_names, values=bar_sum_regional, showlegend=False, marker_colors=colors, 
-        name="Regional"), row=1, col=1)
-    fig.add_trace(go.Pie(labels=bar_sum_names, values=cds_comp, showlegend=False, marker_colors=colors, 
-        name="CDS"), row=1, col=2)
-    fig.add_trace(go.Pie(labels=bar_sum_names, values=exon_comp, showlegend=False, marker_colors=colors, 
-        name="Exons"), row=1, col=3)
-    fig.add_trace(go.Pie(labels=bar_sum_names, values=gene_comp, showlegend=False, marker_colors=colors, 
-        name="Genes"), row=1, col=4)
-    fig.add_trace(go.Pie(labels=bar_sum_names, values=bar_sum_global, showlegend=False, marker_colors=colors, 
-        name="Chromosome"), row=1, col=5)
-    
-    fig.update_layout(height=1000)
-    return fig
-
 def get_local_info(full_counts_ref, x_all, exon_comp, gene_comp, bar_sum_regional, bar_sum_global, cds_comp):
-    #fig = make_subplots(
-    #    rows=1, cols=4,
-    #    specs=[[{"type": "pie"}, {"type": "pie"}, {"type": "pie"}, {"type": "pie"} ]]
-    #)#go.Figure()
+
     x_ref = [int(i) for i in full_counts_ref]
     fig = make_subplots(
         rows=2, cols=2,
@@ -563,12 +519,6 @@ def get_local_info(full_counts_ref, x_all, exon_comp, gene_comp, bar_sum_regiona
     )
     x = [1,2,3,4,5,6,7,8,9]
     colors = ["#fde725", "#addc30", "#5ec962", "#28ae80", "#21918c", "#2c728e", "#3b528b", "#472d7b", "#440154"]
-    #Repeats
-    #fig.add_trace(go.Histogram(x=x_ref, marker_color="#21918c", opacity=0.7, showlegend=False), row=1, col=1)
-    #fig.add_trace(go.Bar(x=x_ref_whole, marker_color="#330C73", opacity=0.7), row=1, col=1)
-    #fig.update_yaxes(type='log')
-    #fig.update_layout(xaxis_range=[0,25000], xaxis_title_text="K-mer count in reference", yaxis_title_text='Frequency (log)')
-
     #This region
     y=[(i/sum(bar_sum_regional[1:])*100) for i in bar_sum_regional[1:]]
     y_whole=[(i/sum(bar_sum_global[1:])*100) for i in bar_sum_global[1:]]
@@ -594,13 +544,6 @@ def get_local_info(full_counts_ref, x_all, exon_comp, gene_comp, bar_sum_regiona
     #fig.add_trace(go.Bar(x=x, y=y_whole, marker_color="#7400b8", showlegend=False), row=1, col=4)
     fig.add_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(y, y_whole)], marker_color=colors, showlegend=False), row=2, col=2)
     #fig.update_layout(xaxis_title_text="K-mers shared in X samples", yaxis_title_text='Frequency (log)')
-
-    #Whole chromosome
-    #y=[(i/sum(bar_sum_global[1:])*100) for i in bar_sum_global[1:]]
-    #fig.add_trace(go.Bar(x=x, y=y_whole, marker_color="#7400b8",  showlegend=False), row=1, col=5)
-    #fig.update_layout(xaxis_title_text="K-mers shared in X samples", yaxis_title_text='Frequency (log)')
-    #fig.add_trace(go.Histogram(x=x_all_whole, marker_color="#330C73", opacity=0.7), row=2, col=1)
-
     fig.update_layout(height=1000)
     return fig
 
@@ -679,12 +622,7 @@ def plot_interactive( window_filter, poly_order, shared_kmers, layout, exon_comp
     fig.add_trace(go.Heatmap(x=x, y=y, z=zs_2, type = 'heatmap', colorscale='plasma'), row=14, col=1)
     fig.update_xaxes(showticklabels=False, row=14, col=1)
     fig.update_traces(colorbar_len=0.25, colorbar_y=0.1, selector=dict(type='heatmap'))
-    #fig.update_traces(colorbar_yanchor="top", selector=dict(type='heatmap'))
-    
-    #colorbar_yanchor="bottom", 
-    #fig.update_traces(colorbar_orientation='h', selector=dict(type='heatmap'))
-    #fig.update_xaxes(type='category', row=1, col=1)
-    #fig.update_yaxes(type="log", row=1, col=1)
+
     print("b2:", time.time()-t)
     t = time.time()
 
@@ -769,9 +707,6 @@ def plot_interactive( window_filter, poly_order, shared_kmers, layout, exon_comp
 
         fig.update_yaxes(visible=False, range=[-1,4], row=2, col=1)
         fig.update_xaxes(showticklabels=False, row=2, col=1)
-        #print("e:", time.time()-t)
-        #t = time.time()
-        #fig.update_layout(xaxis_range=[x_start,x_stop])
     
     #This is the conserved kmer plotting section
     bar_sum_regional = []
@@ -1006,59 +941,6 @@ print("a0.3:", time.time()-t)
 t = time.time()
 print("Read in count file")
 #Read in the repeats file (this has the annotated repeats from Shujun) 
-def read_annotations(ann_file, ann_types):
-    with open(ann_file, "r") as f:
-        line = f.readline()
-        while line:
-            tmp = line.split('\t')
-            this_type = tmp[1].strip()
-            ann_types[this_type].append(int(tmp[2]))
-            ann_types[this_type].append(int(tmp[3]))
-            ann_types[this_type].append('None')
-            line = f.readline()
-    return ann_types
-
-def perc_universal(start,stop, countme):
-    univ = float(names_simp[start:stop].count(countme))
-    #print(names_simp[start:stop])
-    #if univ != 0:
-    #    print(univ)
-    return float(univ/(stop-start))*100
-
-def read_gene_annotations(ann_file, gene_names, gene_locals, exon_locals, exon_names, cds_locals):
-    #rep_file = "Solqui2.repeats.chr1.100k.txt"
-    gene_content = {"Names":[],"Universal":[], "Unique":[]}
-    with open(ann_file, "r") as f:
-        line = f.readline()
-        while line:
-            tmp = line.strip().split('\t')
-            this_name = tmp[1]#line.split('\t')[1].strip()
-            if this_name.split(":")[0] == "ID=gene":
-                gene_locals.append(int(tmp[2]))
-                gene_locals.append(int(tmp[3]))
-                gene_locals.append('None')
-                tmp_name = this_name.split(';')[0].split(":")[1]
-                gene_names.append(tmp_name)
-                gene_names.append(tmp_name)
-                gene_names.append('None')
-                gene_content["Names"].append(tmp_name)#perc_universal(int(tmp[2]), int(tmp[3]))
-                gene_content["Universal"].append(perc_universal(int(tmp[2]), int(tmp[3]), 9))
-                gene_content["Unique"].append(perc_universal(int(tmp[2]), int(tmp[3]), 1))
-            elif this_name.split(":")[0] == "ID=exon":
-                exon_locals.append(int(tmp[2]))
-                exon_locals.append(int(tmp[3]))
-                exon_locals.append('None')
-                tmp_name = this_name.split(';')[0].split(":")[1]
-                exon_names.append(tmp_name)
-                exon_names.append(tmp_name)
-                exon_names.append('None')
-            elif this_name.split(":")[0] == "ID=CDS":
-                cds_locals.append(int(tmp[2]))
-                cds_locals.append(int(tmp[3]))
-                cds_locals.append('None')
-
-            line = f.readline()
-    return gene_locals, gene_names, exon_locals, exon_names, cds_locals, gene_content
 
 
 rep_types = read_annotations(rep_file, rep_types)
@@ -1113,12 +995,6 @@ while cntr < len(exon_locals):
 
 cds_comp = [0]*10
 cntr = 0
-'''while cntr < len(cds_locals):
-    #print(names_simp[gene_locals[cntr]:gene_locals[cntr+1]])
-    for j in range(0, 10):
-        cds_comp[j] += names_simp[cds_locals[cntr]:cds_locals[cntr+1]].count(j)
-    cntr += 3
-'''
 print("a0.5:", time.time()-t)
 t = time.time()
 #This will have the figure componants that we need 
