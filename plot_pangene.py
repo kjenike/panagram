@@ -29,7 +29,7 @@ sns.set_palette('viridis', 9)
 
 #/Users/katiejenike/Desktop/Lab_notes/PanSol/PANGEN/DEBUG/QC_PLOTS/SQUI2_PANGEN_PLOTS
 #python plot_chr_interactive.py result_SQUI2.chr1.txt SQUI2
-
+#Adding another line 
 in_file=sys.argv[1]
 sample = sys.argv[2]
 count_file = "SQUI2.chr1.txt"
