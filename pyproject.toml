@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "panagram"
+version = "0.0.1"
+dependencies = [
+    "plotly",
+    "dash",
+    "pandas",
+    "Bio",
+    "scipy",
+    "toml"
+]
+
+[project.scripts]
+panagram = "panagram.__main__:main"

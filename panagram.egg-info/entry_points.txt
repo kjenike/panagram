@@ -1,0 +1,2 @@
+[console_scripts]
+panagram = panagram.__main__:main
