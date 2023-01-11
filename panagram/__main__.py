@@ -5,6 +5,8 @@ from simple_parsing import ArgumentParser
 
 from .kmer_bitmap import KmerBitmapBgz as KmerBitmap
 
+from .view import view
+
 def parse_coords(coords):
     name, coords = coords.split(":")
     start, end = map(int, coords.split("-"))
@@ -39,6 +41,10 @@ def bitdump_opts(sp):
     p.add_argument("step", nargs="?", default=1, type=int)
     p.add_argument("-v", "--verbose", action="store_true")
 
+def view_opts(sp):
+    p = sp.add_parser("view")
+    p.add_argument("config", help="Config file")
+
 parser = argparse.ArgumentParser("Panagram")
 sp = parser.add_subparsers(dest="subcmd")
 anchor_opts(sp)
@@ -62,7 +68,7 @@ def bitdump(args):
 
     bitmap.close()
 
-cmds = {"anchor", "bitdump"}
+cmds = {"view", "anchor", "bitdump"}
 
 def main():
     args = parser.parse_args()
