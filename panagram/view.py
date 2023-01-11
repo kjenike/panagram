@@ -28,8 +28,7 @@ import plotly.figure_factory as ff
 #plt.rcParams["figure.figsize"] = (40,40)
 #config_f = sys.argv[1] #"test_data/Maize_testing/maize_config.txt"
 
-def view(args):
-    config_f = args.config
+def view(config_f):
 
     SG_window =53
     poly_order = 3
