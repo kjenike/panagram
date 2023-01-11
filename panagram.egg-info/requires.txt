@@ -3,3 +3,4 @@ dash
 pandas
 Bio
 scipy
+toml

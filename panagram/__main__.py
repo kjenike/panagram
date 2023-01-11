@@ -49,6 +49,7 @@ parser = argparse.ArgumentParser("Panagram")
 sp = parser.add_subparsers(dest="subcmd")
 anchor_opts(sp)
 bitdump_opts(sp)
+view_opts(sp)
 
 def anchor(args): #prefix, kmc, *fastas):
     bits = KmerBitmap(args.out_prefix, args.kmc_prefixes, args.genome_tsv, args.anchor_genomes)
