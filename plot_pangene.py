@@ -1976,7 +1976,7 @@ chrs = "chr1"
 #dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
 app = dash.Dash(external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css"]) 
 #app = Dash(__name__, external_stylesheets=[dbc.themes.PULSE, dbc_css])
-
+config = {"toImageButtonOptions" : {"format" : "svg", "width" : None, "height" : None},}
 app.layout = html.Div([
     #html.Div(id = 'parent', children = [
     html.H1(id = 'H1', children = 'Panagram', style = {'textAlign':'center', "font-size": 48}), 
@@ -1994,27 +1994,27 @@ app.layout = html.Div([
                     'textAlign': 'left', "border":"2px grey solid"}),
                 html.Div(className="w3-half", children=[
                     dcc.Graph(id="all_genomes",style={"font-size": 20, "height" : 1500},
-                        figure = all_genomes_dend
+                        figure = all_genomes_dend, config=config
                         ),
                     ]),
                 html.Div(className="w3-half", children=[
                     dcc.Graph(id="all_genomes_kmer_comp",
-                        figure = pangenome_comp, style={"font-size": 30, "height" : 1500}
+                        figure = pangenome_comp, config=config, style={"font-size": 30, "height" : 1500}
                         )
                     ]),
                 html.Div(className="w3-third", children=[
                     dcc.Graph(id="all_genome_sizes",
-                        figure = pangenome_sizes, style={"font-size": 30, "height" : 500}
+                        figure = pangenome_sizes, config=config, style={"font-size": 30, "height" : 500}
                         )
                     ]),
                 html.Div(className="w3-third", children=[
                     dcc.Graph(id="average_kmer_content",
-                        figure = pangenome_avg, style={"font-size": 30, "height" : 500}
+                        figure = pangenome_avg, config=config, style={"font-size": 30, "height" : 500}
                         )
                     ]),
                 html.Div(className="w3-third", children=[
                     dcc.Graph(id="pangenome_num_seqs",
-                        figure = pangenome_num_seqs, style={"font-size": 30, "height" : 500}
+                        figure = pangenome_num_seqs, config=config, style={"font-size": 30, "height" : 500}
                         )
                     ]),
             ]),
@@ -2034,24 +2034,24 @@ app.layout = html.Div([
                     #children=[
                 html.Div(className="w3-third",children=[
                     dcc.Graph(id="gene_content",
-                        figure = gene_content_per_genome_fig)#gene_content_fig)
+                        figure = gene_content_per_genome_fig, config=config), #gene_content_fig)
                     ],), #style={"height" : 700}),
                 html.Div(className="w3-third",children=[
                     dcc.Graph(id="genes_per_chr",
-                        figure = genes_per_chr_fig)
+                        figure = genes_per_chr_fig, config=config)
                     ], ),#style={"height" : 700}),
                 html.Div(className="w3-third",children=[
                     dcc.Graph(id="avg_kmer_chr",
-                        figure = avg_kmer_per_chr_fig)
+                        figure = avg_kmer_per_chr_fig, config=config)
                     ], ),#style={"height" : 700}),
 
                 html.Div(className="w3-threequarter",children=[
                             dcc.Graph(id="all_chromosomes",
-                                figure = whole_genome_fig, style={"height" : num_chrs*250})
+                                figure = whole_genome_fig, config=config, style={"height" : num_chrs*250})
                     ]),
                 html.Div(className="w3-quarter",children=[
                             dcc.Graph(id="all_chromosomes_hists", style={"height" : num_chrs*250},
-                                figure = whole_genome_hists
+                                figure = whole_genome_hists, config=config
                                 )
                             ]),
             ]),
@@ -2100,21 +2100,24 @@ app.layout = html.Div([
                 html.Div(className="w3-container", children=[
                         #left figure
                         dcc.Graph(id="chromosome",
-                            figure = chr_fig, style={"font-size": 20, "height" : 350})
+                            figure = chr_fig, config=config, style={"font-size": 20, "height" : 350})
                 ])
             ]),
             html.Div(children=[
                 html.Div(className="w3-container", children=[
                     html.Div(className="w3-threequarter", children=[
                         #left figure - calling this the "Main" figure
-                        dcc.Graph(id="primary",figure = fig, style={"height": 1000,  "font-size": 20})
+                        dcc.Graph(id="primary",figure = fig, config=config, 
+                            style={"height": 1000,  "font-size": 20})
                     ]), #style={'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 
                     html.Div(className="w3-quarter", children=[
                         dcc.Graph(id="Secondary", 
                             #Now we have the phylogenetic tree
                             figure = get_local_info(names_simp[x_start_init:x_stop_init], #exon_comp[chrs], 
                                 gene_comp[chrs], 
-                                bar_sum_regional, bar_sum_global[chrs]), style={"height": 1000, "font-size": 20}),
+                                bar_sum_regional, bar_sum_global[chrs]), 
+                            config=config,
+                            style={"height": 1000, "font-size": 20}),
                     ])
                 ])
             ]),
@@ -2122,13 +2125,16 @@ app.layout = html.Div([
                 html.Div(className="w3-container", children=[
                     html.Div(className="w3-third", children=[
                             dcc.Graph(id="Genes", 
-                                figure=gene_content_plot, style={"font-size": 20}),
+                                figure=gene_content_plot, 
+                                config=config,
+                                style={"font-size": 20}),
                         ]),
                     html.Div(className="w3-twothird", children=[
                         dcc.Graph(id="Third", 
                             #This is the histogram section
                             
                             figure = create_tree(tree_file, x_start_init,x_stop_init, all_chrs[chrs][int(x_start_init/n_skips_start):int(x_stop_init/n_skips_start)], n_skips_start),
+                            config=config,
                             style={"font-size": 20}),
                     ]),
                     
@@ -2393,20 +2399,34 @@ def primary_fig_triggered(chr_fig, fig1, fig2, fig3, fig4, gene_jump_bottom, #SG
         print("fourth elif")
         x_start = int(relayoutData['xaxis4.range[0]'])
         x_stop = int(relayoutData['xaxis4.range[1]'])
+        if get_buffer(x_start, x_stop, n_skips_start) == 1:
+            exact_mini_counts = anchor.query(chrs, x_start, x_stop, 1)
+            simple_cnts_for_plots = exact_mini_counts.sum(axis=1)
+            n_skips = 1
+        else:
+            exact_mini_counts = all_chrs[chrs][int(x_start/n_skips_start):int((x_stop)/n_skips_start)]
+            simple_cnts_for_plots = names_simp[int(x_start/n_skips_start):int((x_stop)/n_skips_start)]
+            n_skips = n_skips_start 
         #fig1, fig2, fig3 = update_all_figs(x_start, x_stop, click_me_rep, click_me_genes)
         fig1, bar_sum_names, bar_sum_regional, colors, gene_names_tmp = plot_interactive( n_skips_start, #int(SG_window), 
             #int(SG_polynomial_order), SG_check,
             layout, #exon_comp[chrs], 
-            gene_comp[chrs], bins, names_simp[int(x_start/n_skips_start):int(x_stop/n_skips_start)], chrs, zs_tmp, rep_types[chrs], click_me_rep, click_me_genes,  
+            gene_comp[chrs], bins, 
+            simple_cnts_for_plots,
+            #names_simp[int(x_start/n_skips_start):int(x_stop/n_skips_start)], 
+            chrs, zs_tmp, rep_types[chrs], click_me_rep, click_me_genes,  
             int(x_start), int(x_stop), gene_locals[chrs], gene_names[chrs], exon_locals[chrs], exon_names[chrs],
             )
         fig2 = get_local_info(
-            #full_cnts[x_start:x_stop], 
-            names_simp[int(x_start/n_skips_start):int(x_stop/n_skips_start)], #exon_comp[chrs], 
+            #full_cnts[x_start:x_stop],
+            simple_cnts_for_plots, 
+            #names_simp[int(x_start/n_skips_start):int(x_stop/n_skips_start)], #exon_comp[chrs], 
             gene_comp[chrs], bar_sum_regional, bar_sum_global[chrs])
         #And now we update the histograms 
         fig3 = create_tree(tree_file, x_start, x_stop, 
-            all_chrs[chrs][int(x_start/n_skips_start):int(x_stop/n_skips_start)], n_skips_start)
+            exact_mini_counts,
+            #all_chrs[chrs][int(x_start/n_skips_start):int(x_stop/n_skips_start)], 
+            n_skips)
         chr_fig = plot_chr_whole(x[chr_num-1], z_1[chr_num-1], z_9[chr_num-1], z_genes[chrs], x_start, x_stop,  y[chr_num-1])
         local_gene_list = []
         cntr = 0
