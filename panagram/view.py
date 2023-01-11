@@ -13,10 +13,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from upsetplot import generate_counts, plot
-from lenspy import DynamicPlot
 import dash
-from mycolorpy import colorlist as mcp
 import time
 from Bio import Phylo
 from scipy import signal
@@ -25,8 +22,6 @@ import math
 from io import StringIO
 from scipy.cluster.hierarchy import linkage
 from scipy.cluster import hierarchy
-import dash_bootstrap_components as dbc
-from dash_bootstrap_templates import ThemeChangerAIO, template_from_url
 from scipy.spatial.distance import pdist, squareform
 import plotly.figure_factory as ff
 #from cStringIO import StringIO

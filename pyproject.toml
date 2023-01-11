@@ -12,7 +12,7 @@ dependencies = [
     "pandas",
     "Bio",
     "scipy",
-    "toml"
+    "toml",
 ]
 
 [project.scripts]
