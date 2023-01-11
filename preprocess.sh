@@ -80,6 +80,6 @@ done
 echo $dbs
 
 #Run the "get_counts" kmc function 
-panagram anchor ${input} ${dbs} -o ${outdir}anchor
+panagram index ${input} ${dbs} -k ${k} -o ${outdir}anchor
 bgzip -r ${outdir}anchor.pank -I ${outdir}anchor.panx
 bgzip -r ${outdir}anchor.100nt.pank -I ${outdir}anchor.100nt.panx
