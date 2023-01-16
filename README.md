@@ -1,4 +1,5 @@
-#todo
+# Panagram: Interactive, alignment-free pan-genome browser  
+
 Add description and use for panagram
 
 #Useage:
