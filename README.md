@@ -1,5 +1,8 @@
 # Panagram: Interactive, alignment-free pan-genome browser  
 
+#### Katie Jenike, Sam Kovaka, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Zach Lippman, Michael Schatz
+
+
 An alignment-free pan-genome viewer
 
 # Installation
@@ -52,3 +55,6 @@ usage: panagram bitdump [-h] [-v bool] str str str
   -v bool, --verbose bool
                         Output the full bitmap (default: False)
 ```
+
+
+## More information coming soon!
