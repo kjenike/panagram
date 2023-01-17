@@ -26,9 +26,9 @@ usage: panagram index [-h] [-k int] <genomes_in>.tsv -o <out_dir>/
 
   genomes_in str        TSV file with each genome ID in the first column and the path to a
                         gzipped fasta in the second column
+  -k int, --k int       K-mer (default: 21)
   -o str, --out_dir str
                         Output directory for panagram index (default: None)
-  -k int, --k int       K-mer length (must be same as KMC database) (default: 21)
 
 ```
 
