@@ -15,7 +15,7 @@ OR
 ```
 
 # Preprocessing
-Usage
+Usage:
 ```
 ./panagram/scripts/preprocess.sh <genome_fastas.tsv> <K> <index_dir>
 ```
