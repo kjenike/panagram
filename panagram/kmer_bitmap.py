@@ -2,22 +2,22 @@ import sys
 import csv
 import numpy as np
 import pysam                        
-from . import py_kmc_api as kmc            
+from .kmc import py_kmc_api
 import bgzip
 import gzip
 from time import time
 from Bio import bgzf, SeqIO
 
-BGZ_SUFFIX = ".pank"
-BGZ_IDX_SUFFIX = ".panx"
-BGZ_100NT_SUFFIX = ".100nt"
-ANN_SUFFIX = ".pana"
+BGZ_SUFFIX = "/anchor.pank"
+BGZ_IDX_SUFFIX = "/anchor.panx"
+BGZ_100NT_SUFFIX = "/anchor.100nt"
+ANN_SUFFIX = "/anchor.pana"
 
 class KmerBitmapBgz:
     def __init__(self, prefix, kmc_dbs=None, genome_tsv=None, anchors=None):
         self.prefix = prefix
         self.bgz_fname = prefix + BGZ_SUFFIX
-        self.bgz_100nt_fname = prefix + BGZ_100NT_SUFFIX + BGZ_SUFFIX
+        self.bgz_100nt_fname = prefix + BGZ_100NT_SUFFIX + ".pank"
         self.ann_fname = prefix + ANN_SUFFIX
 
         self.offsets = dict()
@@ -55,7 +55,7 @@ class KmerBitmapBgz:
         self.bgz_blocks = self.load_bgz_blocks(self.prefix+BGZ_IDX_SUFFIX)
         self.bgz = bgzf.BgzfReader(self.bgz_fname, "rb")
 
-        self.bgz_100nt_blocks = self.load_bgz_blocks(self.prefix + BGZ_100NT_SUFFIX + BGZ_IDX_SUFFIX)
+        self.bgz_100nt_blocks = self.load_bgz_blocks(self.prefix + BGZ_100NT_SUFFIX + ".panx")
         self.bgz_100nt = bgzf.BgzfReader(self.bgz_100nt_fname, "rb")
 
     def load_bgz_blocks(self, fname):
@@ -138,7 +138,7 @@ class KmerBitmapBgz:
 
         self.kmc_dbs = list()
         for fname in kmc_files:
-            self.kmc_dbs.append(kmc.KMCFile())
+            self.kmc_dbs.append(py_kmc_api.KMCFile())
             self.kmc_dbs[-1].OpenForRA(fname)
 
         self.genomes = list()
@@ -162,7 +162,7 @@ class KmerBitmapBgz:
 
         #with pysam.FastaFile(fname) as fasta:
         with gzip.open(fname, "rt") as fasta:
-            vec = kmc.CountVec()
+            vec = py_kmc_api.CountVec()
             t = time()
             #for seq_name in fasta.references: 
             #    seq = fasta.fetch(seq_name)#, 0, 10000000) 
@@ -274,7 +274,7 @@ class KmerBitmapRaw:
         self.bitmap = open(self.bitmap_fname, "wb")
         self.ann = open(self.ann_fname, "w")
 
-        self.kmc_db = kmc.KMCFile()        
+        self.kmc_db = py_kmc_api.KMCFile()        
         self.kmc_db.OpenForRA(kmc_file)
 
         self.genomes = list()
@@ -298,7 +298,7 @@ class KmerBitmapRaw:
 
         #with pysam.FastaFile(fname) as fasta:
         with gzip.open(fname, "rt") as fasta:
-            vec = kmc.CountVec()
+            vec = py_kmc_api.CountVec()
             t = time()
             for rec in SeqIO.parse(fasta, "fasta"):
                 seq_name = rec.id

@@ -1,5 +1,6 @@
 import sys
 import argparse
+import os
 
 from simple_parsing import ArgumentParser, field
 from dataclasses import dataclass
@@ -21,9 +22,6 @@ class Index:
     genomes: str = field(positional=True)
     """TSV file with each genome ID in the first column and the path to a gzipped fasta in the second column"""
 
-    kmc_files: List[str] = field(alias="kmc_files", positional=True)
-    """KMC database prefix(es)"""
-
     out_dir: str = field(alias=["-o"], required=True)
     """Output directory for panagram index"""
 
@@ -31,12 +29,8 @@ class Index:
     """K-mer length (must be same as KMC database)"""
 
     def run(self):
-        from .kmer_bitmap import KmerBitmapBgz as KmerBitmap
-        bits = KmerBitmap(
-            self.out_dir, 
-            self.kmc_files, 
-            self.genomes)
-        bits.close()
+        from .index import index
+        index(self.genomes, self.out_dir, self.k)
 
 @dataclass
 class Bitdump:

@@ -1,1 +1,1 @@
-graft panagram
+recursive-include panagram *py *so kmc*
