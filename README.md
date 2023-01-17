@@ -2,7 +2,7 @@
 
 An alignment-free pan-genome viewer
 
-#Installation
+# Installation
 
 ```
 > pip install git+https://github.com/kjenike/panagram.git --user
