@@ -12,13 +12,14 @@ SUBMODS = ["KMC"]
 class pre_build(build_py):
     def run(self):
         subprocess.check_call([
-            "make", "-C", KMC_DIR, "py_kmc_api"#, "all" 
+            "make", "-j", "4", "-C", KMC_DIR, "py_kmc_api"#, "all" 
         ])
 
-        kmc_libs = glob.glob(KMC_DIR+"/bin/py_kmc_api*.so")
-        assert(len(kmc_libs) == 1)
+        #kmc_libs = glob.glob(KMC_DIR+"/bin/py_kmc_api*.so")
+        #assert(len(kmc_libs) == 1)
+        #mv = ["mv"] + kmc_libs + [ROOT_DIR+"/panagram"] 
 
-        mv = ["mv"] + kmc_libs + [ROOT_DIR+"/panagram"] 
+        mv = ["mv", f"{KMC_DIR}/bin", f"{ROOT_DIR}/panagram/kmc"]
         subprocess.check_call(mv)
         build_py.run(self)
 
