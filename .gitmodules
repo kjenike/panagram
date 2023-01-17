@@ -1,0 +1,3 @@
+[submodule "KMC"]
+	path = KMC
+	url = https://github.com/skovaka/KMC.git

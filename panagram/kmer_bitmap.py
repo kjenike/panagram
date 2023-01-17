@@ -2,7 +2,7 @@ import sys
 import csv
 import numpy as np
 import pysam                        
-import py_kmc_api as kmc            
+from . import py_kmc_api as kmc            
 import bgzip
 import gzip
 from time import time
