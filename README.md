@@ -12,7 +12,7 @@ An alignment-free pan-genome viewer
 ```
 OR
 ```
-> git clone --recursive git+https://github.com/kjenike/panagram.git
+> git clone --recursive https://github.com/kjenike/panagram.git
 > cd panagram
 > pip install .
 ```
