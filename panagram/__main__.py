@@ -42,17 +42,17 @@ class Bitdump:
     coords: str = field(positional=True)
     """Coordinates to query in chr:start-end format"""
 
-    step: str = field(positional=True, nargs="?", default=1)
+    step: int = field(positional=True, nargs="?", default=1)
     """Spacing between output kmers (optimized for multiples of 100)"""
 
     verbose: bool = field(alias=["-v"], default=False)
     """Output the full bitmap"""
 
     def run(self):
-        from .kmer_bitmap import KmerBitmapBgz as KmerBitmap
+        from .index import KmerBitmap
         bitmap = KmerBitmap(self.index_dir)
-        name, start, end = parse_coords(self.coords)
-        bits = bitmap.query(name, start, end, self.step)
+        genome, chrom, start, end = parse_coords(self.coords)
+        bits = bitmap.query(genome, chrom, start, end, self.step)
 
         if self.verbose:
             print(" ".join(bitmap.genome_names))
@@ -78,9 +78,9 @@ Subcommands:
         return self.cmd.run()
 
 def parse_coords(coords):
-    name, coords = coords.split(":")
+    genome, chrom, coords = coords.split(":")
     start, end = map(int, coords.split("-"))
-    return name, start, end
+    return genome, chrom, start, end
 
 def comma_split(s):
     return s.split(",")
