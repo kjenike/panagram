@@ -1,6 +1,7 @@
 import sys
 import argparse
 import os
+import cProfile
 
 from simple_parsing import ArgumentParser, field
 from dataclasses import dataclass
@@ -28,9 +29,12 @@ class Index:
     k: int = field(alias=["-k"], default=21)
     """K-mer length (must be same as KMC database)"""
 
+    anchor_only: bool = False
+    """Assume KMC databases already exist"""
+
     def run(self):
         from .index import index
-        index(self.genomes, self.out_dir, self.k)
+        index(self)#self.genomes, self.out_dir, self.k)
 
 @dataclass
 class Bitdump:
@@ -61,6 +65,13 @@ class Bitdump:
         else:
             print(bits)
 
+        #g = bitmap.genomes
+        #print(g)
+        #print(bitmap.genome_len(g[1]))
+        #seqs = bitmap.genome_seqs(g[1])
+        #print(seqs)
+        #print(bitmap.seq_len(g[1], seqs[0]))
+
         bitmap.close()
 
 @dataclass
@@ -73,6 +84,7 @@ Subcommands:
     bitdump  Query pan-kmer bitmap via the commandline"""
 
     cmd: Union[View, Index, Bitdump]
+    cprof: str = field(default=None, help=argparse.SUPPRESS)
 
     def run(self):
         return self.cmd.run()
@@ -88,4 +100,11 @@ def comma_split(s):
 def main():
     parser = ArgumentParser()
     parser.add_arguments(Main, dest="main")
-    parser.parse_args().main.run()
+    args = parser.parse_args()
+    if args.main.cprof is None:
+        args.main.run()
+    else:
+        cProfile.runctx("args.main.run()",
+             {},{"args" : args},
+             args.main.cprof)
+

@@ -17,17 +17,14 @@ KMC_DIR = os.path.join(ROOT_DIR, "kmc")
 
 BGZ_SUFFIX = "pank"
 IDX_SUFFIX = "panx"
-#BGZ_IDX_SUFFIX = "/anchor.panx"
-#BGZ_100NT_SUFFIX = "/anchor.100nt"
 ANN_SUFFIX = "pana"
-    
 
 class KmerBitmap:
     def __init__(self, prefix, mode="r"):
         self.prefix = prefix
 
         self.genomes = list()
-        self.genome_sizes = dict()
+        self.seq_lens = defaultdict(dict)
         self.offsets = dict()
         self.bitmap_lens = defaultdict(int)
 
@@ -64,6 +61,7 @@ class KmerBitmap:
                 gi, size, name = line.strip().split("\t")
                 gi, size = map(int, (gi,size))
 
+                self.seq_lens[gi][name] = size
 
                 for i,step in enumerate(self.steps):
                     self.offsets[(step,gi,name)] = offs[i]
@@ -80,6 +78,19 @@ class KmerBitmap:
         #self.bgz_100nt = bgzf.BgzfReader(self.bgz_fname(100), "rb")
         self.blocks = {s : self.load_bgz_blocks(self.idx_fname(s)) for s in self.steps}
         self.bitmaps = {s : bgzf.BgzfReader(self.bgz_fname(s), "rb") for s in self.steps}
+
+    def genome_seqs(self, genome):
+        gi = self.genome_ids[genome]
+        return list(self.seq_lens[gi].keys())
+
+
+    def seq_len(self, genome, seq_name):
+        gi = self.genome_ids[genome]
+        return self.seq_lens[gi][seq_name]
+
+    def genome_len(self, genome):
+        gi = self.genome_ids[genome]
+        return sum(self.seq_lens[gi].values())
 
     def load_bgz_blocks(self, fname):
         idx_in = open(fname, "rb")
@@ -169,11 +180,16 @@ class KmerBitmap:
             if anchors is None or name in anchors:
                 self._load_fasta(i, name, fasta)
 
+    def _get_kmc_counts(self, db, seq):
+        vec = py_kmc_api.CountVec()
+        db.GetCountersForRead(seq, vec)
+
+        pac = np.array(vec, dtype="uint32")
+        return pac.view("uint8").reshape((len(pac),4))
 
     def _load_fasta(self, gi, name, fname):
 
         with gzip.open(fname, "rt") as fasta:
-            vec = py_kmc_api.CountVec()
             t = time()
             #for seq_name in fasta.references: 
             #    seq = fasta.fetch(seq_name)#, 0, 10000000) 
@@ -194,20 +210,11 @@ class KmerBitmap:
                         return 4
                         
                 for ki,db in enumerate(self.kmc_dbs): 
-
-                    db.GetCountersForRead(seq, vec)
-
-                    arr = np.array(vec, dtype="uint32")
-                    arr = arr.view("uint8").reshape((len(arr),4))
-                    
-                    arr = arr[:,:nbytes(ki)]
+                    pacbytes = self._get_kmc_counts(db, seq)
+                    pacbytes = pacbytes[:,:nbytes(ki)]
 
                     for s in self.steps:
-                        byte_arrs[s].append(arr[::s])
-                        
-                    #arr_100nt = arr[::100]
-                    #arrs.append(arr)
-                    #arrs_100nt.append(arr_100nt)
+                        byte_arrs[s].append(pacbytes[::s])
 
                 size = None
                 for step,arr in byte_arrs.items():
@@ -216,6 +223,8 @@ class KmerBitmap:
                     self.bitmap_lens[step] += len(arr)
                     if step == 1:
                         size = len(arr)
+
+                self.seq_lens[gi][seq_name] = size
 
                 #arr = np.concatenate(arrs, axis=1)
                 #arr_100nt = np.concatenate(arrs_100nt, axis=1)
@@ -262,12 +271,10 @@ class KmerBitmap:
 #                genomes.append(name)
 #                self.fastas[name] = fasta
 
-def index(genomes, out_dir, k):
-
-    def init_dir(name):
-        d = os.path.join(out_dir, name)
+def run_kmc_bitvec(args):
+    def init_dir(path):
+        d = os.path.join(args.out_dir, path)
         os.makedirs(d, exist_ok=True)
-
         return d
 
     count_dir = init_dir("kmc_count")
@@ -281,7 +288,7 @@ def index(genomes, out_dir, k):
 
     genome_dbs = list()
     
-    with open(genomes) as genome_file:
+    with open(args.genomes) as genome_file:
         genomes_in = csv.reader(genome_file, delimiter="\t")
         for name, fasta in genomes_in:
             if i >= 32:
@@ -298,16 +305,16 @@ def index(genomes, out_dir, k):
 
             genome_dbs.append((name, os.path.abspath(onehot_db)))
 
-            #subprocess.check_call([
-            #    f"{KMC_DIR}/kmc", f"-k{k}", 
-            #    "-t4", "-m8", "-ci1", "-cs10000000", "-fm",
-            #    fasta, count_db, tmp_dir
-            #])
+            subprocess.check_call([
+                f"{KMC_DIR}/kmc", f"-k{args.k}", 
+                "-t4", "-m8", "-ci1", "-cs10000000", "-fm",
+                fasta, count_db, tmp_dir
+            ])
 
-            #subprocess.check_call([
-            #    f"{KMC_DIR}/kmc_tools", "-t4", "transform",
-            #    count_db, "set_counts", onehot_id, onehot_db
-            #])
+            subprocess.check_call([
+                f"{KMC_DIR}/kmc_tools", "-t4", "transform",
+                count_db, "set_counts", onehot_id, onehot_db
+            ])
 
             i += 1
             samp_count += 1
@@ -336,17 +343,31 @@ def index(genomes, out_dir, k):
 
         opdefs.close()
 
-        #subprocess.check_call([
-        #    f"{KMC_DIR}/kmc_tools", "complex", opdef_fname
-        #])
+        subprocess.check_call([
+            f"{KMC_DIR}/kmc_tools", "complex", opdef_fname
+        ])
         
         bitvec_dbs.append(bitvec_fname)
+    return bitvec_dbs
 
-    bits = KmerBitmap(f"{out_dir}/anchor", "w")
-    bits.write(bitvec_dbs, genomes, steps=[1, 100, 1000])
+def index(args): #genomes, out_dir, k):
+
+    if args.anchor_only:
+        pre = f""
+        suf = ".kmc_pre"
+        bitvec_dbs = [ f[:-len(suf)] 
+            for f in glob.glob(f"{args.out_dir}/kmc_bitvec/*{suf}")]
+
+    else:
+        bitvec_dbs = run_kmc_bitvec(args)
+
+    print(bitvec_dbs)
+
+    bits = KmerBitmap(f"{args.out_dir}/anchor", "w")
+    bits.write(bitvec_dbs, args.genomes, steps=[1, 100, 1000])
     bits.close()
 
     for step in bits.steps:
         subprocess.check_call([
-            "bgzip", "-r", f"{out_dir}/anchor.{step}.pank", 
-                     "-I", f"{out_dir}/anchor.{step}.panx"])
+            "bgzip", "-r", f"{args.out_dir}/anchor.{step}.pank", 
+                     "-I", f"{args.out_dir}/anchor.{step}.panx"])
