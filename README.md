@@ -5,12 +5,10 @@
 
 [An alignment-free pan-genome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf)
 
+Please note: installation instructions and pre-processing scripts are a work in progress. 
+
 # Installation
 
-```
-> pip install git+https://github.com/kjenike/panagram.git --user
-```
-OR
 ```
 > git clone --recursive https://github.com/kjenike/panagram.git
 > cd panagram
