@@ -3,7 +3,7 @@
 #### Katie Jenike, Sam Kovaka, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Zach Lippman, Michael Schatz
 
 
-An alignment-free pan-genome viewer
+[An alignment-free pan-genome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf)
 
 # Installation
 
