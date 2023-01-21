@@ -53,10 +53,10 @@ class Bitdump:
     """Output the full bitmap"""
 
     def run(self):
-        from .index import KmerBitmap
-        bitmap = KmerBitmap(self.index_dir)
+        from .index import Index #KmerBitmap
+        bitmap = Index(self.index_dir)
         genome, chrom, start, end = parse_coords(self.coords)
-        bits = bitmap.query(genome, chrom, start, end, self.step)
+        bits = bitmap.query_bitmap(genome, chrom, start, end, self.step)
 
         if self.verbose:
             print(" ".join(bitmap.genome_names))
