@@ -13,7 +13,9 @@ class View:
     config: str = field(positional=True)
 
     def run(self):
+        #print("HERE")
         from .view import view
+        #print("THERE")
         view(self.config)
 
 @dataclass

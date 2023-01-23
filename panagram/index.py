@@ -1,9 +1,9 @@
+print("importing")
 import sys
 import os
 import subprocess
 import numpy as np
 import pandas as pd
-from .kmc import py_kmc_api
 import bgzip
 import gzip
 import csv
@@ -12,7 +12,6 @@ import pysam
 from collections import defaultdict
 from time import time
 from Bio import bgzf, SeqIO
-
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 KMC_DIR = os.path.join(ROOT_DIR, "kmc")
 
@@ -45,6 +44,8 @@ class Index:
         self._init_dirs()
     
     def _load_kmc(self, files):
+
+        from .kmc import py_kmc_api
         self.kmc_dbs = list()
         for fname in files:
             self.kmc_dbs.append(py_kmc_api.KMCFile())
