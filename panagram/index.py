@@ -1,4 +1,3 @@
-print("importing")
 import sys
 import os
 import subprocess
@@ -12,6 +11,7 @@ import pysam
 from collections import defaultdict
 from time import time
 from Bio import bgzf, SeqIO
+import toml
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 KMC_DIR = os.path.join(ROOT_DIR, "kmc")
 
@@ -21,15 +21,51 @@ ANN_SUFFIX = "pana"
 
 MODES = {"r","w"}
 
+#TODO
+#mash
+#genomes: k-mer composition for genome
+#bins: precomputed kmer types for whole genome (200kb)
+#chromosome: k-mer types for each chromosome
+#genes: for each gene %universal+%unique
+#exons+repeats: track, type, id, metadata for random access display
+
 class Index:
-    def __init__(self, prefix, mode="r"):
-        self.prefix = prefix
-        if mode == "r":
-            self._init_read()
-        elif mode == "w":
+    def __init__(self, prefix=None, conf=None):
+        if conf is not None:
+            self._load_conf(conf)
             self._init_write()
-        if mode not in MODES:
-            raise ValueError(f"'mode' must be in {MODES}")
+        elif prefix is not None:
+            self.prefix = prefix
+            self._init_read()
+        else:
+            raise ValueError(f"Must specify a prefix (read mode) or config file (write mode)")
+        #if mode == "r":
+        #    self._init_read()
+        #elif mode == "w":
+        #    self._init_write()
+        #if mode not in MODES:
+        #    raise ValueError(f"'mode' must be in {MODES}")
+
+    PARAMS = [
+        "k", 
+        ("out_dir", "prefix"), 
+        ("kmc", "kmc_args"),
+        ("genomes", "genome_fastas")
+    ]
+    def _load_conf(self, conf):
+        if conf is None: return
+        elif isinstance(conf, str):
+            conf = toml.load(conf)
+
+        for p in self.PARAMS:
+            if isinstance(p, tuple):
+                name,tgt = p
+            else:
+                name = tgt = p
+            setattr(self, tgt, conf[name])
+
+        self.genome_fastas = pd.Series(self.genome_fastas, name="fasta")
+
 
     def _init_read(self):
         self.write_mode = False
@@ -44,16 +80,16 @@ class Index:
         self._init_dirs()
     
     def _load_kmc(self, files):
-
         from .kmc import py_kmc_api
+        self.kmc = py_kmc_api
         self.kmc_dbs = list()
         for fname in files:
-            self.kmc_dbs.append(py_kmc_api.KMCFile())
+            self.kmc_dbs.append(self.kmc.KMCFile())
             self.kmc_dbs[-1].OpenForRA(fname)
 
-    def write(self, args):
-        self.genome_fastas = pd.read_csv(args.genomes, names=["name", "fasta"], sep="\t").set_index("name")["fasta"]
-        self.k = args.k
+    def write(self):
+        #self.genome_fastas = pd.read_csv(args.genomes, names=["name", "fasta"], sep="\t").set_index("name")["fasta"]
+        #self.k = args.k
         
         genomes = list()
         self.genome_ids = dict()
@@ -73,13 +109,13 @@ class Index:
 
         self.genomes.to_csv(f"{self.anchor_dir}/index.csv")
 
-        if args.anchor_only:
-            pre = f""
-            suf = ".kmc_pre"
-            bitvec_dbs = [f[:-len(suf)] 
-                for f in glob.glob(f"{args.out_dir}/kmc_bitvec/*{suf}")]
-        else:
-            bitvec_dbs = self.run_kmc_bitvec(args)
+        #if args.anchor_only:
+        #    pre = f""
+        #    suf = ".kmc_pre"
+        #    bitvec_dbs = [f[:-len(suf)] 
+        #        for f in glob.glob(f"{args.out_dir}/kmc_bitvec/*{suf}")]
+        #else:
+        bitvec_dbs = self.run_kmc_bitvec()
 
         self._load_kmc(bitvec_dbs)
 
@@ -101,18 +137,16 @@ class Index:
         return d
 
     def _init_dirs(self):
-        print(self.prefix)
         self.count_dir =  self.init_dir("kmc_count")
         self.onehot_dir = self.init_dir("kmc_onehot")
         self.bitvec_dir = self.init_dir("kmc_bitvec")
         self.tmp_dir =    self.init_dir("tmp")
         self.anchor_dir = self.init_dir("anchors")
-        print(self.anchor_dir)
 
     def query_bitmap(self, genome, chrom, start, end, step):
         return self.bitmaps[genome].query(chrom, start, end, step)
 
-    def run_kmc_bitvec(self, args):
+    def run_kmc_bitvec(self):
 
         i = 0
         db_count = 1
@@ -120,9 +154,6 @@ class Index:
 
         genome_dbs = list()
         
-        #with open(args.genomes) as genome_file:
-        #    genomes_in = csv.reader(genome_file, delimiter="\t")
-        #for name, fasta in genomes_in:
         for name,fasta in self.genome_fastas.items():
             if i >= 32:
                 i = 0
@@ -306,7 +337,7 @@ class KmerBitmap:
         return list(self.genomes)
 
     def _get_kmc_counts(self, db, seq):
-        vec = py_kmc_api.CountVec()
+        vec = self.kmc.CountVec()
         db.GetCountersForRead(seq, vec)
 
         pac = np.array(vec, dtype="uint32")
@@ -315,6 +346,7 @@ class KmerBitmap:
     def _init_write(self, index, steps):
         self.bitmaps = {s : bgzf.BgzfWriter(self.bgz_fname(s), "wb") for s in steps}
         self.kmc_dbs = index.kmc_dbs
+        self.kmc = index.kmc
 
         self.steps = steps
 
@@ -388,9 +420,9 @@ class KmerBitmap:
         #    self.kmc_db.close()
 
 
-def index(args): #genomes, out_dir, k):
+def index(conf): #genomes, out_dir, k):
 
-    idx = Index(args.out_dir, "w")
-    idx.write(args)
+    idx = Index(conf=conf)
+    idx.write()#args)
     idx.close()
 
