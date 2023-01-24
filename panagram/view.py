@@ -165,18 +165,18 @@ def view(config_f):
         return total
 
     def get_init_rep_types(rep_types_f=rep_types_file):
-        rep_types = {}
+        #rep_types = {}
         rep_list = []
-        for i in range(0, num_chrs):
-            rep_types["chr" + str(i+1)] = {}
+        #for i in range(0, num_chrs):
+        #    rep_types["chr" + str(i+1)] = {}
         with open(rep_types_f, "r") as f:
             line = f.readline()
             while line:
                 rep_list.append(line.strip())
-                for i in range(0, num_chrs):
-                    rep_types["chr" + str(i+1)][line.strip()] = []
+                #for i in range(0, num_chrs):
+                #    rep_types["chr" + str(i+1)][line.strip()] = []
                 line = f.readline()
-        return rep_types, rep_list
+        return  rep_list
     '''    
     rep_types = {
             "18S_rRNA_gene":[],
@@ -248,7 +248,7 @@ def view(config_f):
 
         return zs
 
-    def read_annotations(ann_file, ann_types, rep_list, this_anchor):
+    def read_annotations(ann_file, rep_list, this_anchor):
         annotations = {}
         with open(ann_file, "r") as f:
             line = f.readline()
@@ -1595,7 +1595,7 @@ def view(config_f):
     cnts_tmp = []
     x = []
     all_chrs = {} #This is where we keep the raw, str, counts 
-    rep_types, rep_list = get_init_rep_types()
+    rep_list = get_init_rep_types()
 
     #anchor = KmerBitmap(bit_file_prefix)
     index = Index(bit_file_prefix) #Directory that contains the anchor direcotry 
@@ -1665,7 +1665,7 @@ def view(config_f):
         #exon_comp[tmp_chr] = [0]*(num_samples+1)'''
     for l in labels:
         this_rep_file = rep_file + "/" + l + ".reps.bed"
-        r = read_annotations(this_rep_file, rep_types, rep_list, l)
+        r = read_annotations(this_rep_file, rep_list, l)
         all_rep_types[l] = r
         #Now we handle the genes 
 
