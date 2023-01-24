@@ -15,7 +15,8 @@ dependencies = [
     "Bio",
     "scipy",
     "toml",
-    "bgzip"
+    "bgzip",
+    "mycolorpy",
 ]
 
 [project.scripts]
