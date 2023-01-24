@@ -12,6 +12,7 @@ from collections import defaultdict
 from time import time
 from Bio import bgzf, SeqIO
 import toml
+import multiprocessing as mp
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 KMC_DIR = os.path.join(ROOT_DIR, "kmc")
 
@@ -91,9 +92,6 @@ class Index:
             self.kmc_dbs[-1].OpenForRA(fname)
 
     def write(self):
-        #self.genome_fastas = pd.read_csv(args.genomes, names=["name", "fasta"], sep="\t").set_index("name")["fasta"]
-        #self.k = args.k
-        
         genomes = list()
         self.genome_ids = dict()
         for i,(name,fasta) in enumerate(self.genome_fastas.items()):
@@ -117,7 +115,7 @@ class Index:
             bitvec_dbs = [f[:-len(suf)] 
                 for f in glob.glob(f"{self.bitvec_dir}/*{suf}")]
         else:
-            bitvec_dbs = self.run_kmc_bitvec()
+            bitvec_dbs = self._run_kmc()
 
         self._load_kmc(bitvec_dbs)
 
@@ -126,9 +124,10 @@ class Index:
         for name,fasta in self.genome_fastas.items():
             self.bitmaps[name] = KmerBitmap(self, name, "w")
 
-        #Calculate per-chromosome k-mer occurance counts
+        #Calculate per-chromosome k-mer occurence counts
         for i in range(len(self.genomes)):
             self.chrs[f"total_occ_{i+1}"] = 0
+
         for (genome,chrom),size in self.chrs["size"].items():
             popcnts = self.query_bitmap(genome, chrom, 0, size, 100).sum(axis=1)
             occs, counts = np.unique(popcnts, return_counts=True)
@@ -158,7 +157,44 @@ class Index:
     def query_bitmap(self, genome, chrom, start, end, step):
         return self.bitmaps[genome].query(chrom, start, end, step)
 
-    def run_kmc_bitvec(self):
+    @staticmethod
+    def _run_kmc_genome(args):
+        args, k, i, name, fasta, count_db, onehot_db, tmp_dir = args
+        memory = args["memory"]
+        threads = args["threads"]
+
+        onehot_id = str(2**i)
+
+        subprocess.check_call([
+            f"{KMC_DIR}/kmc", f"-k{k}", 
+            f"-t{threads}", f"-m{memory}", "-ci1", "-cs10000000", "-fm",
+            fasta, count_db, tmp_dir
+        ])
+
+        subprocess.check_call([
+            f"{KMC_DIR}/kmc_tools", "-t4", "transform",
+            count_db, "set_counts", onehot_id, onehot_db
+        ])
+
+        return name, onehot_db
+
+
+    def _iter_kmc_genome_args(self):
+        i = 0
+        db_count = 0
+        for name,fasta in self.genome_fastas.items():
+            if i >= 32:
+                i = 0
+                db_count += 1
+
+            count_db = os.path.join(self.count_dir, name)
+            onehot_db = os.path.join(self.onehot_dir, name)
+            tmp_dir = self.init_dir(f"tmp/{name}")
+            yield (self.kmc_args, self.k, i, name, fasta, count_db, onehot_db, tmp_dir)
+
+            i += 1
+
+    def _run_kmc(self):
 
         i = 0
         db_count = 1
@@ -166,32 +202,13 @@ class Index:
 
         genome_dbs = list()
         
-        for name,fasta in self.genome_fastas.items():
-            if i >= 32:
-                i = 0
-                db_count += 1
-
-
-            onehot_id = str(2**i)
-
-            count_db = os.path.join(self.count_dir, name)
-            onehot_db = os.path.join(self.onehot_dir, name)
-
-            genome_dbs.append((name, os.path.abspath(onehot_db)))
-
-            subprocess.check_call([
-                f"{KMC_DIR}/kmc", f"-k{self.k}", 
-                "-t4", "-m8", "-ci1", "-cs10000000", "-fm",
-                fasta, count_db, self.tmp_dir
-            ])
-
-            subprocess.check_call([
-                f"{KMC_DIR}/kmc_tools", "-t4", "transform",
-                count_db, "set_counts", onehot_id, onehot_db
-            ])
-
-            i += 1
-            samp_count += 1
+        if self.kmc_args["processes"] == 1:
+            for args in self._iter_kmc_genome_args():
+                genome_dbs.append(self._run_kmc_genome(args))
+        else:
+            with mp.Pool(processes=self.kmc_args["processes"]) as pool:
+                for db in pool.imap(self._run_kmc_genome, self._iter_kmc_genome_args(), chunksize=1):
+                    genome_dbs.append(db)
 
         bitvec_dbs = list()
 
