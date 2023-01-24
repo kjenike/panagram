@@ -48,6 +48,8 @@ class Index:
 
     PARAMS = [
         "k", 
+        "anchor_only",
+        "bitmap_resolutions",
         ("out_dir", "prefix"), 
         ("kmc", "kmc_args"),
         ("genomes", "genome_fastas")
@@ -70,9 +72,10 @@ class Index:
     def _init_read(self):
         self.write_mode = False
         self._init_dirs()
-        self.genomes = pd.read_csv(f"{self.anchor_dir}/index.csv").set_index(["genome","chr"])
+        self.chrs = pd.read_csv(f"{self.prefix}/chrs.csv").set_index(["genome","chr"])
+        self.genomes = self.chrs.index.unique("genome")
 
-        genome_names = self.genomes.index.unique("genome")
+        genome_names = self.chrs.index.unique("genome")
         self.bitmaps = {genome : KmerBitmap(self, genome) for genome in genome_names}
 
     def _init_write(self):
@@ -105,26 +108,35 @@ class Index:
                 [(name, chrom, i, fa.get_reference_length(chrom)) 
                  for chrom in fa.references], 
                 columns=["genome", "chr", "id", "size"]))
-        self.genomes = pd.concat(genomes).set_index(["genome", "chr"])
+        self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
+        self.genomes = self.chrs.index.unique("genome")
 
-        self.genomes.to_csv(f"{self.anchor_dir}/index.csv")
-
-        #if args.anchor_only:
-        #    pre = f""
-        #    suf = ".kmc_pre"
-        #    bitvec_dbs = [f[:-len(suf)] 
-        #        for f in glob.glob(f"{args.out_dir}/kmc_bitvec/*{suf}")]
-        #else:
-        bitvec_dbs = self.run_kmc_bitvec()
+        if self.anchor_only:
+            pre = f""
+            suf = ".kmc_pre"
+            bitvec_dbs = [f[:-len(suf)] 
+                for f in glob.glob(f"{self.bitvec_dir}/*{suf}")]
+        else:
+            bitvec_dbs = self.run_kmc_bitvec()
 
         self._load_kmc(bitvec_dbs)
-
-        self.anchors = dict()
 
         ngenomes = len(self.genome_fastas)
         self.bitmaps = dict()
         for name,fasta in self.genome_fastas.items():
             self.bitmaps[name] = KmerBitmap(self, name, "w")
+
+        #Calculate per-chromosome k-mer occurance counts
+        for i in range(len(self.genomes)):
+            self.chrs[f"total_occ_{i+1}"] = 0
+        for (genome,chrom),size in self.chrs["size"].items():
+            popcnts = self.query_bitmap(genome, chrom, 0, size, 100).sum(axis=1)
+            occs, counts = np.unique(popcnts, return_counts=True)
+            for occ,count in zip(occs, counts):
+                self.chrs.loc[(genome,chrom), f"total_occ_{occ}"] = count
+
+        self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+
 
     def close(self):
         for b in self.bitmaps.values():
@@ -215,26 +227,37 @@ class Index:
 class KmerBitmap:
     def __init__(self, index, anchor, mode="r"):
         self.prefix = os.path.join(index.anchor_dir, anchor)
-
         self.anchor_name = anchor
-        self.anchor_id = index.genomes.loc[anchor]["id"].iloc[0]
-        self.sizes = index.genomes.loc[anchor]["size"]
-        self.genomes = index.genomes.index.unique("genome")
+
+        self.anchor_id = index.chrs.loc[anchor]["id"].iloc[0]
+        self.sizes = index.chrs.loc[anchor]["size"]
+        self.genomes = index.genomes
         self.ngenomes = len(self.genomes)
         self.nbytes = int(np.ceil(self.ngenomes / 8))
 
+        self._init_steps(index)
+        step_sizes = pd.DataFrame({step : np.ceil(self.sizes / step) for step in self.steps}, dtype=int)
+        self.offsets = step_sizes.cumsum().shift(fill_value=0) 
+
         self.seq_lens = defaultdict(dict)
-        self.offsets = dict()
         self.bitmap_lens = defaultdict(int)
 
-        
-
-        if mode == "r":
-            self._init_read(index)
-        elif mode == "w":
+        if mode == "w":
             self._init_write(index, [1,100])
-        else:
+        elif mode != "r":
             raise ValueError("Mode must be 'r' or 'w'")
+
+        self._init_read(index)
+
+    def _init_steps(self, index):
+        if hasattr(index, "bitmap_resolutions"):
+            self.steps = index.bitmap_resolutions
+        else:
+            self.steps = list()
+            for fname in glob.glob(f"{self.prefix}.*.{BGZ_SUFFIX}"):
+                step = int(fname.split(".")[-2])
+                self.steps.append(step)
+        
 
     def bgz_fname(self, step): 
         return f"{self.prefix}.{step}.{BGZ_SUFFIX}"
@@ -249,48 +272,15 @@ class KmerBitmap:
     def _init_read(self, index):
         self.write_mode = False
 
-        self.steps = list()
-        for fname in glob.glob(f"{self.prefix}.*.{BGZ_SUFFIX}"):
-            step = int(fname.split(".")[-2])
-            self.steps.append(step)
-
-        offs = [0 for s in self.steps]
-        for name,size in self.sizes.items():
-            for i,step in enumerate(self.steps):
-                self.offsets[(step,name)] = offs[i]
-                offs[i] += int(np.ceil(size / step))
-            
-        for i,step in enumerate(self.steps):
-            self.bitmap_lens[step] = offs[i]
-
-        #with open(self.ann_fname) as self.ann:
-        #    self._set_genomes(self.ann.readline().strip().split(("\t")))
-        #    for line in self.ann:
-        #        gi, size, name = line.strip().split("\t")
-        #        gi, size = map(int, (gi,size))
-
-        #        self.seq_lens[gi][name] = size
-
-        #        for i,step in enumerate(self.steps):
-        #            self.offsets[(step,gi,name)] = offs[i]
-        #            offs[i] += int(np.ceil(size / step))
-
-        t = time()
         self.blocks = {s : self.load_bgz_blocks(self.idx_fname(s)) for s in self.steps}
         self.bitmaps = {s : bgzf.BgzfReader(self.bgz_fname(s), "rb") for s in self.steps}
 
-    def genome_seqs(self, genome):
-        gi = self.genome_ids[genome]
-        return list(self.seq_lens[gi].keys())
+    @property
+    def chrs(self):
+        return self.sizes.index
 
-
-    def seq_len(self, genome, seq_name):
-        gi = self.genome_ids[genome]
-        return self.seq_lens[gi][seq_name]
-
-    def genome_len(self, genome):
-        gi = self.genome_ids[genome]
-        return sum(self.seq_lens[gi].values())
+    def seq_len(self, seq_name):
+        return self.sizes.loc[seq_name]
 
     def load_bgz_blocks(self, fname):
         idx_in = open(fname, "rb")
@@ -313,7 +303,7 @@ class KmerBitmap:
         return ret
 
     def _query(self, name, start, end, step, bstep):
-        byte_start = self.nbytes * (self.offsets[(bstep,name)] + (start//bstep))
+        byte_start = self.nbytes * (self.offsets.loc[name,bstep] + (start//bstep))
         length  = (end - start) // bstep
 
         step = step // bstep
@@ -325,7 +315,7 @@ class KmerBitmap:
         self.bitmaps[bstep].seek(bgzf.make_virtual_offset(blk_start, blk_offs))
         buf = self.bitmaps[bstep].read(length * self.nbytes)
 
-        pac = np.frombuffer(buf, "uint8").reshape((length, self.nbytes))
+        pac = np.frombuffer(buf, "uint8").reshape((len(buf)//self.nbytes, self.nbytes))
 
         if step > 1:
             return pac[::step]
@@ -344,11 +334,11 @@ class KmerBitmap:
         return pac.view("uint8").reshape((len(pac),4))
 
     def _init_write(self, index, steps):
-        self.bitmaps = {s : bgzf.BgzfWriter(self.bgz_fname(s), "wb") for s in steps}
         self.kmc_dbs = index.kmc_dbs
         self.kmc = index.kmc
+        self.anchor_only = index.anchor_only
 
-        self.steps = steps
+        self.bitmaps = {s : bgzf.BgzfWriter(self.bgz_fname(s), "wb") for s in steps}
 
         gi = self.anchor_id
         name = self.anchor_name
@@ -391,33 +381,18 @@ class KmerBitmap:
 
                 self.seq_lens[gi][seq_name] = size
 
-                #arr = np.concatenate(arrs, axis=1)
-                #arr_100nt = np.concatenate(arrs_100nt, axis=1)
-                #self.bgz.write(arr.tobytes())
-                #self.bgz_100nt.write(arr_100nt.tobytes())
-
-
-                #self.ann.write(f"{self.ref_len}\t{self.ref_len_100nt}\t{name}.{seq_name}\n")
-                #self.ann.write(f"{gi}\t{size}\t{seq_name}\n")
-                #self.bitmap_lens[1] += len(arr)
-                #self.bitmap_lens[100] += len(arr_100nt)
-
                 print(f"Anchored {name} {seq_name}", time()-t)
                 t = time()
 
-    def close(self):
-        #self.ann.close()
-        for f in self.bitmaps.values():
-            f.close()
+        self.close()
 
         for step in self.steps:
             subprocess.check_call([
                 "bgzip", "-r", self.bgz_fname(step), "-I", self.idx_fname(step)])
-        #self.bgz.close()
-        #self.bgz_100nt.close()
 
-        #if self.write_mode:
-        #    self.kmc_db.close()
+    def close(self):
+        for f in self.bitmaps.values():
+            f.close()
 
 
 def index(conf): #genomes, out_dir, k):

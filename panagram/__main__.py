@@ -37,9 +37,10 @@ class Index:
     k: int = field(alias=["-k"], default=21)
     """K-mer length (must be same as KMC database)"""
 
+    anchor_only: bool = False
+    """Assume KMC databases already exist"""
 
-    #anchor_only: bool = False
-    #"""Assume KMC databases already exist"""
+    bitmap_resolutions: list = field(default_factory=lambda:[1, 100])
 
     def run(self):
         from .index import index
@@ -47,7 +48,7 @@ class Index:
         del args["conf"]
         args.update(toml.load(self.conf))
 
-        index(conf=self.conf)#self.genomes, self.out_dir, self.k)
+        index(conf=args)#self.genomes, self.out_dir, self.k)
 
 @dataclasses.dataclass
 class Bitdump:
