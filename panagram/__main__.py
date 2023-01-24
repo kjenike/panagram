@@ -20,9 +20,9 @@ class View:
 @dataclasses.dataclass
 class KMC:
     """Parameters for KMC kmer counting"""
-    kmc_memory: int = field(default=8, dest="main.kmc.memory")
-    kmc_processes: int = field(default=4, dest="main.kmc.processes")
-    kmc_threads: int = field(default=1, dest="main.kmc.threads")
+    memory: int = field(default=8, dest="main.kmc.memory")
+    processes: int = field(default=4, dest="main.kmc.processes")
+    threads: int = field(default=1, dest="main.kmc.threads")
 
 @dataclasses.dataclass
 class Index:
@@ -37,18 +37,31 @@ class Index:
     k: int = field(alias=["-k"], default=21)
     """K-mer length (must be same as KMC database)"""
 
+    processes: int = field(alias=["-p"], default=1)
+    """Number of processes"""
+
+    threads: int = field(default=1,help=argparse.SUPPRESS)
+    memory: int = field(default=1,help=argparse.SUPPRESS)
+
     anchor_only: bool = False
     """Assume KMC databases already exist"""
 
     bitmap_resolutions: list = field(default_factory=lambda:[1, 100])
 
+    def _load_dict(self, d, tgt):
+        for key,val in d.items():
+            if isinstance(val, dict) and dataclasses.is_dataclass(getattr(tgt, key, None)):
+                self._load_dict(val, getattr(tgt, key))
+            else:
+                setattr(tgt, key, val)
+
     def run(self):
         from .index import index
         args = dataclasses.asdict(self)
         del args["conf"]
-        args.update(toml.load(self.conf))
+        self._load_dict(toml.load(self.conf), self)
 
-        index(conf=args)#self.genomes, self.out_dir, self.k)
+        index(conf=self)#self.genomes, self.out_dir, self.k)
 
 @dataclasses.dataclass
 class Bitdump:

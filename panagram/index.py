@@ -13,12 +13,13 @@ from time import time
 from Bio import bgzf, SeqIO
 import toml
 import multiprocessing as mp
+from types import SimpleNamespace
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 KMC_DIR = os.path.join(ROOT_DIR, "kmc")
 
 BGZ_SUFFIX = "bgz"
 IDX_SUFFIX = "gzi"
-ANN_SUFFIX = "pana"
+ANCHOR_DIR = "anchors"
 
 MODES = {"r","w"}
 
@@ -32,11 +33,16 @@ MODES = {"r","w"}
 
 class Index:
     def __init__(self, prefix=None, conf=None):
+        self.conf = conf
+        self.prefix = prefix
         if conf is not None:
-            self._load_conf(conf)
+            #self._load_conf(conf)
+            if prefix is None:
+                self.prefix = conf.prefix
             self._init_write()
         elif prefix is not None:
-            self.prefix = prefix
+            self.conf = SimpleNamespace()
+            self.conf.prefix = prefix
             self._init_read()
         else:
             raise ValueError(f"Must specify a prefix (read mode) or config file (write mode)")
@@ -67,8 +73,6 @@ class Index:
                 name = tgt = p
             setattr(self, tgt, conf[name])
 
-        self.genome_fastas = pd.Series(self.genome_fastas, name="fasta")
-
 
     def _init_read(self):
         self.write_mode = False
@@ -77,7 +81,7 @@ class Index:
         self.genomes = self.chrs.index.unique("genome")
 
         genome_names = self.chrs.index.unique("genome")
-        self.bitmaps = {genome : KmerBitmap(self, genome) for genome in genome_names}
+        self.bitmaps = {genome : KmerBitmap(self.conf, genome, "r", self.chrs) for genome in genome_names}
 
     def _init_write(self):
         self.write_mode = True
@@ -91,9 +95,15 @@ class Index:
             self.kmc_dbs.append(self.kmc.KMCFile())
             self.kmc_dbs[-1].OpenForRA(fname)
 
+    @staticmethod
+    def run_anchor(args):
+        return KmerBitmap(*args).anchor_name
+
     def write(self):
         genomes = list()
         self.genome_ids = dict()
+        self.genome_fastas = pd.Series(self.conf.genomes, name="fasta")
+
         for i,(name,fasta) in enumerate(self.genome_fastas.items()):
             self.genome_ids[name] = i
 
@@ -109,7 +119,7 @@ class Index:
         self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
         self.genomes = self.chrs.index.unique("genome")
 
-        if self.anchor_only:
+        if self.conf.anchor_only:
             pre = f""
             suf = ".kmc_pre"
             bitvec_dbs = [f[:-len(suf)] 
@@ -117,12 +127,24 @@ class Index:
         else:
             bitvec_dbs = self._run_kmc()
 
-        self._load_kmc(bitvec_dbs)
+        #self._load_kmc(bitvec_dbs)
+        
+        def iter_anchor_args():
+            for name,fasta in self.genome_fastas.items():
+                yield (self.conf, name, "w", self.chrs, fasta, bitvec_dbs)
 
-        ngenomes = len(self.genome_fastas)
         self.bitmaps = dict()
-        for name,fasta in self.genome_fastas.items():
-            self.bitmaps[name] = KmerBitmap(self, name, "w")
+        if self.conf.processes == 1:
+            for args in iter_anchor_args():
+                print("Anchored", self.run_anchor(args))
+        else:
+            with mp.Pool(processes=self.conf.processes) as pool:
+                for name in pool.imap(self.run_anchor, iter_anchor_args(), chunksize=1):
+                    print(f"Anchored {name}")
+                    sys.stdout.flush()
+
+        for name in self.genomes:
+            self.bitmaps[name] = KmerBitmap(self.conf, name, "r", self.chrs)
 
         #Calculate per-chromosome k-mer occurence counts
         for i in range(len(self.genomes)):
@@ -152,22 +174,20 @@ class Index:
         self.onehot_dir = self.init_dir("kmc_onehot")
         self.bitvec_dir = self.init_dir("kmc_bitvec")
         self.tmp_dir =    self.init_dir("tmp")
-        self.anchor_dir = self.init_dir("anchors")
+        self.anchor_dir = self.init_dir(ANCHOR_DIR)
 
     def query_bitmap(self, genome, chrom, start, end, step):
         return self.bitmaps[genome].query(chrom, start, end, step)
 
     @staticmethod
     def _run_kmc_genome(args):
-        args, k, i, name, fasta, count_db, onehot_db, tmp_dir = args
-        memory = args["memory"]
-        threads = args["threads"]
+        conf, i, name, fasta, count_db, onehot_db, tmp_dir = args
 
         onehot_id = str(2**i)
 
         subprocess.check_call([
-            f"{KMC_DIR}/kmc", f"-k{k}", 
-            f"-t{threads}", f"-m{memory}", "-ci1", "-cs10000000", "-fm",
+            f"{KMC_DIR}/kmc", f"-k{conf.k}", 
+            f"-t{conf.kmc.threads}", f"-m{conf.kmc.memory}", "-ci1", "-cs10000000", "-fm",
             fasta, count_db, tmp_dir
         ])
 
@@ -190,7 +210,7 @@ class Index:
             count_db = os.path.join(self.count_dir, name)
             onehot_db = os.path.join(self.onehot_dir, name)
             tmp_dir = self.init_dir(f"tmp/{name}")
-            yield (self.kmc_args, self.k, i, name, fasta, count_db, onehot_db, tmp_dir)
+            yield (self.conf, i, name, fasta, count_db, onehot_db, tmp_dir)
 
             i += 1
 
@@ -201,12 +221,11 @@ class Index:
         samp_count = 0
 
         genome_dbs = list()
-        
-        if self.kmc_args["processes"] == 1:
+        if self.conf.kmc.processes == 1:
             for args in self._iter_kmc_genome_args():
                 genome_dbs.append(self._run_kmc_genome(args))
         else:
-            with mp.Pool(processes=self.kmc_args["processes"]) as pool:
+            with mp.Pool(processes=self.conf.kmc.processes) as pool:
                 for db in pool.imap(self._run_kmc_genome, self._iter_kmc_genome_args(), chunksize=1):
                     genome_dbs.append(db)
 
@@ -242,17 +261,19 @@ class Index:
         return bitvec_dbs
 
 class KmerBitmap:
-    def __init__(self, index, anchor, mode="r"):
-        self.prefix = os.path.join(index.anchor_dir, anchor)
+    def __init__(self, conf, anchor, mode="r", chrs=None, fasta=None, kmc_dbs=None):
+        self.conf = conf
+        self.prefix = os.path.join(conf.prefix, ANCHOR_DIR, anchor)
         self.anchor_name = anchor
+        self.fasta = fasta
 
-        self.anchor_id = index.chrs.loc[anchor]["id"].iloc[0]
-        self.sizes = index.chrs.loc[anchor]["size"]
-        self.genomes = index.genomes
+        self.anchor_id = chrs.loc[anchor]["id"].iloc[0]
+        self.sizes = chrs.loc[anchor]["size"]
+        self.genomes = chrs.index.unique(0)
         self.ngenomes = len(self.genomes)
         self.nbytes = int(np.ceil(self.ngenomes / 8))
 
-        self._init_steps(index)
+        self._init_steps(conf)
         step_sizes = pd.DataFrame({step : np.ceil(self.sizes / step) for step in self.steps}, dtype=int)
         self.offsets = step_sizes.cumsum().shift(fill_value=0) 
 
@@ -260,15 +281,16 @@ class KmerBitmap:
         self.bitmap_lens = defaultdict(int)
 
         if mode == "w":
-            self._init_write(index, [1,100])
-        elif mode != "r":
+            self._init_write(kmc_dbs)
+        elif mode == "r":
+            self._init_read(index)
+        else:
             raise ValueError("Mode must be 'r' or 'w'")
 
-        self._init_read(index)
 
-    def _init_steps(self, index):
-        if hasattr(index, "bitmap_resolutions"):
-            self.steps = index.bitmap_resolutions
+    def _init_steps(self, conf):
+        if hasattr(conf, "bitmap_resolutions"):
+            self.steps = conf.bitmap_resolutions
         else:
             self.steps = list()
             for fname in glob.glob(f"{self.prefix}.*.{BGZ_SUFFIX}"):
@@ -338,10 +360,6 @@ class KmerBitmap:
             return pac[::step]
         else:
             return pac
-    
-    @property
-    def genome_names(self):
-        return list(self.genomes)
 
     def _get_kmc_counts(self, db, seq):
         vec = self.kmc.CountVec()
@@ -349,20 +367,29 @@ class KmerBitmap:
 
         pac = np.array(vec, dtype="uint32")
         return pac.view("uint8").reshape((len(pac),4))
+    
+    def _load_kmc(self, kmc_dbs):
+        from .kmc import py_kmc_api
+        self.kmc = py_kmc_api
+        self.kmc_dbs = list()
+        for db in kmc_dbs:
+            if isinstance(db, str):
+                self.kmc_dbs.append(self.kmc.KMCFile())
+                self.kmc_dbs[-1].OpenForRA(db)
+            else:
+                self.kmc_dbs.append(db)
 
-    def _init_write(self, index, steps):
-        self.kmc_dbs = index.kmc_dbs
-        self.kmc = index.kmc
-        self.anchor_only = index.anchor_only
+    def _init_write(self, kmc_dbs=None):
+        self._load_kmc(kmc_dbs)
 
-        self.bitmaps = {s : bgzf.BgzfWriter(self.bgz_fname(s), "wb") for s in steps}
+        self.bitmaps = {s : bgzf.BgzfWriter(self.bgz_fname(s), "wb") for s in self.steps}
 
         gi = self.anchor_id
         name = self.anchor_name
-        fasta_fname = index.genome_fastas.loc[self.anchor_name]
+        #fasta_fname = self.conf.genome_fastas.loc[self.anchor_name]
 
         #with gzip.open(fname, "rt") as fasta:
-        with open(fasta_fname, "r") as fasta:
+        with open(self.fasta, "r") as fasta:
             t = time()
             #for seq_name in fasta.references: 
             for rec in SeqIO.parse(fasta, "fasta"):
@@ -398,7 +425,6 @@ class KmerBitmap:
 
                 self.seq_lens[gi][seq_name] = size
 
-                print(f"Anchored {name} {seq_name}", time()-t)
                 t = time()
 
         self.close()
