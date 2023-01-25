@@ -53,6 +53,7 @@ class Index:
             if isinstance(val, dict) and dataclasses.is_dataclass(getattr(tgt, key, None)):
                 self._load_dict(val, getattr(tgt, key))
             else:
+                #print(tgt, key, val)
                 setattr(tgt, key, val)
 
     def run(self):

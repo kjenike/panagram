@@ -139,7 +139,7 @@ class Index:
                 print("Anchored", self.run_anchor(args))
         else:
             with mp.Pool(processes=self.conf.processes) as pool:
-                for name in pool.imap(self.run_anchor, iter_anchor_args(), chunksize=1):
+                for name in pool.imap_unordered(self.run_anchor, iter_anchor_args(), chunksize=1):
                     print(f"Anchored {name}")
                     sys.stdout.flush()
 
@@ -388,8 +388,13 @@ class KmerBitmap:
         name = self.anchor_name
         #fasta_fname = self.conf.genome_fastas.loc[self.anchor_name]
 
-        #with gzip.open(fname, "rt") as fasta:
-        with open(self.fasta, "r") as fasta:
+        if self.fasta.endswith(".gz") or self.fasta.endswith(".bgz"):
+            opn = lambda f: gzip.open(f, "rt")
+        else:
+            opn = lambda f: open(f, "r")
+
+        with opn(self.fasta) as fasta:
+        #with open(self.fasta, "r") as fasta:
             t = time()
             #for seq_name in fasta.references: 
             for rec in SeqIO.parse(fasta, "fasta"):
@@ -424,6 +429,7 @@ class KmerBitmap:
                         size = len(arr)
 
                 self.seq_lens[gi][seq_name] = size
+                sys.stdout.write(f"Anchored {seq_name}\n")
 
                 t = time()
 
