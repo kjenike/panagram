@@ -72,6 +72,12 @@ class Index:
     def run_anchor(args):
         return KmerBitmap(*args).anchor_name
 
+    def _init_genomes(self):
+        self.genomes = self.chrs.index.unique("genome")
+        self.ngenomes = len(self.genomes)
+        self._total_occ_idx = pd.Index([f"total_occ_{i+1}" for i in range(self.ngenomes)])
+        self._gene_occ_idx = pd.Index([f"gene_occ_{i+1}" for i in range(self.ngenomes)])
+
     def write(self):
         genomes = list()
         self.genome_ids = dict()
@@ -98,9 +104,8 @@ class Index:
                 columns=["genome", "chr", "id", "size"]))
 
         self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
+        self._init_genomes()
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
-
-        self.genomes = self.chrs.index.unique("genome")
 
         if self.conf.anchor_only or self.conf.anno_only:
             pre = f""
@@ -130,20 +135,24 @@ class Index:
         }
 
         #Calculate per-chromosome k-mer occurence counts
-        for i in range(len(self.genomes)):
-            self.chrs[f"total_occ_{i+1}"] = 0
+        self.chrs[self._total_occ_idx] = 0
+        self.chrs[self._gene_occ_idx] = 0
 
         for (genome,chrom),size in self.chrs["size"].items():
-            popcnts = self.query_bitmap(genome, chrom, 0, size, 100).sum(axis=1)
-            occs, counts = np.unique(popcnts, return_counts=True)
-            for occ,count in zip(occs, counts):
-                self.chrs.loc[(genome,chrom), f"total_occ_{occ}"] = count
+            counts = self.query_occ_counts(genome,chrom,0,size,100,self._total_occ_idx)
+            self.chrs.loc[(genome,chrom), counts.index] = counts
 
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
 
         if "gene" in self.genome_files.columns:
             for g in self.genomes:
                 self._load_genes(g)
+        self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+
+    def query_occ_counts(self, genome, chrom, start, end, step, idx):
+        popcnts = self.query_bitmap(genome, chrom, start, end, step).sum(axis=1)
+        occs, counts = np.unique(popcnts, return_counts=True)
+        return pd.Series(index=idx[occs-1], data=counts).reindex(idx, fill_value=0)
 
     TABIX_COLS = ["chr","start","end","type","attr"]
     def _iter_gff(self, fname):
@@ -174,13 +183,23 @@ class Index:
             exons.append(df[df["type"] == "exon"])
 
         def _merge_dfs(dfs):
-            return pd.concat(dfs).sort_values(["chr","start"])
+            return pd.concat(dfs).sort_values(["chr","start"]).reset_index(drop=True)
 
         self._write_tabix(_merge_dfs(exons), genome, "exon")
 
         genes = _merge_dfs(genes)
-        #for i,row in genes.iterrows():
-        #    print(row["chr"], row["start"], row["end"])
+        genes["gene_occ_1"] = 0
+        univ = f"gene_occ_{self.ngenomes}"
+        genes[univ] = 0
+        for i,g in genes.iterrows():
+            counts = self.query_occ_counts(genome, g["chr"], g["start"], g["end"], 1, self._gene_occ_idx)
+            genes.loc[i, "gene_occ_1"] += counts.loc["gene_occ_1"]
+            genes.loc[i, f"gene_occ_{self.ngenomes}"] += counts.loc[f"gene_occ_{self.ngenomes}"]
+            self.chrs.loc[(genome,g["chr"]), counts.index] += counts
+            #for occ,count in counts.items():
+            #    self.chrs.loc[(genome,g["chr"]), occ] += count
+
+        self._write_tabix(genes, genome, "gene")
 
 
     def close(self):
@@ -201,8 +220,7 @@ class Index:
         self.anchor_dir = self.init_dir(ANCHOR_DIR)
         self.anno_dir = self.init_dir("anno")
 
-    def query_bitmap(self, genome, chrom, start, end, step):
-        print(genome, chrom, start, end, step)
+    def query_bitmap(self, genome, chrom, start, end, step=1):
         return self.bitmaps[genome].query(chrom, start, end, step)
 
     @staticmethod
