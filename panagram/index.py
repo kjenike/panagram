@@ -75,7 +75,15 @@ class Index:
                 raise RuntimeError(f"Exactly one chromosome bin file must be present, found {len(fnames)}: {fnames}")
             self.conf.chr_bin_kbp = int(fnames[0].split("_")[-1][:-7])
 
-        self.chr_bins = pd.read_pickle(self.chr_bins_fname)
+        self._load_chr_bins()
+
+    def _load_chr_bins(self):
+        arr = np.fromfile(self.chr_bins_fname, "uint32")
+        arr = arr.reshape((len(arr)//self.ngenomes, self.ngenomes))
+
+        idx = pd.MultiIndex.from_frame(pd.concat([self.chr_bin_coords(*ch).drop(columns=["end"]) for ch in self.chrs.index]))
+        self.chr_bins = pd.DataFrame(arr, columns=self._total_occ_idx, index=idx)
+        #self.chr_bins = pd.read_pickle(self.chr_bins_fname)
 
     def _init_write(self):
         self.write_mode = True
@@ -166,9 +174,9 @@ class Index:
         self.chrs[self._total_occ_idx] = 0
         self.chrs[self._gene_occ_idx] = 0
 
-        #chr_bins_out = open(self.chr_bins_fname, "wb")
-        bin_coords = list()
-        chr_bin_occs = list()
+        chr_bins_out = open(self.chr_bins_fname, "wb")
+        #bin_coords = list()
+        #chr_bin_occs = list()
 
         prev_genome = None
         for (genome,chrom),size in self.chrs["size"].items():
@@ -180,26 +188,16 @@ class Index:
             chr_counts = self.count_occs(occs)
             self.chrs.loc[(genome,chrom), self._total_occ_idx] = chr_counts
 
-            coords = self.chr_bin_coords(genome,chrom,True)
-            bin_coords.append(coords.drop(columns="end"))
+            coords = self.chr_bin_coords(genome,chrom)
+            #bin_coords.append(coords.drop(columns="end"))
 
             for i,c in coords.iterrows():
                 st = c["start"] // self.conf.lowres_step
                 en = c["end"] // self.conf.lowres_step
                 bin_counts = self.count_occs(occs[st:en])
-                chr_bin_occs.append(bin_counts)
-                #chr_bin_coords.append((genome,chrom,start))
+                chr_bins_out.write(bin_counts.tobytes())
 
-                #chr_bins_out.write(bin_counts.tobytes())
-                #print(start,end, bin_counts)
-
-
-        self.chr_bins = pd.DataFrame(
-            chr_bin_occs, columns=self._total_occ_idx, dtype="uint32",
-            index = pd.MultiIndex.from_frame(pd.concat(bin_coords))).sort_index()
-        self.chr_bins.to_pickle(self.chr_bins_fname)
-
-        #chr_bins_out.close()
+        chr_bins_out.close()
 
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
 
@@ -212,17 +210,14 @@ class Index:
 
     @property
     def chr_bins_fname(self):
-        return f"{self.prefix}/bins_{self.conf.chr_bin_kbp}kbp.pkl"
+        return f"{self.prefix}/bins_{self.conf.chr_bin_kbp}kbp.bin"
 
-    def chr_bin_coords(self, genome, chrom, lowres=False):
+    def chr_bin_coords(self, genome, chrom):
         binlen = self.conf.chr_bin_kbp*1000
         size = self.chrs.loc[(genome,chrom),"size"]
         starts = np.arange(0,size,binlen)
         ends = np.clip(starts+binlen, 0, size)
         ret = pd.DataFrame({"genome" : genome, "chr" : chrom, "start" : starts, "end" : ends})
-        #if lowres:
-        #    ret["start"] = ret["start"] // self.conf.lowres_step
-        #else:
         return ret
 
 
