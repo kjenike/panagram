@@ -75,9 +75,16 @@ class Index:
     def write(self):
         genomes = list()
         self.genome_ids = dict()
-        self.genome_fastas = pd.Series(self.conf.genomes, name="fasta")
+        self.genome_files = pd.DataFrame({
+            "fasta" : pd.Series(self.conf.fasta),
+            #"gene" : pd.Series(self.conf.gene)
+        })
 
-        for i,(name,fasta) in enumerate(self.genome_fastas.items()):
+        if hasattr(self.conf, "gene"):
+            self.genome_files["gene"] = self.conf.gene
+
+
+        for i,(name,fasta) in enumerate(self.genome_files["fasta"].items()):
             self.genome_ids[name] = i
 
             if not os.path.exists(fasta+".fai"):
@@ -105,7 +112,7 @@ class Index:
             bitvec_dbs = self._run_kmc()
         
         def iter_anchor_args():
-            for name,fasta in self.genome_fastas.items():
+            for name,fasta in self.genome_files["fasta"].items():
                 yield (self.conf, name, "w", self.chrs, fasta, bitvec_dbs)
 
         if not self.conf.anno_only:
@@ -134,10 +141,46 @@ class Index:
 
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
 
-    #def _load_genes(self):
-    #    itr = pd.read_csv(conf.genes, chunksize=1000)
-    #    for df in itr:
+        if "gene" in self.genome_files.columns:
+            for g in self.genomes:
+                self._load_genes(g)
 
+    TABIX_COLS = ["chr","start","end","type","attr"]
+    def _iter_gff(self, fname):
+        print(fname)
+        for df in pd.read_csv(
+            fname, 
+            sep="\t", comment="#", chunksize=10000,
+            names = ["chr", "source", "type", "start", "end", "score", "strand", "phase", "attr"],
+            usecols = self.TABIX_COLS): yield df[self.TABIX_COLS]
+
+    def _write_tabix(self, df, genome, typ):
+        prefix = os.path.join(self.anno_dir, f"{genome}.{typ}")
+        bed = prefix+".bed"
+        tbx = bed+".bgz"
+
+        df.to_csv(bed, sep="\t", header=None, index=False)
+        pysam.tabix_compress(bed, tbx, True)
+        pysam.tabix_index(tbx, True, 0,1,2)
+        #os.remove(bed)
+
+    def _load_genes(self, genome):
+        genes = list()
+        exons = list()
+
+
+        for df in self._iter_gff(self.genome_files.loc[genome, "gene"]):
+            genes.append(df[df["type"] == "gene"])
+            exons.append(df[df["type"] == "exon"])
+
+        def _merge_dfs(dfs):
+            return pd.concat(dfs).sort_values(["chr","start"])
+
+        self._write_tabix(_merge_dfs(exons), genome, "exon")
+
+        genes = _merge_dfs(genes)
+        #for i,row in genes.iterrows():
+        #    print(row["chr"], row["start"], row["end"])
 
 
     def close(self):
@@ -156,6 +199,7 @@ class Index:
         self.bitvec_dir = self.init_dir("kmc_bitvec")
         self.tmp_dir =    self.init_dir("tmp")
         self.anchor_dir = self.init_dir(ANCHOR_DIR)
+        self.anno_dir = self.init_dir("anno")
 
     def query_bitmap(self, genome, chrom, start, end, step):
         print(genome, chrom, start, end, step)
@@ -184,7 +228,7 @@ class Index:
     def _iter_kmc_genome_args(self):
         i = 0
         db_count = 0
-        for name,fasta in self.genome_fastas.items():
+        for name,fasta in self.genome_files["fasta"].items():
             if i >= 32:
                 i = 0
                 db_count += 1
@@ -369,7 +413,6 @@ class KmerBitmap:
 
         gi = self.anchor_id
         name = self.anchor_name
-        #fasta_fname = self.conf.genome_fastas.loc[self.anchor_name]
 
         if self.fasta.endswith(".gz") or self.fasta.endswith(".bgz"):
             opn = lambda f: gzip.open(f, "rt")
