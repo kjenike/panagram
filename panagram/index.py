@@ -113,7 +113,7 @@ class Index:
         })
 
         if hasattr(self.conf, "gff"):
-            self.genome_files["gff"] = self.conf.gff
+            self.genome_files["gff"] = pd.Series(self.conf.gff)
 
         if self.conf.anno_only:
             self._load_chrs()
