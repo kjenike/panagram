@@ -36,7 +36,6 @@ class Index:
         self.conf = conf
         self.prefix = prefix
         if conf is not None:
-            #self._load_conf(conf)
             if prefix is None:
                 self.prefix = conf.prefix
             self._init_write()
@@ -46,32 +45,6 @@ class Index:
             self._init_read()
         else:
             raise ValueError(f"Must specify a prefix (read mode) or config file (write mode)")
-        #if mode == "r":
-        #    self._init_read()
-        #elif mode == "w":
-        #    self._init_write()
-        #if mode not in MODES:
-        #    raise ValueError(f"'mode' must be in {MODES}")
-
-    PARAMS = [
-        "k", 
-        "anchor_only",
-        "bitmap_resolutions",
-        ("out_dir", "prefix"), 
-        ("kmc", "kmc_args"),
-        ("genomes", "genome_fastas")
-    ]
-    def _load_conf(self, conf):
-        if conf is None: return
-        elif isinstance(conf, str):
-            conf = toml.load(conf)
-
-        for p in self.PARAMS:
-            if isinstance(p, tuple):
-                name,tgt = p
-            else:
-                name = tgt = p
-            setattr(self, tgt, conf[name])
 
 
     def _init_read(self):
@@ -113,38 +86,41 @@ class Index:
             fa = pysam.FastaFile(fasta)
 
             genomes.append(pd.DataFrame(
-                [(name, chrom, i, fa.get_reference_length(chrom)) 
+                [(name, chrom, i, fa.get_reference_length(chrom)-self.conf.k+1) 
                  for chrom in fa.references], 
                 columns=["genome", "chr", "id", "size"]))
+
         self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
+        self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+
         self.genomes = self.chrs.index.unique("genome")
 
-        if self.conf.anchor_only:
+        if self.conf.anchor_only or self.conf.anno_only:
             pre = f""
             suf = ".kmc_pre"
             bitvec_dbs = [f[:-len(suf)] 
                 for f in glob.glob(f"{self.bitvec_dir}/*{suf}")]
+
         else:
             bitvec_dbs = self._run_kmc()
-
-        #self._load_kmc(bitvec_dbs)
         
         def iter_anchor_args():
             for name,fasta in self.genome_fastas.items():
                 yield (self.conf, name, "w", self.chrs, fasta, bitvec_dbs)
 
-        self.bitmaps = dict()
-        if self.conf.processes == 1:
-            for args in iter_anchor_args():
-                print("Anchored", self.run_anchor(args))
-        else:
-            with mp.Pool(processes=self.conf.processes) as pool:
-                for name in pool.imap_unordered(self.run_anchor, iter_anchor_args(), chunksize=1):
-                    print(f"Anchored {name}")
-                    sys.stdout.flush()
+        if not self.conf.anno_only:
+            if self.conf.processes == 1:
+                for args in iter_anchor_args():
+                    print("Anchored", self.run_anchor(args))
+            else:
+                with mp.Pool(processes=self.conf.processes) as pool:
+                    for name in pool.imap_unordered(self.run_anchor, iter_anchor_args(), chunksize=1):
+                        print(f"Anchored {name}")
+                        sys.stdout.flush()
 
-        for name in self.genomes:
-            self.bitmaps[name] = KmerBitmap(self.conf, name, "r", self.chrs)
+        self.bitmaps = {
+            name : KmerBitmap(self.conf, name, "r", self.chrs) for name in self.genomes
+        }
 
         #Calculate per-chromosome k-mer occurence counts
         for i in range(len(self.genomes)):
@@ -157,6 +133,11 @@ class Index:
                 self.chrs.loc[(genome,chrom), f"total_occ_{occ}"] = count
 
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+
+    #def _load_genes(self):
+    #    itr = pd.read_csv(conf.genes, chunksize=1000)
+    #    for df in itr:
+
 
 
     def close(self):
@@ -177,6 +158,7 @@ class Index:
         self.anchor_dir = self.init_dir(ANCHOR_DIR)
 
     def query_bitmap(self, genome, chrom, start, end, step):
+        print(genome, chrom, start, end, step)
         return self.bitmaps[genome].query(chrom, start, end, step)
 
     @staticmethod
@@ -382,7 +364,8 @@ class KmerBitmap:
     def _init_write(self, kmc_dbs=None):
         self._load_kmc(kmc_dbs)
 
-        self.bitmaps = {s : bgzf.BgzfWriter(self.bgz_fname(s), "wb") for s in self.steps}
+        #self.bitmaps = {s : bgzf.BgzfWriter(self.bgz_fname(s), "wb") for s in self.steps}
+        self.bitmaps = {s : bgzip.BGZipWriter(open(self.bgz_fname(s), "wb"))for s in self.steps}
 
         gi = self.anchor_id
         name = self.anchor_name
