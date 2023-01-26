@@ -28,23 +28,27 @@ class KMC:
 class Index:
     """Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap"""
 
+    #configuration file (toml)
     conf: str = field(positional=True, metavar="confg_file")
-    #genomes: str = field(positional=True)
-    #"""TSV file with each genome ID in the first column and the path to a gzipped fasta in the second column"""
 
-    kmc: KMC = KMC()
-
+    #K-mer length
     k: int = field(alias=["-k"], default=21)
-    """K-mer length (must be same as KMC database)"""
 
+    #Number of processes
     processes: int = field(alias=["-p"], default=1)
-    """Number of processes"""
 
+    #dummy parameters to force KMC params to be in "kmc.*" format
     threads: int = field(default=1,help=argparse.SUPPRESS)
     memory: int = field(default=1,help=argparse.SUPPRESS)
 
+    #Only perform anchoring and annotation
     anchor_only: bool = False
-    """Assume KMC databases already exist"""
+
+    #Only perform annotaion
+    anno_only: bool = False
+
+
+    kmc: KMC = KMC()
 
     bitmap_resolutions: list = field(default_factory=lambda:[1, 100])
 
