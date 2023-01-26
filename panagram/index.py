@@ -56,8 +56,9 @@ class Index:
     def _init_read(self):
         self.write_mode = False
         self._init_dirs()
-        self.chrs = pd.read_csv(f"{self.prefix}/chrs.csv").set_index(["genome","chr"])
-        self.genomes = self.chrs.index.unique("genome")
+        #self.chrs = pd.read_csv(f"{self.prefix}/chrs.csv").set_index(["genome","chr"])
+        #self.genomes = self.chrs.index.unique("genome")
+        self._load_chrs()
 
         self.bitmaps = dict()
         self.gene_tabix = dict()
@@ -90,7 +91,13 @@ class Index:
 
     @staticmethod
     def run_anchor(args):
-        return KmerBitmap(*args).anchor_name
+        bitmap = KmerBitmap(*args)
+        bitmap.close()
+        return bitmap.anchor_name
+
+    def _load_chrs(self):
+        self.chrs = pd.read_csv(f"{self.prefix}/chrs.csv").set_index(["genome","chr"])
+        self._init_genomes()
 
     def _init_genomes(self):
         self.genomes = self.chrs.index.unique("genome")
@@ -105,26 +112,28 @@ class Index:
             "fasta" : pd.Series(self.conf.fasta),
         })
 
-        if hasattr(self.conf, "gene"):
-            self.genome_files["gene"] = self.conf.gene
+        if hasattr(self.conf, "gff"):
+            self.genome_files["gff"] = self.conf.gff
 
+        if self.conf.anno_only:
+            self._load_chrs()
+        else:
+            for i,(name,fasta) in enumerate(self.genome_files["fasta"].items()):
+                self.genome_ids[name] = i
 
-        for i,(name,fasta) in enumerate(self.genome_files["fasta"].items()):
-            self.genome_ids[name] = i
+                if not os.path.exists(fasta+".fai"):
+                    cmd = ["samtools", "faidx", fasta]
+                    subprocess.check_call(cmd)
+                fa = pysam.FastaFile(fasta)
 
-            if not os.path.exists(fasta+".fai"):
-                cmd = ["samtools", "faidx", fasta]
-                subprocess.check_call(cmd)
-            fa = pysam.FastaFile(fasta)
+                genomes.append(pd.DataFrame(
+                    [(name, chrom, i, fa.get_reference_length(chrom)-self.conf.k+1) 
+                     for chrom in fa.references], 
+                    columns=["genome", "chr", "id", "size"]))
 
-            genomes.append(pd.DataFrame(
-                [(name, chrom, i, fa.get_reference_length(chrom)-self.conf.k+1) 
-                 for chrom in fa.references], 
-                columns=["genome", "chr", "id", "size"]))
-
-        self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
-        self._init_genomes()
-        self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+            self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
+            self._init_genomes()
+            self.chrs.to_csv(f"{self.prefix}/chrs.csv")
 
         if self.conf.anchor_only or self.conf.anno_only:
             pre = f""
@@ -161,7 +170,12 @@ class Index:
         bin_coords = list()
         chr_bin_occs = list()
 
+        prev_genome = None
         for (genome,chrom),size in self.chrs["size"].items():
+            if genome != prev_genome:
+                print(genome)
+                prev_genome = genome
+
             occs = self.query_bitmap(genome,chrom,0,size,100).sum(axis=1)
             chr_counts = self.count_occs(occs)
             self.chrs.loc[(genome,chrom), self._total_occ_idx] = chr_counts
@@ -179,6 +193,7 @@ class Index:
                 #chr_bins_out.write(bin_counts.tobytes())
                 #print(start,end, bin_counts)
 
+
         self.chr_bins = pd.DataFrame(
             chr_bin_occs, columns=self._total_occ_idx, dtype="uint32",
             index = pd.MultiIndex.from_frame(pd.concat(bin_coords))).sort_index()
@@ -189,9 +204,9 @@ class Index:
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
 
         print("Computing gene summaries")
-        if "gene" in self.genome_files.columns:
+        if "gff" in self.genome_files.columns:
             for g in self.genomes:
-                self._load_genes(g)
+                self._load_gffs(g)
 
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
 
@@ -231,7 +246,10 @@ class Index:
             usecols = TABIX_COLS): yield df[TABIX_COLS]
 
     def _load_tabix(self, genome, type_):
-        return pysam.TabixFile(self.tabix_fname(genome, type_), parser=pysam.asTuple())
+        fname = self.tabix_fname(genome, type_)
+        if not os.path.exists(fname):
+            return None
+        return pysam.TabixFile(fname, parser=pysam.asTuple())
 
     def tabix_fname(self, genome, typ):
         return os.path.join(self.anno_dir, f"{genome}.{typ}.bed{TABIX_SUFFIX}") 
@@ -245,11 +263,13 @@ class Index:
         pysam.tabix_index(tbx, True, 0,1,2)
         #os.remove(bed)
 
-    def _load_genes(self, genome):
+    def _load_gffs(self, genome):
         genes = list()
         annos = list()
+        fname = self.genome_files.loc[genome, "gff"]
+        if pd.isna(fname): return
 
-        for df in self._iter_gff(self.genome_files.loc[genome, "gene"]):
+        for df in self._iter_gff(fname):
             genes.append(df[df["type"].isin(self.conf.gff_gene_types)])
             annos.append(df[df["type"].isin(self.conf.gff_anno_types)])
 
@@ -294,12 +314,18 @@ class Index:
         return self.bitmaps[genome].query(chrom, start, end, step)
 
     def query_genes(self, genome, chrom, start, end):
+        if not genome in self.gene_tabix:
+            return pd.DataFrame(columns=GENE_TABIX_COLS)
         rows = self.gene_tabix[genome].fetch(chrom, start, end)
         return pd.DataFrame(rows, columns=GENE_TABIX_COLS).astype(GENE_TABIX_TYPES)
 
     def query_anno(self, genome, chrom, start, end):
+        if not genome in self.anno_tabix:
+            return pd.DataFrame(columns=TABIX_COLS)
         rows = self.anno_tabix[genome].fetch(chrom, start, end)
         return pd.DataFrame(rows, columns=TABIX_COLS).astype(TABIX_TYPES)
+    
+    #def _query_tabix(self, tabix genome, chrom, start, end):
 
     @staticmethod
     def _run_kmc_genome(args):
@@ -411,8 +437,8 @@ class KmerBitmap:
 
 
     def _init_steps(self, conf):
-        if hasattr(conf, "lowres_steps"):
-            self.steps = [1, conf.lowres_steps]
+        if hasattr(conf, "lowres_step"):
+            self.steps = [1, conf.lowres_step]
         else:
             self.steps = list()
             for fname in glob.glob(f"{self.prefix}.*.{BGZ_SUFFIX}"):
