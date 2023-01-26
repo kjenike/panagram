@@ -21,6 +21,12 @@ BGZ_SUFFIX = "bgz"
 IDX_SUFFIX = "gzi"
 ANCHOR_DIR = "anchors"
 
+TABIX_COLS = ["chr","start","end","type","attr"]
+TABIX_TYPES = {"start" : int, "end" : int}
+GENE_TABIX_COLS = TABIX_COLS + ["unique","universal"]
+GENE_TABIX_TYPES = {"start" : int, "end" : int, "unique" : int, "universal" : int}
+TABIX_SUFFIX = ".bgz"
+
 MODES = {"r","w"}
 
 #TODO
@@ -53,8 +59,22 @@ class Index:
         self.chrs = pd.read_csv(f"{self.prefix}/chrs.csv").set_index(["genome","chr"])
         self.genomes = self.chrs.index.unique("genome")
 
-        genome_names = self.chrs.index.unique("genome")
-        self.bitmaps = {genome : KmerBitmap(self.conf, genome, "r", self.chrs) for genome in genome_names}
+        self.bitmaps = dict()
+        self.gene_tabix = dict()
+        self.anno_tabix = dict()
+
+        for g in self.genomes:
+            self.bitmaps[g] = KmerBitmap(self.conf, g, "r", self.chrs)
+            self.gene_tabix[g] = self._load_tabix(g, "gene")
+            self.anno_tabix[g] = self._load_tabix(g, "anno")
+
+        if not hasattr(self.conf, "chr_bin_kbp"):
+            fnames = glob.glob(f"{self.prefix}/bins_*kbp.pkl")
+            if len(fnames) != 1:
+                raise RuntimeError(f"Exactly one chromosome bin file must be present, found {len(fnames)}: {fnames}")
+            self.conf.chr_bin_kbp = int(fnames[0].split("_")[-1][:-7])
+
+        self.chr_bins = pd.read_pickle(self.chr_bins_fname)
 
     def _init_write(self):
         self.write_mode = True
@@ -83,7 +103,6 @@ class Index:
         self.genome_ids = dict()
         self.genome_files = pd.DataFrame({
             "fasta" : pd.Series(self.conf.fasta),
-            #"gene" : pd.Series(self.conf.gene)
         })
 
         if hasattr(self.conf, "gene"):
@@ -134,39 +153,92 @@ class Index:
             name : KmerBitmap(self.conf, name, "r", self.chrs) for name in self.genomes
         }
 
-        #Calculate per-chromosome k-mer occurence counts
+        print("Computing chromosome summaries")
         self.chrs[self._total_occ_idx] = 0
         self.chrs[self._gene_occ_idx] = 0
 
+        #chr_bins_out = open(self.chr_bins_fname, "wb")
+        bin_coords = list()
+        chr_bin_occs = list()
+
         for (genome,chrom),size in self.chrs["size"].items():
-            counts = self.query_occ_counts(genome,chrom,0,size,100,self._total_occ_idx)
-            self.chrs.loc[(genome,chrom), counts.index] = counts
+            occs = self.query_bitmap(genome,chrom,0,size,100).sum(axis=1)
+            chr_counts = self.count_occs(occs)
+            self.chrs.loc[(genome,chrom), self._total_occ_idx] = chr_counts
+
+            coords = self.chr_bin_coords(genome,chrom,True)
+            bin_coords.append(coords.drop(columns="end"))
+
+            for i,c in coords.iterrows():
+                st = c["start"] // self.conf.lowres_step
+                en = c["end"] // self.conf.lowres_step
+                bin_counts = self.count_occs(occs[st:en])
+                chr_bin_occs.append(bin_counts)
+                #chr_bin_coords.append((genome,chrom,start))
+
+                #chr_bins_out.write(bin_counts.tobytes())
+                #print(start,end, bin_counts)
+
+        self.chr_bins = pd.DataFrame(
+            chr_bin_occs, columns=self._total_occ_idx, dtype="uint32",
+            index = pd.MultiIndex.from_frame(pd.concat(bin_coords))).sort_index()
+        self.chr_bins.to_pickle(self.chr_bins_fname)
+
+        #chr_bins_out.close()
 
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
 
+        print("Computing gene summaries")
         if "gene" in self.genome_files.columns:
             for g in self.genomes:
                 self._load_genes(g)
+
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
 
-    def query_occ_counts(self, genome, chrom, start, end, step, idx):
-        popcnts = self.query_bitmap(genome, chrom, start, end, step).sum(axis=1)
-        occs, counts = np.unique(popcnts, return_counts=True)
-        return pd.Series(index=idx[occs-1], data=counts).reindex(idx, fill_value=0)
+    @property
+    def chr_bins_fname(self):
+        return f"{self.prefix}/bins_{self.conf.chr_bin_kbp}kbp.pkl"
 
-    TABIX_COLS = ["chr","start","end","type","attr"]
+    def chr_bin_coords(self, genome, chrom, lowres=False):
+        binlen = self.conf.chr_bin_kbp*1000
+        size = self.chrs.loc[(genome,chrom),"size"]
+        starts = np.arange(0,size,binlen)
+        ends = np.clip(starts+binlen, 0, size)
+        ret = pd.DataFrame({"genome" : genome, "chr" : chrom, "start" : starts, "end" : ends})
+        #if lowres:
+        #    ret["start"] = ret["start"] // self.conf.lowres_step
+        #else:
+        return ret
+
+
+    def query_occ_counts(self, genome, chrom, start, end, step=1):
+        occs = self.query_bitmap(genome, chrom, start, end, step).sum(axis=1)
+        return self.count_occs(occs)
+    
+    def count_occs(self, occs):
+        ret = np.zeros(self.ngenomes, "uint32")
+        occs, counts = np.unique(occs, return_counts=True)
+        ret[occs-1] = counts
+        return ret
+        #return pd.Series(index=idx[occs-1], data=counts).reindex(idx, fill_value=0)
+
     def _iter_gff(self, fname):
         print(fname)
         for df in pd.read_csv(
             fname, 
             sep="\t", comment="#", chunksize=10000,
-            names = ["chr", "source", "type", "start", "end", "score", "strand", "phase", "attr"],
-            usecols = self.TABIX_COLS): yield df[self.TABIX_COLS]
+            names = ["chr","source","type","start","end","score","strand","phase","attr"],
+            usecols = TABIX_COLS): yield df[TABIX_COLS]
+
+    def _load_tabix(self, genome, type_):
+        return pysam.TabixFile(self.tabix_fname(genome, type_), parser=pysam.asTuple())
+
+    def tabix_fname(self, genome, typ):
+        return os.path.join(self.anno_dir, f"{genome}.{typ}.bed{TABIX_SUFFIX}") 
 
     def _write_tabix(self, df, genome, typ):
-        prefix = os.path.join(self.anno_dir, f"{genome}.{typ}")
-        bed = prefix+".bed"
-        tbx = bed+".bgz"
+        tbx = self.tabix_fname(genome, typ)
+        bed = tbx[:-len(TABIX_SUFFIX)]
 
         df.to_csv(bed, sep="\t", header=None, index=False)
         pysam.tabix_compress(bed, tbx, True)
@@ -175,27 +247,25 @@ class Index:
 
     def _load_genes(self, genome):
         genes = list()
-        exons = list()
-
+        annos = list()
 
         for df in self._iter_gff(self.genome_files.loc[genome, "gene"]):
-            genes.append(df[df["type"] == "gene"])
-            exons.append(df[df["type"] == "exon"])
+            genes.append(df[df["type"].isin(self.conf.gff_gene_types)])
+            annos.append(df[df["type"].isin(self.conf.gff_anno_types)])
 
         def _merge_dfs(dfs):
             return pd.concat(dfs).sort_values(["chr","start"]).reset_index(drop=True)
 
-        self._write_tabix(_merge_dfs(exons), genome, "exon")
+        self._write_tabix(_merge_dfs(annos), genome, "anno")
 
         genes = _merge_dfs(genes)
-        genes["gene_occ_1"] = 0
-        univ = f"gene_occ_{self.ngenomes}"
-        genes[univ] = 0
+        genes["unique"] = 0
+        genes["universal"] = 0
         for i,g in genes.iterrows():
-            counts = self.query_occ_counts(genome, g["chr"], g["start"], g["end"], 1, self._gene_occ_idx)
-            genes.loc[i, "gene_occ_1"] += counts.loc["gene_occ_1"]
-            genes.loc[i, f"gene_occ_{self.ngenomes}"] += counts.loc[f"gene_occ_{self.ngenomes}"]
-            self.chrs.loc[(genome,g["chr"]), counts.index] += counts
+            counts = self.query_occ_counts(genome, g["chr"], g["start"], g["end"])
+            genes.loc[i, "unique"] += counts[0]
+            genes.loc[i, "universal"] += counts[-1]
+            self.chrs.loc[(genome,g["chr"]), self._gene_occ_idx] += counts
             #for occ,count in counts.items():
             #    self.chrs.loc[(genome,g["chr"]), occ] += count
 
@@ -222,6 +292,14 @@ class Index:
 
     def query_bitmap(self, genome, chrom, start, end, step=1):
         return self.bitmaps[genome].query(chrom, start, end, step)
+
+    def query_genes(self, genome, chrom, start, end):
+        rows = self.gene_tabix[genome].fetch(chrom, start, end)
+        return pd.DataFrame(rows, columns=GENE_TABIX_COLS).astype(GENE_TABIX_TYPES)
+
+    def query_anno(self, genome, chrom, start, end):
+        rows = self.anno_tabix[genome].fetch(chrom, start, end)
+        return pd.DataFrame(rows, columns=TABIX_COLS).astype(TABIX_TYPES)
 
     @staticmethod
     def _run_kmc_genome(args):
@@ -333,13 +411,14 @@ class KmerBitmap:
 
 
     def _init_steps(self, conf):
-        if hasattr(conf, "bitmap_resolutions"):
-            self.steps = conf.bitmap_resolutions
+        if hasattr(conf, "lowres_steps"):
+            self.steps = [1, conf.lowres_steps]
         else:
             self.steps = list()
             for fname in glob.glob(f"{self.prefix}.*.{BGZ_SUFFIX}"):
                 step = int(fname.split(".")[-2])
                 self.steps.append(step)
+
         
 
     def bgz_fname(self, step): 
