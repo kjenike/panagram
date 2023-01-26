@@ -24,35 +24,49 @@ class KMC:
     processes: int = field(default=4, dest="main.kmc.processes")
     threads: int = field(default=1, dest="main.kmc.threads")
 
+#TODO merge with index.Index
+#parameters are dataclass attributes
+#
 @dataclasses.dataclass
 class Index:
     """Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap"""
 
+    #configuration file (toml)
     conf: str = field(positional=True, metavar="confg_file")
-    #genomes: str = field(positional=True)
-    #"""TSV file with each genome ID in the first column and the path to a gzipped fasta in the second column"""
 
-    kmc: KMC = KMC()
-
+    #K-mer length
     k: int = field(alias=["-k"], default=21)
-    """K-mer length (must be same as KMC database)"""
 
+    #Number of processes
     processes: int = field(alias=["-p"], default=1)
-    """Number of processes"""
 
+    #Step size for low-resolution pan-kmer bitmap (in nucleotides, larger step = lower resolution)
+    lowres_step: int = 100
+
+    #Size of chromosome-scale occurence count bins in kilobases 
+    chr_bin_kbp: int = 200
+
+    gff_gene_types: List[str] = field(default_factory=lambda: ["gene"])
+    gff_anno_types: List[str] = field(default_factory=lambda: ["exon", "repeat"])
+
+    #dummy parameters to force KMC params to be in "kmc.*" format
     threads: int = field(default=1,help=argparse.SUPPRESS)
     memory: int = field(default=1,help=argparse.SUPPRESS)
 
+    #Only perform anchoring and annotation
     anchor_only: bool = False
-    """Assume KMC databases already exist"""
 
-    bitmap_resolutions: list = field(default_factory=lambda:[1, 100])
+    #Only perform annotaion
+    anno_only: bool = False
+
+    kmc: KMC = KMC()
 
     def _load_dict(self, d, tgt):
         for key,val in d.items():
             if isinstance(val, dict) and dataclasses.is_dataclass(getattr(tgt, key, None)):
                 self._load_dict(val, getattr(tgt, key))
             else:
+                #print(tgt, key, val)
                 setattr(tgt, key, val)
 
     def run(self):
@@ -86,7 +100,7 @@ class Bitdump:
         bits = bitmap.query_bitmap(genome, chrom, start, end, self.step)
 
         if self.verbose:
-            print(" ".join(bitmap.genome_names))
+            print(" ".join(bitmap.genomes))
             for i in range(len(bits)):
                 print(" ".join(bits[i].astype(str)))
         else:
