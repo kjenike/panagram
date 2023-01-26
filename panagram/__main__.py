@@ -24,6 +24,9 @@ class KMC:
     processes: int = field(default=4, dest="main.kmc.processes")
     threads: int = field(default=1, dest="main.kmc.threads")
 
+#TODO merge with index.Index
+#parameters are dataclass attributes
+#
 @dataclasses.dataclass
 class Index:
     """Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap"""
@@ -37,6 +40,15 @@ class Index:
     #Number of processes
     processes: int = field(alias=["-p"], default=1)
 
+    #Step size for low-resolution pan-kmer bitmap (in nucleotides, larger step = lower resolution)
+    lowres_step: int = 100
+
+    #Size of chromosome-scale occurence count bins in kilobases 
+    chr_bin_kbp: int = 200
+
+    gff_gene_types: List[str] = field(default_factory=lambda: ["gene"])
+    gff_anno_types: List[str] = field(default_factory=lambda: ["exon", "repeat"])
+
     #dummy parameters to force KMC params to be in "kmc.*" format
     threads: int = field(default=1,help=argparse.SUPPRESS)
     memory: int = field(default=1,help=argparse.SUPPRESS)
@@ -47,10 +59,7 @@ class Index:
     #Only perform annotaion
     anno_only: bool = False
 
-
     kmc: KMC = KMC()
-
-    bitmap_resolutions: list = field(default_factory=lambda:[1, 100])
 
     def _load_dict(self, d, tgt):
         for key,val in d.items():
@@ -91,7 +100,7 @@ class Bitdump:
         bits = bitmap.query_bitmap(genome, chrom, start, end, self.step)
 
         if self.verbose:
-            print(" ".join(bitmap.genome_names))
+            print(" ".join(bitmap.genomes))
             for i in range(len(bits)):
                 print(" ".join(bits[i].astype(str)))
         else:
