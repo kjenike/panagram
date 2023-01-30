@@ -72,7 +72,7 @@ class Index:
             self.anno_tabix[g] = self._load_tabix(g, "anno")
 
         if not hasattr(self.conf, "chr_bin_kbp"):
-            fnames = glob.glob(f"{self.prefix}/bins_*kbp.pkl")
+            fnames = glob.glob(f"{self.prefix}/bins_*kbp.bin")
             if len(fnames) != 1:
                 raise RuntimeError(f"Exactly one chromosome bin file must be present, found {len(fnames)}: {fnames}")
             self.conf.chr_bin_kbp = int(fnames[0].split("_")[-1][:-7])
