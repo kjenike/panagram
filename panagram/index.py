@@ -326,7 +326,7 @@ class Index:
 
     @staticmethod
     def _run_kmc_genome(args):
-        conf, i, name, fasta, count_db, onehot_db, tmp_dir = args
+        conf, db_i, i, name, fasta, count_db, onehot_db, tmp_dir = args
 
         onehot_id = str(2**i)
 
@@ -341,38 +341,39 @@ class Index:
             count_db, "set_counts", onehot_id, onehot_db
         ])
 
-        return name, onehot_db
+        return db_i, name, onehot_db
 
 
     def _iter_kmc_genome_args(self):
         i = 0
-        db_count = 0
+        db_i = 0
         for name,fasta in self.genome_files["fasta"].items():
             if i >= 32:
                 i = 0
-                db_count += 1
+                db_i += 1
 
             count_db = os.path.join(self.count_dir, name)
             onehot_db = os.path.join(self.onehot_dir, name)
             tmp_dir = self.init_dir(f"tmp/{name}")
-            yield (self.conf, i, name, fasta, count_db, onehot_db, tmp_dir)
+            yield (self.conf, db_i, i, name, fasta, count_db, onehot_db, tmp_dir)
 
             i += 1
 
     def _run_kmc(self):
 
         i = 0
-        db_count = 1
-        samp_count = 0
+        samp_count = len(self.genome_files)
+        db_count = int(np.ceil(samp_count / 32))
 
-        genome_dbs = list()
+        genome_dbs = [list() for i in range(db_count)]
         if self.conf.kmc.processes == 1:
             for args in self._iter_kmc_genome_args():
-                genome_dbs.append(self._run_kmc_genome(args))
+                i,name,db = self._run_kmc_genome(args)
+                genome_dbs[i].append((name,db))
         else:
             with mp.Pool(processes=self.conf.kmc.processes) as pool:
-                for db in pool.imap(self._run_kmc_genome, self._iter_kmc_genome_args(), chunksize=1):
-                    genome_dbs.append(db)
+                for i,name,db in pool.imap(self._run_kmc_genome, self._iter_kmc_genome_args(), chunksize=1):
+                    genome_dbs[i].append((name,db))
 
         bitvec_dbs = list()
 
@@ -389,10 +390,10 @@ class Index:
 
             with open(opdef_fname, "w") as opdefs:
                 opdefs.write("INPUT:\n")
-                for name, db in genome_dbs:
+                for name, db in genome_dbs[i]:
                     opdefs.write(f"{name} = {db}\n")
-                opdefs.write(f"OUTPUT:\n{bitvec_fname} = {genome_dbs[0][0]}")
-                for name,_ in genome_dbs[1:]:
+                opdefs.write(f"OUTPUT:\n{bitvec_fname} = {genome_dbs[i][0][0]}")
+                for name,_ in genome_dbs[i][1:]:
                     opdefs.write(f" + {name}")
                 opdefs.write("\n-ocsum\n")
 
@@ -498,8 +499,6 @@ class KmerBitmap:
         blk_start = self.blocks[bstep]["rstart"][blk]
 
         self.bitmaps[bstep].seek(bgzf.make_virtual_offset(blk_start, blk_offs))
-        print("LEN", length)
-        print("BYTES", self.nbytes)
         buf = self.bitmaps[bstep].read(length * self.nbytes)
 
         pac = np.frombuffer(buf, "uint8").reshape((len(buf)//self.nbytes, self.nbytes))
