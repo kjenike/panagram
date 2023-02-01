@@ -489,7 +489,7 @@ class KmerBitmap:
 
     def _query(self, name, start, end, step, bstep):
         byte_start = self.nbytes * (self.offsets.loc[name,bstep] + (start//bstep))
-        length  = (end - start) // bstep
+        length  = int((end - start) // bstep)
 
         step = step // bstep
 
@@ -498,6 +498,8 @@ class KmerBitmap:
         blk_start = self.blocks[bstep]["rstart"][blk]
 
         self.bitmaps[bstep].seek(bgzf.make_virtual_offset(blk_start, blk_offs))
+        print("LEN", length)
+        print("BYTES", self.nbytes)
         buf = self.bitmaps[bstep].read(length * self.nbytes)
 
         pac = np.frombuffer(buf, "uint8").reshape((len(buf)//self.nbytes, self.nbytes))
