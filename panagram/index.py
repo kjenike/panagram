@@ -91,13 +91,13 @@ class Index:
         self.write_mode = True
         self._init_dirs()
     
-    def _load_kmc(self, files):
-        from .kmc import py_kmc_api
-        self.kmc = py_kmc_api
-        self.kmc_dbs = list()
-        for fname in files:
-            self.kmc_dbs.append(self.kmc.KMCFile())
-            self.kmc_dbs[-1].OpenForRA(fname)
+    #def _load_kmc(self, files):
+    #    from .kmc import py_kmc_api
+    #    self.kmc = py_kmc_api
+    #    self.kmc_dbs = list()
+    #    for fname in files:
+    #        self.kmc_dbs.append(self.kmc.KMCFile())
+    #        self.kmc_dbs[-1].OpenForRA(fname)
 
     @staticmethod
     def run_anchor(args):
@@ -516,7 +516,11 @@ class KmerBitmap:
         return pac.view("uint8").reshape((len(pac),4))
     
     def _load_kmc(self, kmc_dbs):
-        from .kmc import py_kmc_api
+        try:
+            from .kmc import py_kmc_api
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError("py_kmc_api failed to install. See https://github.com/kjenike/panagram#readme for more information")
+
         self.kmc = py_kmc_api
         self.kmc_dbs = list()
         for db in kmc_dbs:
