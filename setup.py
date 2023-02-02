@@ -1,5 +1,6 @@
 from setuptools import setup
 from setuptools.command.build_py import build_py
+from setuptools.command.build import SubCommand
 import subprocess
 import os
 import glob
@@ -29,8 +30,10 @@ KMC_URLS = {
 }
 
 class pre_build(build_py):
+    bulid_lib = ROOT_DIR
+    
     def run(self):
-        make_cmd = ["make", "-j", "4", "-C", KMC_DIR, "py_kmc_api"]
+        make_cmd = ["make", "-C", KMC_DIR, "py_kmc_api"]
 
         plat = platform.system()
         kmc_url = KMC_URLS.get(plat, None)
@@ -60,6 +63,21 @@ class pre_build(build_py):
 
 
         build_py.run(self)
+
+    def get_output_mapping(self):
+        print("GET OUTPUT MAPPING")
+        return build_py.get_output_mapping()
+    
+    def get_outputs(self):
+        print("GET OUTPUTS")
+        return build_py.get_outputs(self)
+
+    def get_source_files(self):
+        print("SOURCES OUT", build_py.get_source_files(self))
+        return build_py.get_source_files(self) + ["KMC/py_kmc_api/py_kmc_api.cpp"]
+
+    def initialize_options(self):
+        return build_py.initialize_options(self)
 
 if __name__ == "__main__":
     setup(
