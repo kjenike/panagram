@@ -48,15 +48,7 @@ MODES = {"r","w"}
 #exons+repeats: track, type, id, metadata for random access display
 
 
-@dataclasses.dataclass
-class KMC:
-    """Parameters for KMC kmer counting"""
-    memory: int = field(default=8, dest="main.kmc.memory")
-    processes: int = field(default=4, dest="main.kmc.processes")
-    threads: int = field(default=1, dest="main.kmc.threads")
-
 #TODO merge with index.Index
-#parameters are dataclass attributes
 #by default load all anno types, store in config
 #store mash distances {prefix}/dists.csv
 
@@ -65,6 +57,16 @@ class KMC:
 #coords
 #max_chr_bins
 #bookmarks
+
+@dataclasses.dataclass
+class KMC:
+    """Parameters for KMC kmer counting"""
+    memory: int = field(default=8, dest="main.kmc.memory")
+    processes: int = field(default=4, dest="main.kmc.processes")
+    threads: int = field(default=1, dest="main.kmc.threads")
+    #Use existing KMC count and onehot genome databases if present
+    #Use existing KMC count and onehot genome databases if present
+    use_existing: bool = field(action="store_true", default=False)
 
 @dataclasses.dataclass
 class Index:
@@ -99,6 +101,7 @@ class Index:
     kmc: KMC = KMC()
 
     #Dummy parameters to force KMC params to be in "kmc.*" format
+    use_existing: int = field(default=1,help=argparse.SUPPRESS)
     threads: int = field(default=1,help=argparse.SUPPRESS)
     memory: int = field(default=1,help=argparse.SUPPRESS)
 
@@ -108,11 +111,12 @@ class Index:
             if dataclasses.is_dataclass(dest):
                 if isinstance(val, dict):
                     self._load_dict(dest, val)
-                    return
-                elif not dataclasses.is_dataclass(val):
+                elif dataclasses.is_dataclass(val):
+                    setattr(root, key, val)
+                else:
                     raise ValueError(f"{key} must be dict or dataclass, found {key} = {val}")
-
-            setattr(root, key, val)
+            else:
+                setattr(root, key, val)
 
     def run(self):
         self.write()#args)
@@ -125,7 +129,9 @@ class Index:
     def __post_init__(self):
 
         if self.config_file is not None:
-            self._load_dict(self, toml.load(self.config_file))
+            d = toml.load(self.config_file)
+            print(d)
+            self._load_dict(self, d)
             self.config_file = None
 
         self.write_mode = hasattr(self, "fasta")
@@ -133,8 +139,6 @@ class Index:
             if len(glob.glob(pattern)) == 0:
                 self.write_mode = True
                 break
-
-
 
         self.count_dir =  self.init_dir("kmc_count")
         self.onehot_dir = self.init_dir("kmc_onehot")
@@ -275,6 +279,7 @@ class Index:
         for (genome,chrom),size in self.chrs["size"].items():
             if genome != prev_genome:
                 prev_genome = genome
+                print(genome)
 
             occs = self.query_bitmap(genome,chrom,0,size,100).sum(axis=1)
             chr_counts = self.count_occs(occs)
@@ -293,9 +298,10 @@ class Index:
 
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
 
-        print("Computing gene summaries")
         if "gff" in self.genome_files.columns:
+            print("Computing gene summaries")
             for g in self.genomes:
+                print(g)
                 self._load_gffs(g)
 
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
@@ -406,18 +412,28 @@ class Index:
 
         onehot_id = str(2**i)
 
-        subprocess.check_call([
-            f"{KMC_DIR}/kmc", f"-k{conf['k']}", 
-            f"-t{conf['kmc']['threads']}", 
-            f"-m{conf['kmc']['memory']}", 
-            "-ci1", "-cs10000000", "-fm",
-            fasta, count_db, tmp_dir
-        ])
+        def should_build(db):
+            if not (conf["kmc"]["use_existing"] and
+                    os.path.exists(db+".kmc_pre") and
+                    os.path.exists(db+".kmc_suf")):
+                return True
+            print(f"Using exisitng KMC db: {db}")
+            return False
 
-        subprocess.check_call([
-            f"{KMC_DIR}/kmc_tools", "-t4", "transform",
-            count_db, "set_counts", onehot_id, onehot_db
-        ])
+        if should_build(count_db):
+            subprocess.check_call([
+                f"{KMC_DIR}/kmc", f"-k{conf['k']}", 
+                f"-t{conf['kmc']['threads']}", 
+                f"-m{conf['kmc']['memory']}", 
+                "-ci1", "-cs10000000", "-fm",
+                fasta, count_db, tmp_dir
+            ])
+
+        if should_build(onehot_db):
+            subprocess.check_call([
+                f"{KMC_DIR}/kmc_tools", "-t4", "transform",
+                count_db, "set_counts", onehot_id, onehot_db
+            ])
 
         return db_i, name, onehot_db
 

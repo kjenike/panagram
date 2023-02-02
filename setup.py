@@ -64,20 +64,20 @@ class pre_build(build_py):
 
         build_py.run(self)
 
-    def get_output_mapping(self):
-        print("GET OUTPUT MAPPING")
-        return build_py.get_output_mapping()
-    
-    def get_outputs(self):
-        print("GET OUTPUTS")
-        return build_py.get_outputs(self)
+    #def get_output_mapping(self):
+    #    print("GET OUTPUT MAPPING")
+    #    return build_py.get_output_mapping()
+    #
+    #def get_outputs(self):
+    #    print("GET OUTPUTS")
+    #    return build_py.get_outputs(self)
 
-    def get_source_files(self):
-        print("SOURCES OUT", build_py.get_source_files(self))
-        return build_py.get_source_files(self) + ["KMC/py_kmc_api/py_kmc_api.cpp"]
+    #def get_source_files(self):
+    #    print("SOURCES OUT", build_py.get_source_files(self))
+    #    return build_py.get_source_files(self) + ["KMC/py_kmc_api/py_kmc_api.cpp"]
 
-    def initialize_options(self):
-        return build_py.initialize_options(self)
+    #def initialize_options(self):
+    #    return build_py.initialize_options(self)
 
 if __name__ == "__main__":
     setup(
