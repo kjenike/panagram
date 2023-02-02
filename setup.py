@@ -21,36 +21,9 @@ def call_cmd(*cmd):
     ret = subprocess.run(cmd)
     return ret.returncode == 0
 
-#kmc_api = Pybind11Extension(
-#    "panagram.kmc",
-#
-#    sources = [ 
-#        "KMC/py_kmc_api.cpp",
-#        "KMC/kmc_api/kmc_file.cpp",
-#        "KMC/kmc_api/kmer_api.cpp",
-#        "KMC/kmc_api/mmer.cpp"
-#    ],
-#
-#    include_dirs = [
-#        "./submods",
-#        "./submods/hdf5/include", 
-#        "./submods/fast5/include",
-#        "./submods/pdqsort",
-#        "./submods/toml11",
-#        get_pybind_include()
-#    ],
-#
-#
-#    libraries = ["bwa", "z", "dl", "m"],
-#
-#    extra_compile_args = ["-O3", "-Wall", "-m64", "-std=c++14"],
-#
-#    define_macros = [("PYBIND", None)]#, ("PYDEBUG", None)]
-#)
-
 KMC_BINS = ["kmc", "kmc_tools", "kmc_dump"]
 KMC_URLS = {
-    "Linu" : "https://github.com/refresh-bio/KMC/releases/download/v3.2.1/KMC3.2.1.linux.tar.gz",
+    "Linux" : "https://github.com/refresh-bio/KMC/releases/download/v3.2.1/KMC3.2.1.linux.tar.gz",
     "Darwin" : "https://github.com/refresh-bio/KMC/releases/download/v3.2.1/KMC3.2.1.mac.tar.gz",
     "Windows" : "https://github.com/refresh-bio/KMC/releases/download/v3.2.1/KMC3.2.1.windows.tar.gz"
 }
