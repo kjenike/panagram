@@ -26,7 +26,16 @@ class KMC:
 
 #TODO merge with index.Index
 #parameters are dataclass attributes
-#
+#by default load all anno types, store in config
+#store mash distances {prefix}/dists.csv
+
+#[view]
+#genome
+#coords
+#max_chr_bins
+#bookmarks
+
+
 @dataclasses.dataclass
 class Index:
     """Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap"""
