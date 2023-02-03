@@ -35,28 +35,12 @@ GENE_TABIX_COLS = TABIX_COLS + ["unique","universal"]
 GENE_TABIX_TYPES = {"start" : int, "end" : int, "unique" : int, "universal" : int}
 TABIX_SUFFIX = ".bgz"
 
-REQUIRED_FILES = ["chrs.csv", "bins_*.bin", "anchors/*bgz", "anchors/*gzi"]
+REQUIRED_FILES = ["panagram.toml", "chrs.csv", "bins_*.bin", "anchors/*bgz", "anchors/*gzi"]
 
 MODES = {"r","w"}
 
 #TODO
-#mash
-#genomes: k-mer composition for genome
-#bins: precomputed kmer types for whole genome (200kb)
-#chromosome: k-mer types for each chromosome
-#genes: for each gene %universal+%unique
-#exons+repeats: track, type, id, metadata for random access display
-
-
-#TODO merge with index.Index
-#by default load all anno types, store in config
 #store mash distances {prefix}/dists.csv
-
-#[view]
-#genome
-#coords
-#max_chr_bins
-#bookmarks
 
 @dataclasses.dataclass
 class KMC:
@@ -64,7 +48,7 @@ class KMC:
     memory: int = field(default=8, dest="main.kmc.memory")
     processes: int = field(default=4, dest="main.kmc.processes")
     threads: int = field(default=1, dest="main.kmc.threads")
-    #Use existing KMC count and onehot genome databases if present
+
     #Use existing KMC count and onehot genome databases if present
     use_existing: bool = field(action="store_true", default=False)
 
@@ -73,9 +57,9 @@ class Index:
     """Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap"""
 
     #configuration file (toml)
-    config_file: str = field(positional=True, metavar="config_file")
+    input: str = field(positional=True, metavar="config_file")
 
-    prefix: str = field(alias=["-o"], default=None, metavar="config_file")
+    prefix: str = field(alias=["-o"], default=None)
 
     #K-mer length
     k: int = field(alias=["-k"], default=21)
@@ -90,7 +74,7 @@ class Index:
     chr_bin_kbp: int = 200
 
     gff_gene_types: List[str] = field(default_factory=lambda: ["gene"])
-    gff_anno_types: List[str] = field(default_factory=lambda: ["exon", "repeat"])
+    gff_anno_types: List[str] = field(default=None)
 
     #Only perform anchoring and annotation
     anchor_only: bool = False
@@ -99,6 +83,9 @@ class Index:
     anno_only: bool = False
 
     kmc: KMC = KMC()
+
+    fasta: dict = field(default_factory=dict,help=argparse.SUPPRESS)
+    gff: dict = field(default_factory=dict,help=argparse.SUPPRESS)
 
     #Dummy parameters to force KMC params to be in "kmc.*" format
     use_existing: int = field(default=1,help=argparse.SUPPRESS)
@@ -128,17 +115,28 @@ class Index:
 
     def __post_init__(self):
 
-        if self.config_file is not None:
-            d = toml.load(self.config_file)
-            print(d)
-            self._load_dict(self, d)
-            self.config_file = None
+        self.write_mode = False
 
-        self.write_mode = hasattr(self, "fasta")
-        for pattern in REQUIRED_FILES:
-            if len(glob.glob(pattern)) == 0:
+        if self.input is not None:
+            if os.path.isdir(self.input):
+                self.prefix = self.input
+
+            elif os.path.exists(self.input):
+                d = toml.load(self.input)
+                self._load_dict(self, d)
                 self.write_mode = True
-                break
+
+            self.input = None
+
+        if self.prefix is None:
+            raise ValueError("Must specify index prefix or valid configuration file")
+
+        #self.write_mode = hasattr(self, "fasta")
+        #for pattern in REQUIRED_FILES:
+        #    if len(glob.glob(pattern)) == 0:
+        #        print(pattern)
+        #        self.write_mode = True
+        #        break
 
         self.count_dir =  self.init_dir("kmc_count")
         self.onehot_dir = self.init_dir("kmc_onehot")
@@ -152,6 +150,8 @@ class Index:
 
     def _init_read(self):
         self._load_chrs()
+
+        self._load_dict(self, toml.load(self.index_config_file))
 
         self.bitmaps = dict()
         self.gene_tabix = dict()
@@ -299,12 +299,26 @@ class Index:
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
 
         if "gff" in self.genome_files.columns:
+
+            if self.gff_anno_types is None:
+                self.all_anno_types = pd.Index([])
+
             print("Computing gene summaries")
             for g in self.genomes:
                 print(g)
                 self._load_gffs(g)
 
+            if self.gff_anno_types is None:
+                self.gff_anno_types = list(self.all_anno_types)
+
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+
+        with open(self.index_config_file, "w") as conf_out:
+            toml.dump(self.params, conf_out)
+
+    @property
+    def index_config_file(self):
+        return f"{self.prefix}/panagram.toml"
 
     @property
     def chr_bins_fname(self):
@@ -317,7 +331,6 @@ class Index:
         ends = np.clip(starts+binlen, 0, size)
         ret = pd.DataFrame({"genome" : genome, "chr" : chrom, "start" : starts, "end" : ends})
         return ret
-
 
     def query_occ_counts(self, genome, chrom, start, end, step=1):
         occs = self.query_bitmap(genome, chrom, start, end, step).sum(axis=1)
@@ -362,13 +375,22 @@ class Index:
         if pd.isna(fname): return
 
         for df in self._iter_gff(fname):
-            genes.append(df[df["type"].isin(self.gff_gene_types)])
-            annos.append(df[df["type"].isin(self.gff_anno_types)])
+            gmask = df["type"].isin(self.gff_gene_types)
+            genes.append(df[gmask])
+
+            if self.gff_anno_types is not None:
+                annos.append(df[df["type"].isin(self.gff_anno_types)])
+            else:
+                annos.append(df[~gmask])
 
         def _merge_dfs(dfs):
             return pd.concat(dfs).sort_values(["chr","start"]).reset_index(drop=True)
 
-        self._write_tabix(_merge_dfs(annos), genome, "anno")
+        annos = _merge_dfs(annos)
+        self._write_tabix(annos, genome, "anno")
+
+        if self.gff_anno_types is None:
+            self.all_anno_types = self.all_anno_types.union(annos["type"].unique())
 
         genes = _merge_dfs(genes)
         genes["unique"] = 0

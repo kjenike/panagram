@@ -10,6 +10,14 @@ from typing import Any, List, Tuple, Type, Union
 
 from .index import Index
 
+#TODO add view parameters
+#prefix: required positional
+#rest are optional arguments?
+#genome
+#coords
+#max_chr_bins
+#bookmarks
+
 @dataclasses.dataclass
 class View:
     """Display panagram viewer"""
