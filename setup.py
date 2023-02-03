@@ -46,6 +46,8 @@ class pre_build(build_py):
             shutil.rmtree(kmc_dest)
             call_cmd("mv", "-f", f"{KMC_DIR}/bin", kmc_dest)
 
+            open(f"{kmc_dest}/__init__.py","w").close()
+
             if kmc_url is not None:
                 tar_fname = f"{kmc_dest}/kmc.tar.gz"
                 urlretrieve(kmc_url, tar_fname)
