@@ -77,10 +77,10 @@ class Index:
     gff_anno_types: List[str] = field(default=None)
 
     #Only perform anchoring and annotation
-    anchor_only: bool = False
+    anchor_only: bool = field(default=False, action="store_true")
 
     #Only perform annotaion
-    anno_only: bool = False
+    anno_only: bool = field(default=False, action="store_true")
 
     kmc: KMC = KMC()
 
