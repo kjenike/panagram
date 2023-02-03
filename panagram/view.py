@@ -610,8 +610,8 @@ def view(params):
         bin_size = ((x_stop-x_start)/bins)
         adjusted_bin_size = (bin_size/n_skips)
         cntr = 0
-        print("a1:", time.time()-t)
-        t = time.time()
+        #print("a1:", time.time()-t)
+        #t = time.time()
         
         cats_tmp = [([0] * (bins+1)) for _ in range(num_samples+1)]
         cntr = 0
@@ -638,17 +638,17 @@ def view(params):
                 cats_tmp[i][x_tracker] += 1 
             cntr += 1 #n_skips
 
-        print("b2:", time.time()-t)
-        t = time.time()
+        #print("b2:", time.time()-t)
+        #t = time.time()
         plot_rep = True
         #Add a line plot that will cover the different repetative elements. 
         if plot_rep == True:
-            print("About to add repeats trace")
+            #print("About to add repeats trace")
             rep_colors = ["#f0f921", "#f8df25", "#fdc627", "#fdaf31", "#f99a3e", "#f3854b", "#e97257", "#de6164", "#d24f71", "#c43e7f", 
                     "#b42e8d", "#a21d9a", "#8e0ca4", "#7801a8", "#6100a7", "#4903a0", "#2f0596", "#0d0887", "grey", "grey", "grey"]
             cntr = 0
             #df = index.query_anno(anchor_name, chrs, x_start, x_stop)
-            print(rep_list)
+            #print(rep_list)
             for i in rep_list: #rep_types.keys():
                 df = index.query_anno(anchor_name, chrs, x_start, x_stop)
                 #print(df)
@@ -688,8 +688,8 @@ def view(params):
                     cntr += 1
             fig.update_yaxes(visible=False, row=4, col=1)
             fig.update_xaxes(showticklabels=False, row=4, col=1)
-        print("a2.2:", time.time()-t)
-        t = time.time()
+        #print("a2.2:", time.time()-t)
+        #t = time.time()
         if plot_gene == True:
             gene_locals_tmp = []
             gene_names_tmp = []
@@ -713,8 +713,8 @@ def view(params):
             fig.update_yaxes(visible=False, range=[-1,4], row=2, col=1)
             fig.update_xaxes(showticklabels=False, row=2, col=1)
         
-        print("a2.1:", time.time()-t)
-        t = time.time()
+        #print("a2.1:", time.time()-t)
+        #t = time.time()
         #This is the conserved kmer plotting section
         bar_sum_regional = []
         bar_sum_names = []
@@ -740,8 +740,8 @@ def view(params):
                 ), 
                 row=6, col=1 )
             #cntr += 1
-        print("a2.3:", time.time()-t)
-        t = time.time()
+        #print("a2.3:", time.time()-t)
+        #t = time.time()
         fig.update_layout(barmode='stack', bargap=0.0)
         #fig.update_layout(clickmode='select')
         fig.update_xaxes(showticklabels=False, row=6, col=1)
@@ -756,8 +756,8 @@ def view(params):
             fig.add_trace(go.Scatter(x=x, y=signal.savgol_filter(y_tmp,window_filter,poly_order), 
                 name="Savitzky-Golay - "+str(sk), marker=dict(color="grey"), mode='lines'), row=6, col=1)
         #fig.update_traces(visible=False, selector=dict(mode="markers"), row=6, col=1)
-        print("a2:", time.time()-t)
-        t = time.time()
+        #print("a2:", time.time()-t)
+        #t = time.time()
 
         #Now we add the reference sequence:
         y_ref = [1, 1]
@@ -786,8 +786,8 @@ def view(params):
 
             size=16,
             ))
-        print("a3:", time.time()-t)
-        t = time.time()
+        #print("a3:", time.time()-t)
+        #t = time.time()
         return fig, bar_sum_names, bar_sum_regional, colors, gene_names_tmp
 
     def make_chr_whole(names_simp, whole_bins, gene_locals, x_start, x_stop, n_skips):
@@ -1123,7 +1123,7 @@ def view(params):
         for i in range(0, num_samples):
             for l in labels:
                 cats[i].append(genome_comp_totals[l][i])
-        print(cats)
+        #print(cats)
         fig = make_subplots(rows=1, cols=1)
         for g in range(0,len(labels)):
             fig.add_trace(go.Bar(y=labels, x=cats[g], name=str(g+1), #orientation='h',
@@ -1411,13 +1411,13 @@ def view(params):
         #print(genes)
         #df = pd.DataFrame(d)
         x = [i for i in range(0, len(genes['universal']))]
-        print("Made x axis")
+        #print("Made x axis")
         genes['universal'] = genes['universal']/genes["size"]
-        print("Updated universal")
+        #print("Updated universal")
         genes['unique'] = genes['unique']/genes["size"]
-        print("Updated unique")
+        #print("Updated unique")
         df_sorted = genes.sort_values('universal')
-        print("sorted the dataframe")
+        #print("sorted the dataframe")
         df_sorted['X'] = x
         #print(df_sorted)
         fig.add_trace(go.Scattergl(x=x, y=df_sorted['unique'], text=df_sorted["chr"] + ":" + df_sorted['name'], marker=dict(color=colors[0]),
@@ -1431,7 +1431,7 @@ def view(params):
         return fig
 
     ##### READ DATA
-    print("Reading data!")
+    #print("Reading data!")
 
 
     #print(labels)
@@ -1468,13 +1468,13 @@ def view(params):
         chr_start = 0
 
         chr_end = index.chrs.loc[anchor_name, chrs]["size"]#chr_lens[anchor_name][i-1] #308452471
-        print(chr_end)
+        #print(chr_end)
         #print(anchor_name + "." + chrs)
         all_chrs[chrs] = index.query_bitmap(anchor_name, chrs, chr_start, chr_end, n_skips_start)
         #all_chrs[chrs] = anchor.get_counts(chrs, chr_start, chr_end, n_skips_start)
     chrs = index.chrs.loc[anchor_name].index[0] #"chr1"
-    print("a0:", time.time()-t)
-    t = time.time()
+    #print("a0:", time.time()-t)
+    #t = time.time()
     #chrs = "chr1"
     #Parsing the counts will return the number of genomes present at each kmer position, based on the counts
     names_simp = all_chrs[chrs].sum(axis=1)#tmp.sum(axis=1)
@@ -1491,12 +1491,12 @@ def view(params):
 
     tmp = 0
     
-    print("a0.2:", time.time()-t)
-    t = time.time()
+    #print("a0.2:", time.time()-t)
+    #t = time.time()
     
     #Read in the repeats file (this has the annotated repeats from Shujun)     
-    print("a0.4:", time.time()-t)
-    t = time.time()
+    #print("a0.4:", time.time()-t)
+    #t = time.time()
     #grep -v "#" Solqui2_genes_1.0.0.gff | awk '{if($1=="chr1") print $0}' | awk '{if($3=="gene") print $1"\t"$9"\t"$4"\t"$5}' > Squi2.genes.chr1.txt
     zs_tmp = []
     gene_names = {}
@@ -1508,8 +1508,8 @@ def view(params):
     gene_content = {}
     #gene_anns = {}
 
-    print("a0.45:", time.time()-t)
-    t = time.time()
+    #print("a0.45:", time.time()-t)
+    #t = time.time()
     def get_idx_content(gene_locals, gene_cntr, j):
         est_pos_start = int(gene_locals[gene_cntr]/n_skips_start)
         est_pos_stop = int(gene_locals[gene_cntr+1]/n_skips_start)
@@ -1573,8 +1573,8 @@ def view(params):
     chr_fig = plot_chr_whole(x_start_init, x_stop_init, anchor_name, chrs)
     whole_genome_fig = plot_whole_genome(anchor_name)
     #chr_fig = plot_chr_whole(names_simp, full_cnts, 1000, gene_locals, x_start_init, x_stop_init)
-    print("a4:", time.time()-t)
-    t = time.time()
+    #print("a4:", time.time()-t)
+    #t = time.time()
 
     #Now we need to make the pangenome plot
     #This is going to be a bar chart 
@@ -1852,7 +1852,7 @@ def view(params):
         click_me_genes = True
         click_me_rep = True
         if triggered_id == 'Anchor_tab_dropdown':
-            print(anchor_tab_dropdown)
+            #print(anchor_tab_dropdown)
             chrs = anchor_tab_dropdown
             chr_num = chrs_list[anchor_name].get_loc(chrs)
             #chr_num = chrs_list[anchor_name].index(chrs) #int(chrs.split('r')[1])
@@ -1902,7 +1902,7 @@ def view(params):
         elif triggered_id == 'chromosome':
             return chromosome_gene_triggered(chr_fig, fig1, fig2, fig3, fig4, gene_jump_bottom, n_skips, click_me_genes, click_me_rep, chr_relayoutData, chrs, anchor_name)
         elif triggered_id == 'primary':
-            print("Is the issue here?")
+            #print("Is the issue here?")
             return primary_fig_triggered(chr_fig, fig1, fig2, fig3, fig4, gene_jump_bottom, n_skips, click_me_genes, click_me_rep, chr_relayoutData, relayoutData, clickData, x_start, x_stop, chrs, anchor_name)
         local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
         local_gene_list["name"] = local_gene_list["attr"].str.extract("ID=([^;]+)")
@@ -1976,7 +1976,7 @@ def view(params):
         names_simp = index.query_bitmap(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"], n_skips_start).sum(axis=1) #all_chrs[chrs].sum(axis=1)
         #int(chrs.split('r')[1])
         if gene_jump_bottom != None: #and gene_jump_bottom['points'][0]['text'] in gene_names[anchor_name][chrs]:
-            print("first elif")
+            #print("first elif")
             
             genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
 
@@ -2131,7 +2131,7 @@ def view(params):
         gene_locals = bounds.to_numpy().flatten()
         #int(chrs.split('r')[1])
         if relayoutData != None and 'xaxis4.range[0]' in relayoutData.keys():
-            print("fourth elif")
+            #print("fourth elif")
             x_start = int(relayoutData['xaxis4.range[0]'])
             x_stop = int(relayoutData['xaxis4.range[1]'])
             if get_buffer(x_start, x_stop, n_skips_start) == 1:
@@ -2188,7 +2188,7 @@ def view(params):
             fig4 = plot_gene_content(gene_names,universals,uniques,sizes, 
                 sort_by, colors, uniq_avg, univ_avg, int(x_start), int(x_stop), anchor_name, chrs)
         elif clickData != None:#len(print(clickData['points'])) > 0:
-            print("third elif")
+            #print("third elif")
             #print(clickData)
             #tmp_idx = gene_names[anchor_name][chrs].index(clickData['points'][0]['text'])
             #gene_buffer = get_buffer(int(gene_locals[tmp_idx]), int(gene_locals[tmp_idx+1]), n_skips_start)
