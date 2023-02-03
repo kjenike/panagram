@@ -2,7 +2,7 @@ test_data/
 env/
 build/
 KMC/
-panagram/kmc/*
+panagram/extra/*
 **.egg-info
 **/__pycache__
 *.*.swp

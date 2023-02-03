@@ -23,7 +23,7 @@ from typing import Any, List, Tuple, Type, Union
 import argparse
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
-KMC_DIR = os.path.join(ROOT_DIR, "kmc")
+EXTRA_DIR = os.path.join(ROOT_DIR, "extra")
 
 BGZ_SUFFIX = "bgz"
 IDX_SUFFIX = "gzi"
@@ -144,6 +144,7 @@ class Index:
         self.tmp_dir =    self.init_dir("tmp")
         self.anchor_dir = self.init_dir(ANCHOR_DIR)
         self.anno_dir = self.init_dir("anno")
+        self.mash_dir = self.init_dir("mash")
 
         if not self.write_mode:
             self._init_read()
@@ -194,6 +195,24 @@ class Index:
     #        self.kmc_dbs.append(self.kmc.KMCFile())
     #        self.kmc_dbs[-1].OpenForRA(fname)
 
+    #def _calc_genome_dist(self, files):
+    #    from .kmc import py_kmc_api
+    #    kmc = py_kmc_api
+    #    kmc_dbs = list()
+    #    kmer_objs = list()
+
+    #    union = pd.DataFrame(0, index=self.genomes, columns=self.genomes)
+    #    inter = pd.DataFrame(0, index=self.genomes, columns=self.genomes)
+
+    #    for fname in files:
+    #        db = kmc.KMCFile()
+    #        db.OpenForListing(fname)
+    #        kmer = pka.KmerAPI(self.k)
+    #        count = kmc
+
+    #        while db.ReadNextKmer(kmer
+
+
     @staticmethod
     def run_anchor(args):
         bitmap = KmerBitmap(*args)
@@ -209,6 +228,32 @@ class Index:
         self.ngenomes = len(self.genomes)
         self._total_occ_idx = pd.Index([f"total_occ_{i+1}" for i in range(self.ngenomes)])
         self._gene_occ_idx = pd.Index([f"gene_occ_{i+1}" for i in range(self.ngenomes)])
+
+    def _run_mash(self):
+        mash_files = list()
+        for i,(name,fasta) in enumerate(self.genome_files["fasta"].items()):
+            cmd =[f"{EXTRA_DIR}/mash", "sketch", "-o", f"{self.mash_dir}/{name}", "-r", "-s", "10000", fasta]
+            subprocess.check_call(cmd)
+            mash_files.append(f"mash/{name}.msh")
+
+        cmd = [f"{EXTRA_DIR}/mash", "triangle", "-E"] + mash_files
+        triangle_fname = f"{self.mash_dir}/triangle.txt"
+        with open(triangle_fname, "w") as triangle_out:
+            subprocess.check_call(cmd, stdout=triangle_out)
+
+        fasta_names = self.genome_files.reset_index().set_index("fasta")["index"]
+
+        with open(triangle_fname, "r") as infile, open(self.genome_dist_fname, "w") as outfile:
+            line = infile.readline()
+            while line:
+                tmp = line.strip().split('\t')
+                outfile.write(fasta_names.loc[tmp[0]] + "\t" + fasta_names.loc[tmp[1]] + "\t" + tmp[2] + "\t" + tmp[3] + "\t" + tmp[4] + "\n")
+                line = infile.readline()
+
+
+    @property
+    def genome_dist_fname(self):
+        return os.path.join(self.prefix, "genome_dist.tsv")
 
     def write(self):
         genomes = list()
@@ -230,6 +275,7 @@ class Index:
                     cmd = ["samtools", "faidx", fasta]
                     subprocess.check_call(cmd)
                 fa = pysam.FastaFile(fasta)
+
 
                 genomes.append(pd.DataFrame(
                     [(name, chrom, i, fa.get_reference_length(chrom)-self.k+1) 
@@ -266,6 +312,9 @@ class Index:
         self.bitmaps = {
             name : KmerBitmap(self.params, name, "r", self.chrs) for name in self.genomes
         }
+
+        print("Computing mash distance")
+        self._run_mash()
 
         print("Computing chromosome summaries")
         self.chrs[self._total_occ_idx] = 0
@@ -444,7 +493,7 @@ class Index:
 
         if should_build(count_db):
             subprocess.check_call([
-                f"{KMC_DIR}/kmc", f"-k{conf['k']}", 
+                f"{EXTRA_DIR}/kmc", f"-k{conf['k']}", 
                 f"-t{conf['kmc']['threads']}", 
                 f"-m{conf['kmc']['memory']}", 
                 "-ci1", "-cs10000000", "-fm",
@@ -453,7 +502,7 @@ class Index:
 
         if should_build(onehot_db):
             subprocess.check_call([
-                f"{KMC_DIR}/kmc_tools", "-t4", "transform",
+                f"{EXTRA_DIR}/kmc_tools", "-t4", "transform",
                 count_db, "set_counts", onehot_id, onehot_db
             ])
 
@@ -516,7 +565,7 @@ class Index:
             opdefs.close()
 
             subprocess.check_call([
-                f"{KMC_DIR}/kmc_tools", "complex", opdef_fname
+                f"{EXTRA_DIR}/kmc_tools", "complex", opdef_fname
             ])
             
             bitvec_dbs.append(bitvec_fname)
@@ -639,7 +688,7 @@ class KmerBitmap:
     
     def _load_kmc(self, kmc_dbs):
         try:
-            from .kmc import py_kmc_api
+            from .extra import py_kmc_api
         except ModuleNotFoundError:
             raise ModuleNotFoundError("py_kmc_api failed to install. See https://github.com/kjenike/panagram#readme for more information")
 
