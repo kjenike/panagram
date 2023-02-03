@@ -38,6 +38,7 @@ class pre_build(build_py):
     bulid_lib = ROOT_DIR
     
     def run(self):
+        call_cmd("make", "-C", KMC_DIR, "clean")
         make_cmd = ["make", "-C", KMC_DIR, "py_kmc_api"]
 
         plat = platform.system()
