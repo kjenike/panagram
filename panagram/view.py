@@ -27,7 +27,7 @@ from scipy.spatial.distance import pdist, squareform
 import plotly.figure_factory as ff
 from .index import Index 
 
-def view(config_f):
+def view(bit_file_prefix):
     SG_window =53
     poly_order = 3
     SG_polynomial_order = 3
@@ -38,45 +38,62 @@ def view(config_f):
     n_skips_start = 100
     buff = 1000
 
+    
+    
+    #bit_file_prefix = sys.argv[1]
+    index = Index(bit_file_prefix) #Directory that contains the anchor direcotry
+    labels = list(index.genomes)
+    num_samples = len(labels)
+    sns.set_palette('viridis', num_samples)
+    colors = mcp.gen_color(cmap="viridis_r",n=num_samples)
+
+    kmer_len = index.k
+    x_start_init = 0
+    x_stop_init  = 1000000
+    bins = 350
+    rep_list = index.gff_anno_types
+    mash_edges = index.genome_dist_fname
+    anchor_name, chrs = index.chrs.index[0]
+    opt_bed_file = "None"#sys.argv[3]
     #Read in the config file:
-    with open(config_f, "r") as f:
-        line1 = f.readline()
-        while line1:
-            num_samples = int(line1.strip().split(':')[1])
-            line2 = f.readline()
-            kmer_len = int(line2.strip().split(':')[1])
+    #with open(config_f, "r") as f:
+    #    line1 = f.readline()
+    #    while line1:
+    #        num_samples = int(line1.strip().split(':')[1])
+    #        line2 = f.readline()
+    #        kmer_len = int(line2.strip().split(':')[1])
 
             #line4 = f.readline()
             #buff = int(line4.strip().split(':')[1])
 
-            line5 = f.readline()
-            x_start_init = int(line5.strip().split(':')[1])
+    #        line5 = f.readline()
+    #        x_start_init = int(line5.strip().split(':')[1])
 
-            line6 = f.readline()
-            x_stop_init = int(line6.strip().split(':')[1])
+    #        line6 = f.readline()
+    #        x_stop_init = int(line6.strip().split(':')[1])
 
-            line7 = f.readline()
-            bins = int(line7.strip().split(':')[1])
+    #        line7 = f.readline()
+    #        bins = int(line7.strip().split(':')[1])
 
-            line8 = f.readline()
-            rep_types_file = line8.strip().split(':')[1]
+    #        line8 = f.readline()
+    #        rep_types_file = line8.strip().split(':')[1]
 
             #line9 = f.readline()
             #mash_filenames = line9.strip().split(':')[1]
 
-            line10 = f.readline()
-            mash_edges = line10.strip().split(':')[1]
+    #        line10 = f.readline()
+    #        mash_edges = line10.strip().split(':')[1]
 
-            line11 = f.readline()
-            bit_file_prefix = line11.strip().split(':')[1]
+    #        line11 = f.readline()
+    #        bit_file_prefix = line11.strip().split(':')[1]
 
-            line12 = f.readline()
-            anchor_name = line12.strip().split(':')[1]
+    #        line12 = f.readline()
+    #        anchor_name = line12.strip().split(':')[1]
 
-            line13 = f.readline()
-            opt_bed_file = line13.strip()
+    #        line13 = f.readline()
+    #        opt_bed_file = line13.strip()
 
-            line1 = f.readline()
+    #        line1 = f.readline()
 
     def bitvec_to_mat(bitvecs, genome_count):
         #bitvec_to_mat(np.array([45]), 9).sum(axis=1)
@@ -114,7 +131,7 @@ def view(config_f):
             total += name_idx_short[i]
         return total
 
-    def get_init_rep_types(rep_types_f=rep_types_file):
+    def get_init_rep_types(rep_types_f):
         #rep_types = {}
         rep_list = []
         #for i in range(0, num_chrs):
@@ -1315,7 +1332,8 @@ def view(config_f):
         fig = make_subplots(rows=1, cols=1)
         x = []
         y = []
-        for c in range(0, num_chrs[anchor_name]):#len(chrs_comp)):
+        for c in range(0, num_chrs[this_anchor]-1):#len(chrs_comp)):
+            #print(c)
             x.append(chrs_list[this_anchor][c])
             total = 0
             running_sum = 0
@@ -1398,13 +1416,7 @@ def view(config_f):
     ##### READ DATA
     print("Reading data!")
 
-    colors = mcp.gen_color(cmap="viridis_r",n=num_samples)
-    sns.set_palette('viridis', num_samples)
-    #gene_file = gene_content_by_gene_f
 
-
-    index = Index(bit_file_prefix) #Directory that contains the anchor direcotry
-    labels = list(index.genomes)
     #print(labels)
     chrs_list = {}
     chr_lens = {}
@@ -1422,9 +1434,9 @@ def view(config_f):
     cnts_tmp = []
     x = []
     all_chrs = {} #This is where we keep the raw, str, counts 
-    rep_list = get_init_rep_types()
+    #rep_list = get_init_rep_types()
     
-    if len(opt_bed_file) > 1: 
+    if opt_bed_file != "None": 
         #The optional bed file was provided 
         with open(opt_bed_file, "r") as f:
             line = f.readline()
