@@ -15,30 +15,22 @@ Please note: installation instructions and pre-processing scripts are a work in 
 > pip install .
 ```
 
+# Running
+Panagram runs in two steps, the pre-processing step (index command) and the viewing (view command). 
+
 # Preprocessing
 Usage:
+Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap
 ```
-usage: panagram index [-h] [-k int] <genomes_in>.tsv -o <out_dir>/
-
-  Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap
-
-  genomes_in str        TSV file with each genome ID in the first column and the path to a
-                        gzipped fasta in the second column
-  -k int, --k int       K-mer (default: 21)
-  -o str, --out_dir str
-                        Output directory for panagram index (default: None)
-
+usage: panagram index [-h] <config>.toml
 ```
-
-Where `<genome_fastas.tsv>` is a tab-separated file with the first column being a genome ID containing only alphanumeric characters, and the second a path to a gzipped fasta file. Will output all files to directory named `<index_dir>/`.
-
-This is a work in progress, and does not yet produce the full configuration file required to run `panagram view`. It does, however, perform the most computationaly intensive steps required for indexing the pan-genome.
+See example config.toml file for more details on the layout. Must include paths to all of the fasta files and optionally any annotations in gff format. 
 
 # View
 
 Usage:
 ```
-usage: panagram view [-h] <config>.txt
+usage: panagram view [-h] <path_to_panagram_index_directory>
   Display panagram viewer
 ```
 
