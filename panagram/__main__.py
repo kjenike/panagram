@@ -35,30 +35,29 @@ class Bitdump:
     index_dir: str = field(positional=True)
     """Panagram index directory"""
 
-    coords: str = field(positional=True)
-    """Coordinates to query in chr:start-end format"""
+    genome: str = field(positional=True)
+    chrom: str = field(positional=True)
+    start: int = field(positional=True, nargs="?")
+    end: int = field(positional=True, nargs="?")
 
-    step: int = field(positional=True, nargs="?", default=1)
+    step: int = field(positional=True, default=1, nargs="?")
     """Spacing between output kmers (optimized for multiples of 100)"""
 
     verbose: bool = field(alias=["-v"], default=False)
     """Output the full bitmap"""
 
     def run(self):
-        bitmap = Index(self.index_dir)
-        genome, chrom, start, end = parse_coords(self.coords)
-        bits = bitmap.query_bitmap(genome, chrom, start, end, self.step)
+        idx = Index(self.index_dir)
+        bits = idx.query_bitmap(self.genome, self.chrom, self.start, self.end, self.step)
 
         if self.verbose:
-            print(" ".join(bitmap.genomes))
+            print(" ".join(idx.genomes))
             for i in range(len(bits)):
                 print(" ".join(bits[i].astype(str)))
         else:
             print(bits)
 
-        #g = bitmap.genomes
-
-        bitmap.close()
+        idx.close()
 
 @dataclasses.dataclass
 class Main:
