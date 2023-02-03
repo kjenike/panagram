@@ -21,11 +21,19 @@ from .index import Index
 @dataclasses.dataclass
 class View:
     """Display panagram viewer"""
-    config: str = field(positional=True)
+    #config: str = field(positional=True)
+
+    index_dir: str = field(positional=True)
+    genome: str = field(positional=True, nargs="?")
+    chrom: str = field(positional=True, nargs="?")
+    start: int = field(positional=True, nargs="?")
+    end: int = field(positional=True, nargs="?")
+    max_chr_bins: int = field(default=400)
+    bookmarks: str = field(default=None)
 
     def run(self):
         from .view import view
-        view(self.config)
+        view(self)
 
 
 @dataclasses.dataclass

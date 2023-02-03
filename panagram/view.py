@@ -27,34 +27,37 @@ from scipy.spatial.distance import pdist, squareform
 import plotly.figure_factory as ff
 from .index import Index 
 
-def view(bit_file_prefix):
+def view(params):
     SG_window =53
     poly_order = 3
     SG_polynomial_order = 3
     SG_check = [1]
     window_size = 200000
 
-    #/Users/katiejenike/Desktop/Lab_notes/PanSol/PANGEN/DEBUG/QC_PLOTS/SQUI2_PANGEN_PLOTS
     n_skips_start = 100
     buff = 1000
 
-    
-    
-    #bit_file_prefix = sys.argv[1]
-    index = Index(bit_file_prefix) #Directory that contains the anchor direcotry
+    index = Index(params.index_dir) #Directory that contains the anchor direcotry
+
+    anchor_name, chrs = index.chrs.index[0]
+    if params.genome is not None:
+        anchor_name = params.genome
+    if params.chrom is not None
+        chrs = params.chrom
+    x_start_init = 0 if params.start is None else params.start
+    x_stop_init  = 1000000 if params.end is None else params.end
+    bins = params.max_chr_bins
+    opt_bed_file = params.bookmarks
+
+    num_samples = len(index.genomes)
+    kmer_len = index.k
+    rep_list = index.gff_anno_types
     labels = list(index.genomes)
-    num_samples = len(labels)
+
     sns.set_palette('viridis', num_samples)
     colors = mcp.gen_color(cmap="viridis_r",n=num_samples)
 
-    kmer_len = index.k
-    x_start_init = 0
-    x_stop_init  = 1000000
-    bins = 350
-    rep_list = index.gff_anno_types
-    mash_edges = index.genome_dist_fname
-    anchor_name, chrs = index.chrs.index[0]
-    opt_bed_file = "None"#sys.argv[3]
+    #opt_bed_file = "None"#sys.argv[3]
     #Read in the config file:
     #with open(config_f, "r") as f:
     #    line1 = f.readline()
@@ -94,13 +97,6 @@ def view(bit_file_prefix):
     #        opt_bed_file = line13.strip()
 
     #        line1 = f.readline()
-
-    def bitvec_to_mat(bitvecs, genome_count):
-        #bitvec_to_mat(np.array([45]), 9).sum(axis=1)
-        ret = np.zeros((len(bitvecs), genome_count), dtype=bool)
-        for i in range(genome_count):
-            ret[:,i] = (bitvecs >> i) & 1
-        return ret
 
 
     def get_newick(node, parent_dist, leaf_names, newick='') -> str:
@@ -385,7 +381,7 @@ def view(bit_file_prefix):
         #Adapted from:
         #https://github.com/plotly/dash-phylogeny
 
-        tree_tmp1 = raw_counts #bitvec_to_mat(np.array(raw_counts), 9)
+        tree_tmp1 = raw_counts 
         #We need to sum up the number of times that kmers occur in each column (aka, each sample)
         kmer_num_tmp = tree_tmp1.sum(axis=0)
         
@@ -1172,7 +1168,7 @@ def view(bit_file_prefix):
         dim = len(sample_list)
         dist_mat = np.zeros((dim, dim), np.float64)
 
-        with open(mash_edges) as f:
+        with open(index.genome_dist_fname) as f:
             for line in f:
                 f, t, d, p, x = line.rstrip().split("\t")
                 #print(f)
@@ -1436,7 +1432,7 @@ def view(bit_file_prefix):
     all_chrs = {} #This is where we keep the raw, str, counts 
     #rep_list = get_init_rep_types()
     
-    if opt_bed_file != "None": 
+    if opt_bed_file != None: 
         #The optional bed file was provided 
         with open(opt_bed_file, "r") as f:
             line = f.readline()
