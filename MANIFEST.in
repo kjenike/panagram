@@ -1,1 +1,5 @@
-recursive-include panagram *py *so kmc*
+recursive-include panagram *py *so extra*
+include panagram/extra/kmc
+include panagram/extra/kmc_tools
+include panagram/extra/kmc_dump
+include panagram/extra/mash

@@ -8,6 +8,16 @@ from simple_parsing import ArgumentParser, field
 import dataclasses
 from typing import Any, List, Tuple, Type, Union
 
+from .index import Index
+
+#TODO add view parameters
+#prefix: required positional
+#rest are optional arguments?
+#genome
+#coords
+#max_chr_bins
+#bookmarks
+
 @dataclasses.dataclass
 class View:
     """Display panagram viewer"""
@@ -17,65 +27,6 @@ class View:
         from .view import view
         view(self.config)
 
-@dataclasses.dataclass
-class KMC:
-    """Parameters for KMC kmer counting"""
-    memory: int = field(default=8, dest="main.kmc.memory")
-    processes: int = field(default=4, dest="main.kmc.processes")
-    threads: int = field(default=1, dest="main.kmc.threads")
-
-#TODO merge with index.Index
-#parameters are dataclass attributes
-#
-@dataclasses.dataclass
-class Index:
-    """Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap"""
-
-    #configuration file (toml)
-    conf: str = field(positional=True, metavar="confg_file")
-
-    #K-mer length
-    k: int = field(alias=["-k"], default=21)
-
-    #Number of processes
-    processes: int = field(alias=["-p"], default=1)
-
-    #Step size for low-resolution pan-kmer bitmap (in nucleotides, larger step = lower resolution)
-    lowres_step: int = 100
-
-    #Size of chromosome-scale occurence count bins in kilobases 
-    chr_bin_kbp: int = 200
-
-    gff_gene_types: List[str] = field(default_factory=lambda: ["gene"])
-    gff_anno_types: List[str] = field(default_factory=lambda: ["exon", "repeat"])
-
-    #dummy parameters to force KMC params to be in "kmc.*" format
-    threads: int = field(default=1,help=argparse.SUPPRESS)
-    memory: int = field(default=1,help=argparse.SUPPRESS)
-
-    #Only perform anchoring and annotation
-    anchor_only: bool = False
-
-    #Only perform annotaion
-    anno_only: bool = False
-
-    kmc: KMC = KMC()
-
-    def _load_dict(self, d, tgt):
-        for key,val in d.items():
-            if isinstance(val, dict) and dataclasses.is_dataclass(getattr(tgt, key, None)):
-                self._load_dict(val, getattr(tgt, key))
-            else:
-                #print(tgt, key, val)
-                setattr(tgt, key, val)
-
-    def run(self):
-        from .index import index
-        args = dataclasses.asdict(self)
-        del args["conf"]
-        self._load_dict(toml.load(self.conf), self)
-
-        index(conf=self)#self.genomes, self.out_dir, self.k)
 
 @dataclasses.dataclass
 class Bitdump:
@@ -84,31 +35,29 @@ class Bitdump:
     index_dir: str = field(positional=True)
     """Panagram index directory"""
 
-    coords: str = field(positional=True)
-    """Coordinates to query in chr:start-end format"""
+    genome: str = field(positional=True)
+    chrom: str = field(positional=True)
+    start: int = field(positional=True, nargs="?")
+    end: int = field(positional=True, nargs="?")
 
-    step: int = field(positional=True, nargs="?", default=1)
+    step: int = field(positional=True, default=1, nargs="?")
     """Spacing between output kmers (optimized for multiples of 100)"""
 
     verbose: bool = field(alias=["-v"], default=False)
     """Output the full bitmap"""
 
     def run(self):
-        from .index import Index #KmerBitmap
-        bitmap = Index(self.index_dir)
-        genome, chrom, start, end = parse_coords(self.coords)
-        bits = bitmap.query_bitmap(genome, chrom, start, end, self.step)
+        idx = Index(self.index_dir)
+        bits = idx.query_bitmap(self.genome, self.chrom, self.start, self.end, self.step)
 
         if self.verbose:
-            print(" ".join(bitmap.genomes))
+            print(" ".join(idx.genomes))
             for i in range(len(bits)):
                 print(" ".join(bits[i].astype(str)))
         else:
             print(bits)
 
-        #g = bitmap.genomes
-
-        bitmap.close()
+        idx.close()
 
 @dataclasses.dataclass
 class Main:
