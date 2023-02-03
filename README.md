@@ -15,7 +15,7 @@ Please note: installation instructions and pre-processing scripts are a work in 
 > pip install .
 ```
 
-Panagram relies on [KMC](https://github.com/refresh-bio/KMC) to build its kmer index. This should be installed automatically, however it is possible that the KMC installation will fail but panagram will successfully install. In this case `panagram view` can be run, but `panagram index` will return an error. You may be able to debug the KMC installation by running `make -C KMC py_kmc_api` and attempting to fix any errors, then re-running `pip install .`
+Panagram relies on [KMC](https://github.com/refresh-bio/KMC) to build its kmer index. This should be installed automatically, however it is possible that the KMC installation will fail but panagram will successfully install. In this case `panagram view` can be run, but `panagram index` will return an error. You may be able to debug the KMC installation by running `make -C KMC py_kmc_api` and attempting to fix any errors, then re-run `pip install -v .` after the errors are fixed.
 
 # Running
 Panagram runs in two steps, the pre-processing step (index command) and the viewing (view command). 
