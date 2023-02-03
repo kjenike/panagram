@@ -21,14 +21,26 @@ from .index import Index
 @dataclasses.dataclass
 class View:
     """Display panagram viewer"""
-    #config: str = field(positional=True)
 
-    index_dir: str = field(positional=True)
-    genome: str = field(positional=True, nargs="?")
-    chrom: str = field(positional=True, nargs="?")
-    start: int = field(positional=True, nargs="?")
-    end: int = field(positional=True, nargs="?")
-    max_chr_bins: int = field(default=400)
+    #Panagram index directory
+    index_dir: str = field(positional=True, metavar="index_dir")
+
+    #Initial anchor genome (optional)
+    genome: str = field(positional=True, nargs="?", metavar="genome")
+
+    #Initial chromosome (optional)
+    chrom: str = field(positional=True, nargs="?", metavar="chrom")
+
+    #Initial start coordinate (optional)
+    start: int = field(positional=True, nargs="?", metavar="start")
+
+    #Initial end coordinate (optional)
+    end: int = field(positional=True, nargs="?", metavar="end")
+
+    #Max number of bins on chromosome tab
+    max_chr_bins: int = field(default=350)
+
+    #Bed file with bookmarked regions 
     bookmarks: str = field(default=None)
 
     def run(self):
