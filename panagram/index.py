@@ -411,7 +411,7 @@ class Index:
             b.close()
 
 
-    def query_bitmap(self, genome, chrom, start, end, step=1):
+    def query_bitmap(self, genome, chrom, start=None, end=None, step=1):
         return self.bitmaps[genome].query(chrom, start, end, step)
 
     def query_genes(self, genome, chrom, start, end):
@@ -592,11 +592,17 @@ class KmerBitmap:
         blocks[1:] = np.fromfile(idx_in, dtype, nblocks)
         return blocks.astype([("rstart", int), ("dstart", int)])
 
-    def query(self, name, start, end, step=1):
+    def query(self, name, start=None, end=None, step=1):
         bstep = 1
         for s in self.steps:
             if step % s == 0:
                 bstep = max(bstep, s)
+
+        if start is None:
+            start = 0
+
+        if end is None:
+            end = self.seq_len(name)
 
         pac = self._query(name, start, end, step, bstep)
 
