@@ -53,5 +53,61 @@ usage: panagram bitdump [-h] [-v bool] index_dir coords step
                         Output the full bitmap (default: False)
 ```
 
+# Hosting and Proxies
+
+Panagram uses [Dash](https://dash.plotly.com/introduction) to serve the plotly visualizations. 
+Normally Dash will serve this on a dedicated webserver on port 8050 that is only viewable on 
+your localhost, but you can reverse proxy to a different port and path using a web engine 
+such as [nginx](https://www.nginx.com/)
+
+For nginx, first reconfigure your nginx configuration file to add:
+
+```
+    location /panagram {
+      proxy_pass http://127.0.0.1:8050;
+    }
+```
+
+The retart nginx with 
+
+```
+systemctl stop nginx
+systemctl start nginx
+```
+
+Currently (Feb 5, 2023) you will also need to edit the panagram source code to support proxying.
+The easiest way is to edit panagram/view.py in the panagram source code directory before
+installation with `pip install`. You can also edit the installed version (e.g. ~/.local/lib/python3.8/site-packages/panagram/view.py).
+
+First change this line (line 1597)
+```
+    app = dash.Dash(external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css"])
+```
+
+To read:
+```
+app = dash.Dash(external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css"],
+                    url_base_pathname='/panagram/') 
+```
+
+And then edit this line (at the end of the file)
+```
+    app.run_server(debug=True)
+```
+
+To read:
+
+```
+    app.run_server(host='127.0.0.1', port=8050, debug=True)
+```
+
+Finally you will need to run panagram using `panagram view <dir>`. You will probably want to run this in a loop
+in case it needs to be restarted, such as:
+
+```
+until panagram view .; do echo "restarting"; sleep 1; done
+```
+
+We will optimize this process in future releases.
 
 ## More information coming soon!
