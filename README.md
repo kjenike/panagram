@@ -56,7 +56,7 @@ usage: panagram bitdump [-h] [-v bool] index_dir coords step
 # Example run
 
 First download the example bacterial data from: 
-[http://data.schatz-lab.org/panagram/example_data.zip](http://data.schatz-lab.org/panagram/example_data.zip)
+[https://data.schatz-lab.org/panagram/example_data.zip](https://data.schatz-lab.org/panagram/example_data.zip)
 
 Unzip the archive and you will find 5 bacterial genomes plus their annotations
 ```
