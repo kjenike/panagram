@@ -60,7 +60,8 @@ Normally Dash will serve this on a dedicated webserver on port 8050 that is only
 your localhost, but you can reverse proxy to a different port and path using a web engine 
 such as [nginx](https://www.nginx.com/)
 
-For nginx, first reconfigure your nginx configuration file to add:
+For nginx, first reconfigure your nginx configuration file to add (note to be very careful 
+with the use of the slash ('/') character):
 
 ```
     location /panagram {
@@ -98,7 +99,7 @@ And then edit this line (at the end of the file)
 To read:
 
 ```
-    app.run_server(host='127.0.0.1', port=8050, debug=True)
+    app.run_server(host='127.0.0.1', port=8050)
 ```
 
 Finally you will need to run panagram using `panagram view <dir>`. You will probably want to run this in a loop
