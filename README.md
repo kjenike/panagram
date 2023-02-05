@@ -53,6 +53,31 @@ usage: panagram bitdump [-h] [-v bool] index_dir coords step
                         Output the full bitmap (default: False)
 ```
 
+# Example run
+
+First download the example bacterial data from: 
+[http://data.schatz-lab.org/panagram/example_data.zip](http://data.schatz-lab.org/panagram/example_data.zip)
+
+Unzip the archive and you will find 5 bacterial genomes plus their annotations
+```
+unzip example_data.zip
+```
+
+To run, first index the genomes:
+
+```
+cd example_data
+panagram index conf.toml
+```
+
+Then you can panagram to visualize (from the example_data directory):
+```
+panagram view . 
+```
+
+From there, you can view the results in your webbrowser at [http://127.0.0.1:8050/](http://127.0.0.1:8050)
+
+
 # Hosting and Proxies
 
 Panagram uses [Dash](https://dash.plotly.com/introduction) to serve the plotly visualizations. 
