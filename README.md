@@ -113,6 +113,7 @@ The retart nginx with
 ```
 systemctl stop nginx
 systemctl start nginx
+```
 
 For a secure public-facing server, be sure to run with the option `panagram view --ndebug` to disable debug mode. You may also wish to change the base URL path with the `--url_base` option, for example to something like `--url_base /panagram/`. The port and host name can also be defined by the `--port` and `--host` options.
 
