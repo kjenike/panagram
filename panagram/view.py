@@ -1234,11 +1234,15 @@ def view(params):
         heatmap[0]['y'] = dendro_side['layout']['yaxis']['tickvals']
         for data in heatmap:
             fig.add_trace(data)
-        fig.update_layout({'width':1500, 'height':1500,
+        fig.update_layout({"autosize":True,#'width':1500, 'height':1500,
                                  'showlegend':False, 'hovermode': 'closest',
                                  'paper_bgcolor':'rgba(0,0,0,0)',
                                  'plot_bgcolor':'rgba(0,0,0,0)'
                                  })
+        fig.update_yaxes(
+            scaleanchor = "x",
+            scaleratio = 1,
+        ) 
         # Edit xaxis
         fig.update_layout(xaxis={'domain': [.2, 1],
             'mirror': True,
@@ -2370,7 +2374,7 @@ def view(params):
         return_me = [{'label': i, 'value': i} for i in index.chrs.loc[anchor_name].index]
         return return_me 
 
-    app.run_server(host='127.0.0.1', debug=True)
+    app.run_server(host=params.host, port=params.port, debug=not params.ndebug)
 
 
 
