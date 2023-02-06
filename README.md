@@ -24,16 +24,29 @@ Panagram runs in two steps, the pre-processing step (index command) and the view
 Usage:
 Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap
 ```
-usage: panagram index [-h] <config>.toml
+usage: panagram index [-h] <config.toml>
 ```
 See example config.toml file for more details on the layout. Must include paths to all of the fasta files and optionally any annotations in gff format. 
 
 # View
 
 Usage:
-```
-usage: panagram view [-h] <path_to_panagram_index_directory>
   Display panagram viewer
+```
+usage: panagram view [-h] <index_dir/> [genome] [chrom] [start] [end]
+  index_dir           Panagram index directory
+  genome              Initial anchor genome (optional) 
+  chrom               Initial chromosome (optional) 
+  start               Initial start coordinate (optional) 
+  end                 Initial end coordinate (optional)
+  --ndebug            Run server in production mode (important for a public-
+                      facing server)
+  --port str          Server port (default: 8050)
+  --host str          Server address (default: 127.0.0.1)
+  --url_base str      A local URL prefix to use app-wide (passed to
+                      Dash.dash(url_base_pathname=...)) (default: /)
+  --bookmarks str     Bed file with bookmarked regions (default: None)
+
 ```
 
 Runs a local Dash server. Browser can be viewed at http://127.0.0.1:8050/ by default.
@@ -83,8 +96,7 @@ From there, you can view the results in your webbrowser at [http://127.0.0.1:805
 # Hosting and Proxies
 
 Panagram uses [Dash](https://dash.plotly.com/introduction) to serve the plotly visualizations. 
-Normally Dash will serve this on a dedicated webserver on port 8050 that is only viewable on 
-your localhost, but you can reverse proxy to a different port and path using a web engine 
+By default the dedicated webserver runs on localhost (127.0.0.1) on port 8050, but you can reverse proxy to a different port and path using a web engine 
 such as [nginx](https://www.nginx.com/)
 
 For nginx, first reconfigure your nginx configuration file to add (note to be very careful 
@@ -101,33 +113,8 @@ The retart nginx with
 ```
 systemctl stop nginx
 systemctl start nginx
-```
 
-Currently (Feb 5, 2023) you will also need to edit the panagram source code to support proxying.
-The easiest way is to edit panagram/view.py in the panagram source code directory before
-installation with `pip install`. You can also edit the installed version (e.g. ~/.local/lib/python3.8/site-packages/panagram/view.py).
-
-First change this line (line 1597)
-```
-    app = dash.Dash(external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css"])
-```
-
-To read:
-```
-app = dash.Dash(external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css"],
-                    url_base_pathname='/panagram/') 
-```
-
-And then edit this line (at the end of the file)
-```
-    app.run_server(debug=True)
-```
-
-To read:
-
-```
-    app.run_server(host='127.0.0.1', port=8050)
-```
+For a secure public-facing server, be sure to run with the option `panagram view --ndebug` to disable debug mode. You may also wish to change the base URL path with the `--url_base` option, for example to something like `--url_base /panagram/`. The port and host name can also be defined by the `--port` and `--host` options.
 
 Finally you will need to run panagram using `panagram view <dir>`. You will probably want to run this in a loop
 in case it needs to be restarted, such as:

@@ -1598,7 +1598,10 @@ def view(params):
     #Set up the dash app 
     chrs = index.chrs.loc[anchor_name].index[0] #"chr1"
     #dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
-    app = dash.Dash(external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css"]) 
+    app = dash.Dash(
+        external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css"],
+        url_base_pathname=params.url_base
+    ) 
     #app = Dash(__name__, external_stylesheets=[dbc.themes.PULSE, dbc_css])
     config = {"toImageButtonOptions" : {"format" : "svg", "width" : None, "height" : None},}
     app.layout = html.Div([
