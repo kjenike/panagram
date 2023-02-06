@@ -123,7 +123,7 @@ Finally you will need to run panagram using `panagram view <dir>`. You will prob
 in case it needs to be restarted, such as:
 
 ```
-until panagram view .; do echo "restarting"; sleep 1; done
+until panagram view --ndebug .; do echo "restarting"; sleep 1; done
 ```
 
 We will optimize this process in future releases.
