@@ -39,9 +39,6 @@ REQUIRED_FILES = ["panagram.toml", "chrs.csv", "bins_*.bin", "anchors/*bgz", "an
 
 MODES = {"r","w"}
 
-#TODO
-#store mash distances {prefix}/dists.csv
-
 @dataclasses.dataclass
 class KMC:
     """Parameters for KMC kmer counting"""
@@ -234,7 +231,7 @@ class Index:
         for i,(name,fasta) in enumerate(self.genome_files["fasta"].items()):
             cmd =[f"{EXTRA_DIR}/mash", "sketch", "-o", f"{self.mash_dir}/{name}", "-r", "-s", "10000", fasta]
             subprocess.check_call(cmd)
-            mash_files.append(f"mash/{name}.msh")
+            mash_files.append(f"{self.mash_dir}/{name}.msh")
 
         cmd = [f"{EXTRA_DIR}/mash", "triangle", "-E"] + mash_files
         triangle_fname = f"{self.mash_dir}/triangle.txt"
@@ -464,13 +461,13 @@ class Index:
         return self.bitmaps[genome].query(chrom, start, end, step)
 
     def query_genes(self, genome, chrom, start, end):
-        if not genome in self.gene_tabix:
+        if self.gene_tabix.get(genome, None) is None:
             return pd.DataFrame(columns=GENE_TABIX_COLS)
         rows = self.gene_tabix[genome].fetch(chrom, start, end)
         return pd.DataFrame(rows, columns=GENE_TABIX_COLS).astype(GENE_TABIX_TYPES)
 
     def query_anno(self, genome, chrom, start, end):
-        if not genome in self.anno_tabix:
+        if self.gene_tabix.get(genome, None) is None:
             return pd.DataFrame(columns=TABIX_COLS)
         rows = self.anno_tabix[genome].fetch(chrom, start, end)
         return pd.DataFrame(rows, columns=TABIX_COLS).astype(TABIX_TYPES)

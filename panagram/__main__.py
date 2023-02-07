@@ -37,6 +37,18 @@ class View:
     #Initial end coordinate (optional)
     end: int = field(positional=True, nargs="?", metavar="end")
 
+    #Run server in production mode (important for a public-facing server)
+    ndebug: bool = field(action="store_true")
+
+    #Server port
+    port: str = field(default="8050")
+
+    #Server address
+    host: str = field(default="127.0.0.1")
+
+    #A local URL prefix to use app-wide (passed to Dash.dash(url_base_pathname=...))
+    url_base: str = field(default="/")
+
     #Max number of bins on chromosome tab
     max_chr_bins: int = field(default=350)
 
