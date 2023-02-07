@@ -10,10 +10,14 @@ Please note: installation instructions and pre-processing scripts are a work in 
 # Installation
 
 ```
-> git clone --recursive https://github.com/kjenike/panagram.git
-> cd panagram
-> pip install .
+git clone --recursive https://github.com/kjenike/panagram.git
+cd panagram
+pip install .
 ```
+
+## Dependencies
+
+Requires python version >=3.7, pip, samtools, and tabix. All other dependencies should be automatically installed via pip.
 
 Panagram relies on [KMC](https://github.com/refresh-bio/KMC) to build its kmer index. This should be installed automatically, however it is possible that the KMC installation will fail but panagram will successfully install. In this case `panagram view` can be run, but `panagram index` will return an error. You may be able to debug the KMC installation by running `make -C KMC py_kmc_api` and attempting to fix any errors, then re-run `pip install -v .` after the errors are fixed.
 
@@ -27,6 +31,8 @@ Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap
 usage: panagram index [-h] <config.toml>
 ```
 See example config.toml file for more details on the layout. Must include paths to all of the fasta files and optionally any annotations in gff format. 
+
+Currently genome IDs should only contain alphanumeric characters and underscores due to KMC requirements.
 
 # View
 
