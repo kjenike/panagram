@@ -875,7 +875,7 @@ def view(params):
         g = 0
         while g < len(locs):
             #print(locs[g])
-            x_bin = int(int(locs[g])/200000)
+            x_bin = int(int(locs[g])/window_size)
             if x_bin < len(z_genes):
                 z_genes[x_bin] += 1
             g += 1
