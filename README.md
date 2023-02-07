@@ -15,6 +15,8 @@ cd panagram
 pip install .
 ```
 
+The `--recursive` option is required to install the KMC dependency. If you forget to include it, you can update the repository with the command `git submodule update --init`.
+
 ## Dependencies
 
 Requires python version >=3.7, pip, samtools, and tabix. All other dependencies should be automatically installed via pip.
