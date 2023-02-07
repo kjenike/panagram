@@ -32,6 +32,8 @@ usage: panagram index [-h] <config.toml>
 ```
 See example config.toml file for more details on the layout. Must include paths to all of the fasta files and optionally any annotations in gff format. 
 
+Panagram may fail to index datasets with more than 32 genomes. This is **not** a fundamental limitation, and we are working on fixing it.
+
 Currently genome IDs should only contain alphanumeric characters and underscores due to KMC requirements.
 
 # View
