@@ -644,8 +644,9 @@ def view(params):
         #Add a line plot that will cover the different repetative elements. 
         if plot_rep == True:
             #print("About to add repeats trace")
-            rep_colors = ["#f0f921", "#f8df25", "#fdc627", "#fdaf31", "#f99a3e", "#f3854b", "#e97257", "#de6164", "#d24f71", "#c43e7f", 
-                    "#b42e8d", "#a21d9a", "#8e0ca4", "#7801a8", "#6100a7", "#4903a0", "#2f0596", "#0d0887", "grey", "grey", "grey"]
+            #rep_colors = ["#f0f921", "#f8df25", "#fdc627", "#fdaf31", "#f99a3e", "#f3854b", "#e97257", "#de6164", "#d24f71", "#c43e7f", 
+            #        "#b42e8d", "#a21d9a", "#8e0ca4", "#7801a8", "#6100a7", "#4903a0", "#2f0596", "#0d0887", "grey", "grey", "grey"]
+            rep_colors = mcp.gen_color(cmap="plasma",n=len(rep_list))
             cntr = 0
             #df = index.query_anno(anchor_name, chrs, x_start, x_stop)
             #print(rep_list)
