@@ -17,6 +17,12 @@ pip install .
 
 The `--recursive` option is required to install the KMC dependency. If you forget to include it, you can update the repository with the command `git submodule update --init`.
 
+Installation may fail if pip is not up-to-date or if setuptools is not up-to-date. In order to update pip and setuptools run: 
+```
+pip install --upgrade pip
+pip install --upgrade setuptools
+```
+
 ## Dependencies
 
 Requires python version >=3.7, pip, samtools, and tabix. All other dependencies should be automatically installed via pip.
