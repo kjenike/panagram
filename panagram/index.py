@@ -82,6 +82,7 @@ class Index:
     kmc: KMC = KMC()
 
     fasta: dict = field(default_factory=dict,help=argparse.SUPPRESS)
+    fastq: dict = field(default_factory=dict,help=argparse.SUPPRESS)
     gff: dict = field(default_factory=dict,help=argparse.SUPPRESS)
 
     #Dummy parameters to force KMC params to be in "kmc.*" format
@@ -155,7 +156,7 @@ class Index:
         self.gene_tabix = dict()
         self.anno_tabix = dict()
 
-        for g in self.genomes:
+        for g in self.anchor_genomes:
             self.bitmaps[g] = KmerBitmap(self.params, g, "r", self.chrs)
             self.gene_tabix[g] = self._load_tabix(g, "gene")
             self.anno_tabix[g] = self._load_tabix(g, "anno")
@@ -222,13 +223,14 @@ class Index:
 
     def _init_genomes(self):
         self.genomes = self.chrs.index.unique("genome")
+        self.anchor_genomes = self.chrs.query("size > 0").index.unique("genome")
         self.ngenomes = len(self.genomes)
         self._total_occ_idx = pd.Index([f"total_occ_{i+1}" for i in range(self.ngenomes)])
         self._gene_occ_idx = pd.Index([f"gene_occ_{i+1}" for i in range(self.ngenomes)])
 
     def _run_mash(self):
         mash_files = list()
-        for i,(name,fasta) in enumerate(self.genome_files["fasta"].items()):
+        for i,(name,fasta) in enumerate(self.genome_files["fasta"].dropna().items()):
             cmd =[f"{EXTRA_DIR}/mash", "sketch", "-o", f"{self.mash_dir}/{name}", "-r", "-s", "10000", fasta]
             subprocess.check_call(cmd)
             mash_files.append(f"{self.mash_dir}/{name}.msh")
@@ -238,7 +240,8 @@ class Index:
         with open(triangle_fname, "w") as triangle_out:
             subprocess.check_call(cmd, stdout=triangle_out)
 
-        fasta_names = self.genome_files.reset_index().set_index("fasta")["index"]
+        fasta_names = self.genome_files.reset_index().dropna(subset=["fasta"]).set_index("fasta")["index"]
+        print(fasta_names)
 
         with open(triangle_fname, "r") as infile, open(self.genome_dist_fname, "w") as outfile:
             line = infile.readline()
@@ -259,25 +262,40 @@ class Index:
             "fasta" : pd.Series(self.fasta),
         })
 
+        if hasattr(self, "fastq"):
+            self.genome_files = pd.concat([self.genome_files, pd.Series(self.fastq, name="fastq")], axis=1)
+
         if hasattr(self, "gff"):
             self.genome_files["gff"] = pd.Series(self.gff)
 
         if self.anno_only:
             self._load_chrs()
         else:
-            for i,(name,fasta) in enumerate(self.genome_files["fasta"].items()):
-                self.genome_ids[name] = i
+            genome_id = 0
+            for name,(fasta,fastq) in self.genome_files[["fasta", "fastq"]].iterrows():
+                if pd.isnull(fasta) == pd.isnull(fastq):
+                    print(fasta, fastq)
+                    raise ValueError(f"Must specify either FASTA or FASTQ for {name} (not both)")
 
-                if not os.path.exists(fasta+".fai"):
-                    cmd = ["samtools", "faidx", fasta]
-                    subprocess.check_call(cmd)
-                fa = pysam.FastaFile(fasta)
+                self.genome_ids[name] = genome_id
+                genome_id += 1
 
+                if pd.isnull(fastq):
+                    if not os.path.exists(fasta+".fai"):
+                        cmd = ["samtools", "faidx", fasta]
+                        subprocess.check_call(cmd)
+                    fa = pysam.FastaFile(fasta)
 
-                genomes.append(pd.DataFrame(
-                    [(name, chrom, i, fa.get_reference_length(chrom)-self.k+1) 
-                     for chrom in fa.references], 
-                    columns=["genome", "chr", "id", "size"]))
+                    genomes.append(pd.DataFrame(
+                        [(name, chrom, genome_id, fa.get_reference_length(chrom)-self.k+1) 
+                         for chrom in fa.references], 
+                        columns=["genome", "chr", "id", "size"]))
+
+                elif pd.isnull(fasta):
+                    genomes.append(pd.DataFrame(
+                        {"genome" : [name], "id" : genome_id, "chr" : None, "size" : 0}
+                    ))
+                    print(genomes)
 
             self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
             self._init_genomes()
@@ -293,7 +311,7 @@ class Index:
             bitvec_dbs = self._run_kmc()
         
         def iter_anchor_args():
-            for name,fasta in self.genome_files["fasta"].items():
+            for name,fasta in self.genome_files["fasta"].dropna().items():
                 yield (self.params, name, "w", self.chrs, fasta, bitvec_dbs)
 
         if not self.anno_only:
@@ -307,7 +325,7 @@ class Index:
                         sys.stdout.flush()
 
         self.bitmaps = {
-            name : KmerBitmap(self.params, name, "r", self.chrs) for name in self.genomes
+            name : KmerBitmap(self.params, name, "r", self.chrs) for name in self.anchor_genomes
         }
 
         print("Computing mash distance")
@@ -322,7 +340,11 @@ class Index:
         #chr_bin_occs = list()
 
         prev_genome = None
+        print(self.chrs)
         for (genome,chrom),size in self.chrs["size"].items():
+            if size == 0: 
+                continue
+
             if genome != prev_genome:
                 prev_genome = genome
                 print(genome)
@@ -332,7 +354,6 @@ class Index:
             self.chrs.loc[(genome,chrom), self._total_occ_idx] = chr_counts
 
             coords = self.chr_bin_coords(genome,chrom)
-            #bin_coords.append(coords.drop(columns="end"))
 
             for i,c in coords.iterrows():
                 st = c["start"] // self.lowres_step
@@ -476,7 +497,7 @@ class Index:
 
     @staticmethod
     def _run_kmc_genome(args):
-        conf, db_i, i, name, fasta, count_db, onehot_db, tmp_dir = args
+        conf, db_i, i, name, fasta, count_db, onehot_db, tmp_dir, fasta_in = args
 
         onehot_id = str(2**i)
 
@@ -488,12 +509,14 @@ class Index:
             print(f"Using exisitng KMC db: {db}")
             return False
 
+        in_arg = "-fm" if fasta_in else "-fq"
+
         if should_build(count_db):
             subprocess.check_call([
                 f"{EXTRA_DIR}/kmc", f"-k{conf['k']}", 
                 f"-t{conf['kmc']['threads']}", 
                 f"-m{conf['kmc']['memory']}", 
-                "-ci1", "-cs10000000", "-fm",
+                "-ci1", "-cs10000000", in_arg,
                 fasta, count_db, tmp_dir
             ])
 
@@ -509,7 +532,12 @@ class Index:
     def _iter_kmc_genome_args(self):
         i = 0
         db_i = 0
-        for name,fasta in self.genome_files["fasta"].items():
+        #for name,fasta in self.genome_files["fasta"].items():
+        for name,(fasta,fastq) in self.genome_files[["fasta", "fastq"]].iterrows():
+            fasta_in = pd.isnull(fastq)
+            if not fasta_in:
+                fasta = fastq
+
             if i >= 32:
                 i = 0
                 db_i += 1
@@ -517,7 +545,7 @@ class Index:
             count_db = os.path.join(self.count_dir, name)
             onehot_db = os.path.join(self.onehot_dir, name)
             tmp_dir = self.init_dir(f"tmp/{name}")
-            yield (self.params, db_i, i, name, fasta, count_db, onehot_db, tmp_dir)
+            yield (self.params, db_i, i, name, fasta, count_db, onehot_db, tmp_dir, fasta_in)
 
             i += 1
 
