@@ -144,4 +144,36 @@ until panagram view --ndebug .; do echo "restarting"; sleep 1; done
 
 We will optimize this process in future releases.
 
+# Example config.toml file
+
+```
+k = 12
+prefix = "."
+processes = 5
+
+lowres_step = 100
+chr_bin_kbp = 200
+
+gff_anno_types = ["exon", "CDS"]
+
+[kmc]
+memory = 10
+processes = 5
+threads = 4
+
+[fasta]
+ecoli = "FASTAS/ecoli_GCF_001612495.1_ASM161249v1_genomic.fna"
+ecoli_k12 = "FASTAS/ecoli_k12_GCF_000005845.2_ASM584v2_genomic.fna"
+klebsiella = "FASTAS/klebsiella_GCF_000240185.1_ASM24018v2_genomic.fna"
+salmonella = "FASTAS/salmonella_GCF_016117835.1_ASM1611783v1_genomic.fna"
+shigella = "FASTAS/shigella_GCF_000006925.2_ASM692v2_genomic.fna"
+
+[gff]
+ecoli = "gffs/ecoli_GCF_001612495.1_ASM161249v1_genomic.gff"
+ecoli_k12 = "gffs/ecoli_k12_GCF_000005845.2_ASM584v2_genomic.gff"
+klebsiella = "gffs/klebsiella_GCF_000240185.1_ASM24018v2_genomic.gff"
+salmonella = "gffs/salmonella_GCF_016117835.1_ASM1611783v1_genomic.gff"
+shigella = "gffs/shigella_GCF_000006925.2_ASM692v2_genomic.gff"
+```
+
 ## More information coming soon!
