@@ -49,6 +49,11 @@ class pre_build(build_py):
 
         extra_dir = f"{ROOT_DIR}/panagram/extra"
 
+        if not os.path.exists(f"{KMC_DIR}"):
+            print("KMC submodule not found, attempting to update")
+            if not call_cmd("git", "submodule", "update", "--init"):
+                raise RuntimeError("Failed to download KMC submodule. You may try re-cloning with the '--recursive` option")
+
         if call_cmd(*make_cmd):
             shutil.rmtree(extra_dir)
             call_cmd("mv", "-f", f"{KMC_DIR}/bin", extra_dir)
