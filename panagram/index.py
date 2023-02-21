@@ -421,7 +421,14 @@ class Index:
         fname = self.tabix_fname(genome, type_)
         if not os.path.exists(fname):
             return None
-        return pysam.TabixFile(fname, parser=pysam.asTuple())
+
+        index_fname = fname+".csi"
+        if not os.path.exists(index_fname):
+            index_fname = fname+".tbi"
+            if not os.path.exists(index_fname):
+                raise FileNotFoundError("Index file not found: '{fname}.csi' or '{fname.tbi}' must be preset")
+
+        return pysam.TabixFile(fname, parser=pysam.asTuple(), index=index_fname)
 
     def tabix_fname(self, genome, typ):
         return os.path.join(self.anno_dir, f"{genome}.{typ}.bed{TABIX_SUFFIX}") 
@@ -432,7 +439,7 @@ class Index:
 
         df.to_csv(bed, sep="\t", header=None, index=False)
         pysam.tabix_compress(bed, tbx, True)
-        pysam.tabix_index(tbx, True, 0,1,2)
+        pysam.tabix_index(tbx, True, 0,1,2, csi=True)
         #os.remove(bed)
 
     def _load_gffs(self, genome):
