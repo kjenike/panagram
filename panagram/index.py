@@ -73,8 +73,13 @@ class Index:
     gff_gene_types: List[str] = field(default_factory=lambda: ["gene"])
     gff_anno_types: List[str] = field(default=None)
 
+    #Subset of genome IDs to generate anchor genomes for. Will use all genomes as anchors if not specified
+    anchor_genomes: List[str] = field(default=None)
+
     #Only perform anchoring and annotation
     anchor_only: bool = field(default=False, action="store_true")
+
+    use_existing_anchors: bool = field(default=False, action="store_true")
 
     #Only perform annotaion
     anno_only: bool = field(default=False, action="store_true")
@@ -223,7 +228,9 @@ class Index:
 
     def _init_genomes(self):
         self.genomes = self.chrs.index.unique("genome")
-        self.anchor_genomes = self.chrs.query("size > 0").index.unique("genome")
+        print(self.anchor_genomes, "ANCHOR")
+        if self.anchor_genomes is None:
+            self.anchor_genomes = self.chrs.query("size > 0").index.unique("genome")
         self.ngenomes = len(self.genomes)
         self._total_occ_idx = pd.Index([f"total_occ_{i+1}" for i in range(self.ngenomes)])
         self._gene_occ_idx = pd.Index([f"gene_occ_{i+1}" for i in range(self.ngenomes)])
@@ -274,13 +281,14 @@ class Index:
             genome_id = 0
             for name,(fasta,fastq) in self.genome_files[["fasta", "fastq"]].iterrows():
                 if pd.isnull(fasta) == pd.isnull(fastq):
-                    print(fasta, fastq)
                     raise ValueError(f"Must specify either FASTA or FASTQ for {name} (not both)")
 
                 self.genome_ids[name] = genome_id
                 genome_id += 1
 
-                if pd.isnull(fastq):
+                is_anchor = pd.isnull(fastq) and (self.anchor_genomes is None or name in self.anchor_genomes)
+
+                if is_anchor:
                     if not os.path.exists(fasta+".fai"):
                         cmd = ["samtools", "faidx", fasta]
                         subprocess.check_call(cmd)
@@ -291,11 +299,10 @@ class Index:
                          for chrom in fa.references], 
                         columns=["genome", "chr", "id", "size"]))
 
-                elif pd.isnull(fasta):
+                else:
                     genomes.append(pd.DataFrame(
                         {"genome" : [name], "id" : genome_id, "chr" : None, "size" : 0}
                     ))
-                    print(genomes)
 
             self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
             self._init_genomes()
@@ -312,7 +319,8 @@ class Index:
         
         def iter_anchor_args():
             for name,fasta in self.genome_files["fasta"].dropna().items():
-                yield (self.params, name, "w", self.chrs, fasta, bitvec_dbs)
+                if self.anchor_genomes is None or name in self.anchor_genomes:
+                    yield (self.params, name, "w", self.chrs, fasta, bitvec_dbs)
 
         if not self.anno_only:
             if self.processes == 1:
@@ -518,20 +526,24 @@ class Index:
 
         in_arg = "-fm" if fasta_in else "-fq"
 
+        print(name, i, db_i, onehot_id)
+
         if should_build(count_db):
-            subprocess.check_call([
+            cmd = [
                 f"{EXTRA_DIR}/kmc", f"-k{conf['k']}", 
                 f"-t{conf['kmc']['threads']}", 
                 f"-m{conf['kmc']['memory']}", 
                 "-ci1", "-cs10000000", in_arg,
                 fasta, count_db, tmp_dir
-            ])
+            ]
+            subprocess.check_call(cmd)
 
         if should_build(onehot_db):
-            subprocess.check_call([
+            cmd = [
                 f"{EXTRA_DIR}/kmc_tools", "-t4", "transform",
                 count_db, "set_counts", onehot_id, onehot_db
-            ])
+            ]
+            subprocess.check_call(cmd)
 
         return db_i, name, onehot_db
 
@@ -615,6 +627,7 @@ class KmerBitmap:
         self.genomes = chrs.index.unique(0)
         self.ngenomes = len(self.genomes)
         self.nbytes = int(np.ceil(self.ngenomes / 8))
+        self.bitmaps = None
 
         self._init_steps(conf)
         step_sizes = pd.DataFrame({step : np.ceil(self.sizes / step) for step in self.steps}, dtype=int)
@@ -624,7 +637,16 @@ class KmerBitmap:
         self.bitmap_lens = defaultdict(int)
 
         if mode == "w":
-            self._init_write(kmc_dbs)
+            if self.conf["use_existing_anchors"]:
+                write = False
+                for s in self.steps:
+                    if not (os.path.exists(self.bgz_fname(s)) and os.path.exists(self.idx_fname(s))):
+                        write = True
+                        break
+            else:
+                write = True
+            if write:
+                self._init_write(kmc_dbs)
         elif mode == "r":
             self._init_read()
         else:
@@ -639,8 +661,6 @@ class KmerBitmap:
             for fname in glob.glob(f"{self.prefix}.*.{BGZ_SUFFIX}"):
                 step = int(fname.split(".")[-2])
                 self.steps.append(step)
-
-        
 
     def bgz_fname(self, step): 
         return f"{self.prefix}.{step}.{BGZ_SUFFIX}"
@@ -794,5 +814,6 @@ class KmerBitmap:
                 "bgzip", "-r", self.bgz_fname(step), "-I", self.idx_fname(step)])
 
     def close(self):
-        for f in self.bitmaps.values():
-            f.close()
+        if self.bitmaps is not None:
+            for f in self.bitmaps.values():
+                f.close()
