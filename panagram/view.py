@@ -1446,7 +1446,6 @@ def view(params):
     num_chrs = {}
     cntr = 0
     pre_bed_info = {}
-    anchor_list = ["chm13"]
     #chr_nums = 12
     for l in labels:
         num_chrs[l] = len(index.chrs.loc[l])
@@ -1491,7 +1490,7 @@ def view(params):
         bar_sum_global[l] = {}
         cntr = 0
         #print(l)
-        if l in anchor_list:
+        if l in index.anchor_genomes:
             #print(l)
             for c in index.chrs.loc[l].index:
                 #print(c) 
