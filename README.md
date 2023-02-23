@@ -176,4 +176,10 @@ salmonella = "gffs/salmonella_GCF_016117835.1_ASM1611783v1_genomic.gff"
 shigella = "gffs/shigella_GCF_000006925.2_ASM692v2_genomic.gff"
 ```
 
+# Known issues
+- Right now, there is a bug (issue #7) when indexing very large genomes with very large chromosomes. We are activley working to fix this. 
+- Indexing sometimes fails when working with more than 32 genomes 
+- Mash dendogram leaf placement is not always perfect
+- Installing on a mac can be tricky. Will need to include a more detailed list of dependancies 
+
 ## More information coming soon!
