@@ -808,7 +808,7 @@ class KmerBitmap:
 
         for step in self.steps:
             subprocess.check_call([
-                "bgzip", "-r", self.bgz_fname(step), "-I", self.idx_fname(step)])
+                "bgzip", "-rI", self.idx_fname(step), self.bgz_fname(step)])
 
     def close(self):
         if self.bitmaps is not None:
