@@ -73,8 +73,13 @@ class Index:
     gff_gene_types: List[str] = field(default_factory=lambda: ["gene"])
     gff_anno_types: List[str] = field(default=None)
 
+    #Subset of genome IDs to generate anchor genomes for. Will use all genomes as anchors if not specified
+    anchor_genomes: List[str] = field(default=None)
+
     #Only perform anchoring and annotation
     anchor_only: bool = field(default=False, action="store_true")
+
+    use_existing_anchors: bool = field(default=False, action="store_true")
 
     #Only perform annotaion
     anno_only: bool = field(default=False, action="store_true")
@@ -183,16 +188,6 @@ class Index:
             os.makedirs(d, exist_ok=True)
         return d
 
-
-    
-    #def _load_kmc(self, files):
-    #    from .kmc import py_kmc_api
-    #    self.kmc = py_kmc_api
-    #    self.kmc_dbs = list()
-    #    for fname in files:
-    #        self.kmc_dbs.append(self.kmc.KMCFile())
-    #        self.kmc_dbs[-1].OpenForRA(fname)
-
     #def _calc_genome_dist(self, files):
     #    from .kmc import py_kmc_api
     #    kmc = py_kmc_api
@@ -223,7 +218,8 @@ class Index:
 
     def _init_genomes(self):
         self.genomes = self.chrs.index.unique("genome")
-        self.anchor_genomes = self.chrs.query("size > 0").index.unique("genome")
+        if self.anchor_genomes is None:
+            self.anchor_genomes = self.chrs.query("size > 0").index.unique("genome")
         self.ngenomes = len(self.genomes)
         self._total_occ_idx = pd.Index([f"total_occ_{i+1}" for i in range(self.ngenomes)])
         self._gene_occ_idx = pd.Index([f"gene_occ_{i+1}" for i in range(self.ngenomes)])
@@ -241,7 +237,6 @@ class Index:
             subprocess.check_call(cmd, stdout=triangle_out)
 
         fasta_names = self.genome_files.reset_index().dropna(subset=["fasta"]).set_index("fasta")["index"]
-        print(fasta_names)
 
         with open(triangle_fname, "r") as infile, open(self.genome_dist_fname, "w") as outfile:
             line = infile.readline()
@@ -274,13 +269,14 @@ class Index:
             genome_id = 0
             for name,(fasta,fastq) in self.genome_files[["fasta", "fastq"]].iterrows():
                 if pd.isnull(fasta) == pd.isnull(fastq):
-                    print(fasta, fastq)
                     raise ValueError(f"Must specify either FASTA or FASTQ for {name} (not both)")
 
                 self.genome_ids[name] = genome_id
                 genome_id += 1
 
-                if pd.isnull(fastq):
+                is_anchor = pd.isnull(fastq) and (self.anchor_genomes is None or name in self.anchor_genomes)
+
+                if is_anchor:
                     if not os.path.exists(fasta+".fai"):
                         cmd = ["samtools", "faidx", fasta]
                         subprocess.check_call(cmd)
@@ -291,11 +287,10 @@ class Index:
                          for chrom in fa.references], 
                         columns=["genome", "chr", "id", "size"]))
 
-                elif pd.isnull(fasta):
+                else:
                     genomes.append(pd.DataFrame(
                         {"genome" : [name], "id" : genome_id, "chr" : None, "size" : 0}
                     ))
-                    print(genomes)
 
             self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
             self._init_genomes()
@@ -304,15 +299,17 @@ class Index:
         if self.anchor_only or self.anno_only:
             pre = f""
             suf = ".kmc_pre"
-            bitvec_dbs = [f[:-len(suf)] 
-                for f in glob.glob(f"{self.bitvec_dir}/*{suf}")]
+            bitvec_dbs = [f"{self.bitvec_dir}/{i}" for i in range(self.kmc_bitvec_count)]
+            #[f[:-len(suf)] 
+            #    for f in glob.glob(f"{self.bitvec_dir}/*{suf}")]
 
         else:
             bitvec_dbs = self._run_kmc()
         
         def iter_anchor_args():
             for name,fasta in self.genome_files["fasta"].dropna().items():
-                yield (self.params, name, "w", self.chrs, fasta, bitvec_dbs)
+                if self.anchor_genomes is None or name in self.anchor_genomes:
+                    yield (self.params, name, "w", self.chrs, fasta, bitvec_dbs)
 
         if not self.anno_only:
             if self.processes == 1:
@@ -328,9 +325,6 @@ class Index:
             name : KmerBitmap(self.params, name, "r", self.chrs) for name in self.anchor_genomes
         }
 
-        print("Computing mash distance")
-        self._run_mash()
-
         print("Computing chromosome summaries")
         self.chrs[self._total_occ_idx] = 0
         self.chrs[self._gene_occ_idx] = 0
@@ -340,14 +334,12 @@ class Index:
         #chr_bin_occs = list()
 
         prev_genome = None
-        print(self.chrs)
         for (genome,chrom),size in self.chrs["size"].items():
             if size == 0: 
                 continue
 
             if genome != prev_genome:
                 prev_genome = genome
-                print(genome)
 
             occs = self.query_bitmap(genome,chrom,0,size,100).sum(axis=1)
             chr_counts = self.count_occs(occs)
@@ -364,6 +356,9 @@ class Index:
         chr_bins_out.close()
 
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+
+        print("Computing mash distance")
+        self._run_mash()
 
         if "gff" in self.genome_files.columns:
 
@@ -519,19 +514,21 @@ class Index:
         in_arg = "-fm" if fasta_in else "-fq"
 
         if should_build(count_db):
-            subprocess.check_call([
+            cmd = [
                 f"{EXTRA_DIR}/kmc", f"-k{conf['k']}", 
                 f"-t{conf['kmc']['threads']}", 
                 f"-m{conf['kmc']['memory']}", 
                 "-ci1", "-cs10000000", in_arg,
                 fasta, count_db, tmp_dir
-            ])
+            ]
+            subprocess.check_call(cmd)
 
         if should_build(onehot_db):
-            subprocess.check_call([
+            cmd = [
                 f"{EXTRA_DIR}/kmc_tools", "-t4", "transform",
                 count_db, "set_counts", onehot_id, onehot_db
-            ])
+            ]
+            subprocess.check_call(cmd)
 
         return db_i, name, onehot_db
 
@@ -555,14 +552,18 @@ class Index:
             yield (self.params, db_i, i, name, fasta, count_db, onehot_db, tmp_dir, fasta_in)
 
             i += 1
+    
+    @property
+    def kmc_bitvec_count(self):
+        return int(np.ceil(self.ngenomes / 32.0))
 
     def _run_kmc(self):
 
         i = 0
         samp_count = len(self.genome_files)
-        db_count = int(np.ceil(samp_count / 32))
+        kmc_bitvec_count = int(np.ceil(samp_count / 32))
 
-        genome_dbs = [list() for i in range(db_count)]
+        genome_dbs = [list() for i in range(kmc_bitvec_count)]
         if self.kmc.processes == 1:
             for args in self._iter_kmc_genome_args():
                 i,name,db = self._run_kmc_genome(args)
@@ -574,10 +575,10 @@ class Index:
 
         bitvec_dbs = list()
 
-        for i in range(db_count):
+        for i in range(kmc_bitvec_count):
             h = (i+1)*32
 
-            if db_count == 1 or i < db_count:
+            if kmc_bitvec_count == 1 or i < kmc_bitvec_count:
                 t=32
             else:
                 t = samp_count-32
@@ -615,6 +616,7 @@ class KmerBitmap:
         self.genomes = chrs.index.unique(0)
         self.ngenomes = len(self.genomes)
         self.nbytes = int(np.ceil(self.ngenomes / 8))
+        self.bitmaps = None
 
         self._init_steps(conf)
         step_sizes = pd.DataFrame({step : np.ceil(self.sizes / step) for step in self.steps}, dtype=int)
@@ -624,7 +626,16 @@ class KmerBitmap:
         self.bitmap_lens = defaultdict(int)
 
         if mode == "w":
-            self._init_write(kmc_dbs)
+            if self.conf["use_existing_anchors"]:
+                write = False
+                for s in self.steps:
+                    if not (os.path.exists(self.bgz_fname(s)) and os.path.exists(self.idx_fname(s))):
+                        write = True
+                        break
+            else:
+                write = True
+            if write:
+                self._init_write(kmc_dbs)
         elif mode == "r":
             self._init_read()
         else:
@@ -639,8 +650,6 @@ class KmerBitmap:
             for fname in glob.glob(f"{self.prefix}.*.{BGZ_SUFFIX}"):
                 step = int(fname.split(".")[-2])
                 self.steps.append(step)
-
-        
 
     def bgz_fname(self, step): 
         return f"{self.prefix}.{step}.{BGZ_SUFFIX}"
@@ -706,6 +715,8 @@ class KmerBitmap:
 
         pac = np.frombuffer(buf, "uint8").reshape((len(buf)//self.nbytes, self.nbytes))
 
+        #pac = pac[:,::-1]
+
         if step > 1:
             return pac[::step]
         else:
@@ -762,17 +773,21 @@ class KmerBitmap:
                 def nbytes(i):
                     if self.nbytes <= 4:
                         return self.nbytes
-                    elif i == len(self.kmc_dbs)-1:
+                    elif i == len(self.kmc_dbs)-1 and self.nbytes % 4 > 0:
                         return self.nbytes % 4
                     else:
                         return 4
-                        
+
+                sizes = defaultdict(list)
                 for ki,db in enumerate(self.kmc_dbs): 
+                    sys.stdout.flush()
                     pacbytes = self._get_kmc_counts(db, seq)
                     pacbytes = pacbytes[:,:nbytes(ki)]
 
                     for s in self.steps:
-                        byte_arrs[s].append(pacbytes[::s])
+                        a = pacbytes[::s]
+                        byte_arrs[s].append(a)
+                        sizes[s].append(len(a))
 
                 size = None
                 for step,arr in byte_arrs.items():
@@ -784,6 +799,8 @@ class KmerBitmap:
 
                 self.seq_lens[gi][seq_name] = size
                 sys.stdout.write(f"Anchored {seq_name}\n")
+                sys.stdout.flush()
+
 
                 t = time()
 
@@ -794,5 +811,6 @@ class KmerBitmap:
                 "bgzip", "-r", self.bgz_fname(step), "-I", self.idx_fname(step)])
 
     def close(self):
-        for f in self.bitmaps.values():
-            f.close()
+        if self.bitmaps is not None:
+            for f in self.bitmaps.values():
+                f.close()
