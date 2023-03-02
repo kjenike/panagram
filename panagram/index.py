@@ -237,7 +237,6 @@ class Index:
             subprocess.check_call(cmd, stdout=triangle_out)
 
         fasta_names = self.genome_files.reset_index().dropna(subset=["fasta"]).set_index("fasta")["index"]
-        print(fasta_names)
 
         with open(triangle_fname, "r") as infile, open(self.genome_dist_fname, "w") as outfile:
             line = infile.readline()
@@ -335,21 +334,16 @@ class Index:
         #chr_bin_occs = list()
 
         prev_genome = None
-        print(self.chrs)
         for (genome,chrom),size in self.chrs["size"].items():
-            print(genome,chrom,size)
             if size == 0: 
                 continue
 
             if genome != prev_genome:
                 prev_genome = genome
-                print("summarizing", genome)
 
             occs = self.query_bitmap(genome,chrom,0,size,100).sum(axis=1)
             chr_counts = self.count_occs(occs)
-            print(chr_counts)
             self.chrs.loc[(genome,chrom), self._total_occ_idx] = chr_counts
-            print(list(self.chrs.loc[(genome,chrom)]))
 
             coords = self.chr_bin_coords(genome,chrom)
 
@@ -518,8 +512,6 @@ class Index:
             return False
 
         in_arg = "-fm" if fasta_in else "-fq"
-
-        print(name, i, db_i, onehot_id)
 
         if should_build(count_db):
             cmd = [
@@ -786,12 +778,8 @@ class KmerBitmap:
                     else:
                         return 4
 
-                print("anchoring", fasta)
-                sys.stdout.flush()
-                        
                 sizes = defaultdict(list)
                 for ki,db in enumerate(self.kmc_dbs): 
-                    print("db", len(seq), ki, nbytes(ki))
                     sys.stdout.flush()
                     pacbytes = self._get_kmc_counts(db, seq)
                     pacbytes = pacbytes[:,:nbytes(ki)]
@@ -808,7 +796,6 @@ class KmerBitmap:
                     self.bitmap_lens[step] += len(arr)
                     if step == 1:
                         size = len(arr)
-                    print(sum(sizes[step]), sizes[step])
 
                 self.seq_lens[gi][seq_name] = size
                 sys.stdout.write(f"Anchored {seq_name}\n")
