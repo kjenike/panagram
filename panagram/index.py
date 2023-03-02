@@ -188,16 +188,6 @@ class Index:
             os.makedirs(d, exist_ok=True)
         return d
 
-
-    
-    #def _load_kmc(self, files):
-    #    from .kmc import py_kmc_api
-    #    self.kmc = py_kmc_api
-    #    self.kmc_dbs = list()
-    #    for fname in files:
-    #        self.kmc_dbs.append(self.kmc.KMCFile())
-    #        self.kmc_dbs[-1].OpenForRA(fname)
-
     #def _calc_genome_dist(self, files):
     #    from .kmc import py_kmc_api
     #    kmc = py_kmc_api
@@ -228,7 +218,6 @@ class Index:
 
     def _init_genomes(self):
         self.genomes = self.chrs.index.unique("genome")
-        print(self.anchor_genomes, "ANCHOR")
         if self.anchor_genomes is None:
             self.anchor_genomes = self.chrs.query("size > 0").index.unique("genome")
         self.ngenomes = len(self.genomes)
@@ -311,8 +300,9 @@ class Index:
         if self.anchor_only or self.anno_only:
             pre = f""
             suf = ".kmc_pre"
-            bitvec_dbs = [f[:-len(suf)] 
-                for f in glob.glob(f"{self.bitvec_dir}/*{suf}")]
+            bitvec_dbs = [f"{self.bitvec_dir}/{i}" for i in range(self.kmc_bitvec_count)]
+            #[f[:-len(suf)] 
+            #    for f in glob.glob(f"{self.bitvec_dir}/*{suf}")]
 
         else:
             bitvec_dbs = self._run_kmc()
@@ -336,9 +326,6 @@ class Index:
             name : KmerBitmap(self.params, name, "r", self.chrs) for name in self.anchor_genomes
         }
 
-        print("Computing mash distance")
-        self._run_mash()
-
         print("Computing chromosome summaries")
         self.chrs[self._total_occ_idx] = 0
         self.chrs[self._gene_occ_idx] = 0
@@ -350,16 +337,19 @@ class Index:
         prev_genome = None
         print(self.chrs)
         for (genome,chrom),size in self.chrs["size"].items():
+            print(genome,chrom,size)
             if size == 0: 
                 continue
 
             if genome != prev_genome:
                 prev_genome = genome
-                print(genome)
+                print("summarizing", genome)
 
             occs = self.query_bitmap(genome,chrom,0,size,100).sum(axis=1)
             chr_counts = self.count_occs(occs)
+            print(chr_counts)
             self.chrs.loc[(genome,chrom), self._total_occ_idx] = chr_counts
+            print(list(self.chrs.loc[(genome,chrom)]))
 
             coords = self.chr_bin_coords(genome,chrom)
 
@@ -372,6 +362,9 @@ class Index:
         chr_bins_out.close()
 
         self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+
+        print("Computing mash distance")
+        self._run_mash()
 
         if "gff" in self.genome_files.columns:
 
@@ -567,14 +560,18 @@ class Index:
             yield (self.params, db_i, i, name, fasta, count_db, onehot_db, tmp_dir, fasta_in)
 
             i += 1
+    
+    @property
+    def kmc_bitvec_count(self):
+        return int(np.ceil(self.ngenomes / 32.0))
 
     def _run_kmc(self):
 
         i = 0
         samp_count = len(self.genome_files)
-        db_count = int(np.ceil(samp_count / 32))
+        kmc_bitvec_count = int(np.ceil(samp_count / 32))
 
-        genome_dbs = [list() for i in range(db_count)]
+        genome_dbs = [list() for i in range(kmc_bitvec_count)]
         if self.kmc.processes == 1:
             for args in self._iter_kmc_genome_args():
                 i,name,db = self._run_kmc_genome(args)
@@ -586,10 +583,10 @@ class Index:
 
         bitvec_dbs = list()
 
-        for i in range(db_count):
+        for i in range(kmc_bitvec_count):
             h = (i+1)*32
 
-            if db_count == 1 or i < db_count:
+            if kmc_bitvec_count == 1 or i < kmc_bitvec_count:
                 t=32
             else:
                 t = samp_count-32
@@ -726,6 +723,8 @@ class KmerBitmap:
 
         pac = np.frombuffer(buf, "uint8").reshape((len(buf)//self.nbytes, self.nbytes))
 
+        #pac = pac[:,::-1]
+
         if step > 1:
             return pac[::step]
         else:
@@ -782,17 +781,25 @@ class KmerBitmap:
                 def nbytes(i):
                     if self.nbytes <= 4:
                         return self.nbytes
-                    elif i == len(self.kmc_dbs)-1:
+                    elif i == len(self.kmc_dbs)-1 and self.nbytes % 4 > 0:
                         return self.nbytes % 4
                     else:
                         return 4
+
+                print("anchoring", fasta)
+                sys.stdout.flush()
                         
+                sizes = defaultdict(list)
                 for ki,db in enumerate(self.kmc_dbs): 
+                    print("db", len(seq), ki, nbytes(ki))
+                    sys.stdout.flush()
                     pacbytes = self._get_kmc_counts(db, seq)
                     pacbytes = pacbytes[:,:nbytes(ki)]
 
                     for s in self.steps:
-                        byte_arrs[s].append(pacbytes[::s])
+                        a = pacbytes[::s]
+                        byte_arrs[s].append(a)
+                        sizes[s].append(len(a))
 
                 size = None
                 for step,arr in byte_arrs.items():
@@ -801,9 +808,12 @@ class KmerBitmap:
                     self.bitmap_lens[step] += len(arr)
                     if step == 1:
                         size = len(arr)
+                    print(sum(sizes[step]), sizes[step])
 
                 self.seq_lens[gi][seq_name] = size
                 sys.stdout.write(f"Anchored {seq_name}\n")
+                sys.stdout.flush()
+
 
                 t = time()
 
