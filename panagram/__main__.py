@@ -75,7 +75,7 @@ class Bitdump:
     step: int = field(positional=True, default=1, nargs="?", metavar="step")
     """Spacing between output kmers (optimized for multiples of 100)"""
 
-    verbose: bool = field(alias=["-v"], default=False)
+    verbose: bool = field(alias=["-v"], action="store_true")
     """Output the full bitmap"""
 
     def run(self):
