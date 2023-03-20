@@ -40,13 +40,15 @@ def view(params):
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
 
     anchor_name, chrs = index.chrs.index[0]
+    #anchor_name = "kakapo"
+    #chrs = "S1"
     if params.genome is not None:
         anchor_name = params.genome
     if params.chrom is not None:
         chrs = params.chrom
     x_start_init = 0 if params.start is None else params.start
     x_stop_init  = 1000000 if params.end is None else params.end
-    bins = params.max_chr_bins
+    bins = 200#params.max_chr_bins
     opt_bed_file = params.bookmarks
     window_size = index.chr_bin_kbp*1000
     n_skips_start = index.lowres_step
@@ -481,9 +483,9 @@ def view(params):
         layout = dict(#title=graph_title,
                       paper_bgcolor='rgba(0,0,0,0)',
                       #dragmode="select",
-                      font=dict(family='Balto', size=20),
+                      font=dict(family='Balto', size=22),
                       # width=1000,
-                      height=600,
+                      height=1500,
                       autosize=True,
                       showlegend=True,
                       xaxis=dict(showline=True,
@@ -536,7 +538,7 @@ def view(params):
                [{"type": "bar"}, {"type": "bar"}]],
             subplot_titles=("Whole chromosome",  "This region", 
                 "Genes", ), 
-            vertical_spacing=0.1
+            vertical_spacing=0.1,
         )
         x = []
         for i in range(1,num_samples+1):
@@ -548,7 +550,9 @@ def view(params):
         y=[(i/sum(bar_sum_regional[1:])*100) for i in bar_sum_regional[1:]]
         y_whole=[(i/sum(bar_sum_global_tmp)*100) for i in bar_sum_global_tmp]
         #.sum(axis=1)
-        fig.add_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(y, y_whole)], marker_color=colors, showlegend=False), row=2, col=1)
+        
+        #fig.add_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(y, y_whole)], marker_color=colors, showlegend=False), row=2, col=1)
+        fig.add_trace(go.Bar(x=x, y=y, marker_color=colors, showlegend=False), row=2, col=1)
         fig.add_trace(go.Bar(x=x, y=y_whole, marker_color=colors, showlegend=False), row=1, col=1)
         #Genes
         #y=[(i/sum(gene_comp[1:])*100) for i in gene_comp[1:]]
@@ -562,12 +566,34 @@ def view(params):
         
         for t in gene_comp_tmp:
             gene_comp.append(t/totals*100)
+        
         fig.add_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(gene_comp, y_whole)], marker_color=colors, showlegend=False), row=2, col=2)
         #fig.update_layout(xaxis_title_text="K-mers shared in X samples", yaxis_title_text='Frequency (log)')
         fig.update_xaxes(title_text="# of genomes", row=2, col=1)
         fig.update_yaxes(title_text="Difference from whole chromosome", row=2, col=1)
         fig.update_yaxes(title_text="Percent of k-mers", row=1, col=1)
+        fig.update_yaxes(type="log", row=1, col=1)
+        fig.update_yaxes(type="log", row=2, col=1)
+        fig.update_yaxes(type="log", row=2, col=2)
         fig.update_layout(height=1000)
+        
+        #fig.update_layout(
+        #    updatemenus = [
+        #    dict(type="buttons",direction="left", #showactive=True, x=0, y=0, 
+        #        pad={"r": 10, "t": 10},
+        #        showactive=True,
+        #        x=0,#0.11,
+        #        xanchor="left",
+        #        y=1.05,
+        #        yanchor="top",
+        #        buttons=list([
+        #        dict(args=[{'yaxis.type': 'linear'}], label="Linear", method="relayout"
+        #            ),
+        #        dict(args=[{'yaxis.type': 'log'}], label="Log",method="relayout"
+        #            )
+        #        ])
+        #    ),])
+
         return fig
 
     def plot_interactive( n_skips, #window_filter, poly_order, shared_kmers, 
@@ -1079,7 +1105,7 @@ def view(params):
 
         fig.add_hline(y=uniq_avg, line_dash='dash', line_color='goldenrod')
         fig.add_hline(y=univ_avg, line_dash='dash', line_color='#440154')
-        fig.update_layout(height=600)
+        fig.update_layout(height=1500)
         fig.update_layout(
             title={"text":"k-mer content in individual genes",
                 "xanchor": "center",
@@ -1136,10 +1162,26 @@ def view(params):
                 #log_x=True
                 ), row=1, col=1)
         fig.update_layout(barmode='stack' )#,orientation='h')
-        fig.update_xaxes(type="log")
+        #fig.update_xaxes(type="log")
         fig.update_layout(height=1500, font=dict(
             size=26,
             ), plot_bgcolor='rgba(0,0,0,0)')
+        fig.update_layout(
+            updatemenus = [
+            dict(type="buttons",direction="left", #showactive=True, x=0, y=0, 
+                pad={"r": 10, "t": 10},
+                showactive=True,
+                x=0,#0.11,
+                xanchor="left",
+                y=1.05,
+                yanchor="top",
+                buttons=list([
+                dict(args=[{'xaxis.type': 'linear'}],label="Linear", method="relayout"
+                    ),
+                dict(args=[{'xaxis.type': 'log'}],label="Log",method="relayout"
+                    )
+                ])
+            ),])
         return fig, genome_comp_totals
 
     def read_genome_comp(anchor_name):
@@ -1206,7 +1248,7 @@ def view(params):
         branch_colors = ['purple','purple','purple','purple','purple','purple']
         fig = ff.create_dendrogram(df, colorscale=branch_colors, labels=labels, orientation='bottom' ) #, orientation='bottom'
         fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font=dict(
-                size=24,))
+                size=10,))
         for i in range(len(fig['data'])):
             fig['data'][i]['yaxis'] = 'y2'
 
@@ -1358,6 +1400,24 @@ def view(params):
         fig.update_yaxes(title_text="Average k-mer",)
         fig.update_xaxes(title_text="Chromosome",)
         fig.update_layout(plot_bgcolor='rgba(0,0,0,0)',  font=dict(size=20))
+
+        fig.update_layout(
+            updatemenus = [
+            dict(type="buttons",direction="left", #showactive=True, x=0, y=0, 
+                pad={"r": 10, "t": 10},
+                showactive=True,
+                x=0,#0.11,
+                xanchor="left",
+                y=1.2,
+                yanchor="top",
+                buttons=list([
+                dict(args=[{'yaxis.type': 'linear'}],label="Linear", method="relayout"
+                    ),
+                dict(args=[{'yaxis.type': 'log'}],label="Log",method="relayout"
+                    )
+                ])
+            ),])
+
         return fig
 
     def make_genes_per_chr_fig(anchor_name):
@@ -1375,6 +1435,22 @@ def view(params):
         fig.update_yaxes(title_text="Gene density",)
         fig.update_xaxes(title_text="Chromosome",)
         fig.update_layout(plot_bgcolor='rgba(0,0,0,0)',  font=dict(size=20))
+        fig.update_layout(
+            updatemenus = [
+            dict(type="buttons",direction="left", #showactive=True, x=0, y=0, 
+                pad={"r": 10, "t": 10},
+                showactive=True,
+                x=0,#0.11,
+                xanchor="left",
+                y=1.2,
+                yanchor="top",
+                buttons=list([
+                dict(args=[{'yaxis.type': 'linear'}],label="Linear", method="relayout"
+                    ),
+                dict(args=[{'yaxis.type': 'log'}],label="Log",method="relayout"
+                    )
+                ])
+            ),])
         return fig
 
     def make_gene_per_genome_fig(anchor_name):
@@ -1398,7 +1474,7 @@ def view(params):
         #print("About to concat")
         genes = pd.concat(genes)
         #print(genes)
-        genes["name"] = genes["attr"].str.extract("ID=([^;]+)")
+        genes["name"] = genes["attr"].str.extract("Name=([^;]+)")
         genes["size"] = genes["end"] - genes["start"]
         #print("Finished the name and size stuff")
 
@@ -1434,6 +1510,67 @@ def view(params):
         fig.update_xaxes(title_text="Genes",)
         fig.update_yaxes(title_text="Proportion of gene",)
         fig.update_layout(hovermode='x unified')
+
+        #fig.update_layout(
+        #    updatemenus = [
+        #    dict(type="buttons",direction="left", #showactive=True, x=0, y=0, 
+        #        pad={"r": 10, "t": 10},
+        #        showactive=True,
+        #        x=0,#0.11,
+        #        xanchor="left",
+        #        y=1.05,
+        #        yanchor="top",
+        #        buttons=list([
+        #        dict(args=[{'y':[df[df['special']==s]['y'].values],
+        #                       'x':x,
+        #                       'type':'Scattergl'},],label="Conserved", method="relayout"
+        #            ),
+        #        dict(args=[{'xaxis.type': 'log'}],label="Unique",method="relayout"
+        #            )
+        #        ])
+        #    ),])
+
+        return fig
+    
+    def plot_anno_conserve(anchor_name):
+        #fig = make_subplots(rows=1, cols=1)
+        file_name="gene_var.txt"
+        all_avgs = []
+        all_stds = []
+        all_names = []
+        all_lens = []
+        with open(file_name, "r") as f:
+            line = f.readline()
+            while line:
+                tmp = line.strip().split('\t')
+                #if tmp[1] != "chrX":
+                    #print("hey!")
+                    #print(tmp)
+                this_avg = float(tmp[4])
+                all_avgs.append(this_avg)
+                all_stds.append(float(tmp[5]))
+                all_names.append(tmp[0])
+                all_lens.append(int(tmp[3])-int(tmp[2]))
+                line = f.readline()
+
+        d_anno = {"Standard_dev":all_stds, #np.log10(all_stds),#all_stds,
+            "Average":all_avgs,
+            "Name":all_names,
+            "Length":all_lens,
+            #"Sweep":is_sweep
+        }
+        df_anno = pd.DataFrame(d_anno)
+        fig = px.scatter(df_anno,x="Average", y="Standard_dev", marginal_y='histogram', 
+            marginal_x='histogram',
+            hover_name="Name", 
+            #color="Sweep",
+            opacity=0.5,
+            color=np.log10(df_anno["Length"])
+        )
+        #color="Length")
+        #hover_data="Name")
+
+        #fig.show()
         return fig
 
     ##### READ DATA
@@ -1547,6 +1684,8 @@ def view(params):
     x_stop_init_adjust = int(x_stop_init/n_skips_start)
     #### NEED TO ADJUST THE START INIT AND STOP INIT SO THAT WE TAKE THE SKIPS INTO ACCOUNT
     #Here is where we make the main plot 
+    #if len(index.chr_bins.loc[(anchor_name,chrs)]) > 1:
+    print(anchor_name)
     genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
     #[g.split(';')[1].split('=')[1] for g in genes['attr']]
     bounds = genes.loc[:, ["start", "end"]]
@@ -1609,10 +1748,10 @@ def view(params):
         url_base_pathname=params.url_base
     ) 
     #app = Dash(__name__, external_stylesheets=[dbc.themes.PULSE, dbc_css])
-    config = {"toImageButtonOptions" : {"format" : "svg", "width" : None, "height" : None},}
+    config = {"toImageButtonOptions" : {"format" : "svg", "width" : None, "height" : None} , "scrollZoom": True}
     app.layout = html.Div([
         #html.Div(id = 'parent', children = [
-        html.H1(id = 'H1', children = 'Panagram', style = {'textAlign':'center', "font-size": 48}), 
+        html.H1(id = 'H1', children = 'Panagram', style = {'textAlign':'center', "font-size": 64}), 
         dcc.Tabs(id="tabs-graph", style={"font-size": 36}, children=[
             dcc.Tab(label='Pangenome', style={"background-color": "lightgrey", "font-size": 36,}, 
                 children=[
@@ -1783,7 +1922,17 @@ def view(params):
                         
                         ])
                     ])
-            ]),  
+            ]), 
+            dcc.Tab(label='Annotation', value='anno_view', style={"background-color": "lightgrey", "font-size": 36,},
+                children=[
+                    html.Div(children=[
+                            dcc.Graph(id="annotation_conservation",
+                                figure=plot_anno_conserve(anchor_name),
+                                config=config,
+                                style={"height": 1000, "font-size": 20}
+                            )
+                        ]),
+                ]), 
         #]),
         ]),
 
@@ -1797,7 +1946,7 @@ def view(params):
     ])
 
     def get_buffer(tmp_start, tmp_stop, n_skips):
-        min_dist = n_skips*bins*5
+        min_dist = n_skips*bins*8
         act_dist = tmp_stop-tmp_start
         #print("getting buffer")
         #print(min_dist)
@@ -1922,7 +2071,7 @@ def view(params):
             #print("Is the issue here?")
             return primary_fig_triggered(chr_fig, fig1, fig2, fig3, fig4, gene_jump_bottom, n_skips, click_me_genes, click_me_rep, chr_relayoutData, relayoutData, clickData, x_start, x_stop, chrs, anchor_name)
         local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
-        local_gene_list["name"] = local_gene_list["attr"].str.extract("ID=([^;]+)")
+        local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
         #local_gene_list = []
         #cntr = 0
         #while cntr < len(gene_names_tmp):
@@ -1943,9 +2092,10 @@ def view(params):
         else:
             exact_mini_counts = index.query_bitmap(anchor_name, chrs, new_x_start, new_x_stop, n_skips)
             simple_cnts_for_plots = exact_mini_counts.sum(axis=1)
+            n_skips = n_skips_start
         chr_num = chrs_list[anchor_name].get_loc(chrs)
         #chr_num = chrs_list[anchor_name].index(chrs)#int(chrs.split('r')[1])
-        genes = index.query_genes(l, chrom, 0, index.chrs.loc[l, chrom]["size"])
+        genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
         #[g.split(';')[1].split('=')[1] for g in genes['attr']]
         bounds = genes.loc[:, ["start", "end"]]
         bounds["break"] = None
@@ -1974,8 +2124,8 @@ def view(params):
         #while cntr < len(gene_names_tmp):
         #    local_gene_list.append(gene_names_tmp[cntr])
         #    cntr += 3
-        local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
-        local_gene_list["name"] = local_gene_list["attr"].str.extract("ID=([^;]+)")
+        local_gene_list = index.query_genes(anchor_name, chrs, int(new_x_start), int(new_x_stop))
+        local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
         #genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
         
         universals = genes["universal"]
@@ -1984,7 +2134,7 @@ def view(params):
         sizes = genes["end"]-genes["start"]
         fig4 = plot_gene_content(gene_names,universals,uniques,sizes, sort_by, colors, uniq_avg, 
             univ_avg, int(new_x_start), int(new_x_stop), anchor_name, chrs)
-        return chr_fig, fig1, fig2, fig3, fig4, chr_relayoutData, chrs, update_output_div(chrs,new_x_start,new_x_stop,anchor_name), update_out_chr(chrs, anchor_name), update_gene_locals(local_gene_list, chrs, x_start, x_stop, anchor_name), anchor_name, update_anchor_name(anchor_name), no_update, no_update, no_update, no_update, no_update, no_update, no_update 
+        return chr_fig, fig1, fig2, fig3, fig4, chr_relayoutData, chrs, update_output_div(chrs,new_x_start,new_x_stop,anchor_name), update_out_chr(chrs, anchor_name), update_gene_locals(local_gene_list, chrs, new_x_start, new_x_stop, anchor_name), anchor_name, update_anchor_name(anchor_name), no_update, no_update, no_update, no_update, no_update, no_update, no_update, no_update 
 
     def sorted_gene_fig(chr_fig, fig1, fig2, fig3, fig4, gene_jump_bottom, #SG_window, SG_polynomial_order,
                 n_skips, click_me_genes, click_me_rep, chr_relayoutData, chrs, anchor_name ):
@@ -2001,10 +2151,11 @@ def view(params):
             bounds = genes.loc[:, ["start", "end"]]
             bounds["break"] = None
             gene_locals = bounds.to_numpy().flatten()
-            #print(gene_jump_bottom)
+            print(gene_jump_bottom)
             this_gene_name = gene_jump_bottom['points'][0]['text']
-            #print(this_gene_name)
-            genes["name"] = genes["attr"].str.extract("ID=([^;]+)")
+            print(this_gene_name)
+            genes["name"] = genes["attr"].str.extract("Name=([^;]+)")
+            
             this_gene = genes[genes["name"] == this_gene_name]
             this_start = int(this_gene['start'])-1
             this_stop = int(this_gene['end'])+1
@@ -2053,7 +2204,7 @@ def view(params):
         #    cntr += 3
         #print("Sorted gene list. Almost finished ")
         local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
-        local_gene_list["name"] = local_gene_list["attr"].str.extract("ID=([^;]+)")
+        local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
 
         genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
         gene_names = [g.split(';')[0].split("=")[1] for g in genes['attr']]
@@ -2124,7 +2275,7 @@ def view(params):
         #    local_gene_list.append(gene_names_tmp[cntr])
         #    cntr += 3
         local_gene_list = genes #index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
-        local_gene_list["name"] = local_gene_list["attr"].str.extract("ID=([^;]+)")
+        local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
         genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
         gene_names = [g.split(';')[0].split("=")[1] for g in genes['attr']]
         universals = genes["universal"]
@@ -2195,7 +2346,7 @@ def view(params):
             #    local_gene_list.append(gene_names_tmp[cntr])
             #    cntr += 3
             local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
-            local_gene_list["name"] = local_gene_list["attr"].str.extract("ID=([^;]+)")
+            local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
             genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
             gene_names = [g.split(';')[0].split("=")[1] for g in genes['attr']]
             universals = genes["universal"]
@@ -2211,7 +2362,7 @@ def view(params):
             #gene_buffer = get_buffer(int(gene_locals[tmp_idx]), int(gene_locals[tmp_idx+1]), n_skips_start)
             this_gene_name = clickData['points'][0]['text']
             
-            genes["name"] = genes["attr"].str.extract("ID=([^;]+)")
+            genes["name"] = genes["attr"].str.extract("Name=([^;]+)")
             this_gene = genes[genes["name"] == this_gene_name]
 
             x_start = int(this_gene['start'])
@@ -2249,7 +2400,7 @@ def view(params):
                 exact_mini_counts, n_skips)
             chr_fig = plot_chr_whole(x_start, x_stop, anchor_name, chrs)
             local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
-            local_gene_list["name"] = local_gene_list["attr"].str.extract("ID=([^;]+)")
+            local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
             #local_gene_list = []
             #cntr = 0
             #while cntr < len(gene_names_tmp):
@@ -2266,7 +2417,7 @@ def view(params):
                 sort_by, colors, uniq_avg, univ_avg, int(x_start), int(x_stop), anchor_name, chrs)   
         else:
             local_gene_list = index.query_genes(anchor_name, chrs, x_start_init,x_stop_init)
-            local_gene_list["name"] = local_gene_list["attr"].str.extract("ID=([^;]+)")
+            local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
             #local_gene_list = [g.split(';')[0].split("=")[1] for g in local_gene_list['attr']]
         return chr_fig, fig1, fig2, fig3, fig4, chr_relayoutData, chrs, update_output_div(chrs,x_start,x_stop,anchor_name), update_out_chr(chrs, anchor_name), update_gene_locals(local_gene_list, chrs, x_start, x_stop, anchor_name), anchor_name, no_update, no_update, no_update,no_update, no_update, no_update, no_update, no_update, no_update 
     def render_tab_content(active_tab, chrs):
@@ -2296,7 +2447,7 @@ def view(params):
                 )
         #local_gene_list = []
         local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
-        local_gene_list["name"] = local_gene_list["attr"].str.extract("ID=([^;]+)")
+        local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
         #cntr = 0
         #while cntr < len(gene_names_tmp):
         #    local_gene_list.append(gene_names_tmp[cntr])
@@ -2374,7 +2525,7 @@ def view(params):
             printme += local_gene_list['name'][0] + ": "
             printme += local_gene_list['attr'][0] #index.query_anno(anchor_name, chrs, x_start, x_stop)['attr']
             #gene_anns[anchor_name][local_gene_list[0]]
-        elif len(local_gene_list)<=10:
+        elif len(local_gene_list)<=25:
             printme += "Genes: "
             for i in local_gene_list['name']:
                 printme += i + ", "
