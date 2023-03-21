@@ -355,8 +355,8 @@ def view(params):
         gene_comp_tmp = []
         gene_comp = []
         for i in range(1, num_samples+1):
-            totals += index.chrs.loc[(anchor_name, chrs), "gene_occ_"+str(i)]
-            gene_comp_tmp.append(index.chrs.loc[(anchor_name, chrs), "gene_occ_"+str(i)])
+            totals += index.chr_occs.loc[(anchor_name, chrs), ("gene",i)]
+            gene_comp_tmp.append(index.chr_occs.loc[(anchor_name, chrs), ("gene",i)])
         
         for t in gene_comp_tmp:
             gene_comp.append(t/totals*100)
@@ -568,8 +568,8 @@ def view(params):
         return z_genes
 
     def plot_chr_whole( x_start, x_stop, anchor_name, this_chr): 
-        z_1 = index.chr_bins.loc[(anchor_name, "total_occ_1")][this_chr]
-        z_9 = index.chr_bins.loc[(anchor_name, "total_occ_"+str(num_samples))][this_chr]
+        z_1 = index.chr_bins.loc[anchor_name, ("total",1)][this_chr]
+        z_9 = index.chr_bins.loc[anchor_name, ("total", num_samples)][this_chr]
         y, x = [], []
         cntr = 0
         for xtmp in z_1:
@@ -654,9 +654,9 @@ def view(params):
         for chrom in index.chrs.loc[anchor_name].index:
             x = list(index.chr_bins.loc[(anchor_name, chrom)].index)
             if len(x)!=1:
-                wg_fig.add_trace(go.Heatmap(x=x, z=index.chr_bins.loc[(anchor_name, "total_occ_"+str(num_samples))][chrom], 
+                wg_fig.add_trace(go.Heatmap(x=x, z=index.chr_bins.loc[anchor_name, ("total",num_samples)][chrom], 
                     y=[1]*(len(x)), type = 'heatmap', colorscale='magma_r', showlegend=False,showscale=False), row=((cntr*3)-2), col=1)
-                wg_fig.add_trace(go.Heatmap(x=x, z=index.chr_bins.loc[(anchor_name, "total_occ_1")][chrom], 
+                wg_fig.add_trace(go.Heatmap(x=x, z=index.chr_bins.loc[anchor_name, ("total",1)][chrom], 
                     y=[1]*(len(x)), type = 'heatmap', colorscale='magma', showscale=False), row=((cntr*3)-1), col=1)
             
             if cntr == 1:
@@ -737,8 +737,9 @@ def view(params):
         for i in range(0,num_samples):
             cats.append([])
 
-        cols = ["total_occ_"+str(i) for i in range(1,num_samples+1)]
-        counts = index.chrs[cols].groupby(level="genome").sum()
+        #cols = [("total",i) for i in range(1,num_samples+1)]
+        cols = [("total", i) for i in range(1,num_samples+1)]
+        counts = index.chr_occs[cols].groupby(level="genome").sum()
         fracs = counts.divide(counts.sum(axis=1), axis=0) 
 
         for l in labels: 
@@ -783,7 +784,7 @@ def view(params):
         for c in index.chrs.loc[anchor_name].index:
             tmp = []
             for n in range(1, num_samples+1):
-                tmp.append(index.chrs.loc[anchor_name, c]["total_occ_"+str(n)])
+                tmp.append(index.chr_occs.loc[(anchor_name, c),("total",n)])
             chrs_comp.append(tmp)
         fig = make_subplots(rows=len(chrs_comp), cols=1)
         x = []
@@ -927,8 +928,6 @@ def view(params):
         return fig_sizes, fig_seqs
 
     def find_avgs(genome_comp_totals):
-        #print(genome_comp_totals)
-        
         tmp = []
         for k in genome_comp_totals.keys():
             running_sum = 0
@@ -936,13 +935,9 @@ def view(params):
             for i in range(1, len(genome_comp_totals[k])):
                 total += float(genome_comp_totals[k][i-1])
                 running_sum += (float(genome_comp_totals[k][i-1])*i)
-            #print("*******************")
             tmp.append([k,(running_sum/total)])
-        #print(tmp)
         df = pd.DataFrame(tmp, columns=['Sample','Avg'])
-        #print(df)
         df = df.sort_values(by=['Avg'])
-        #print(df)
         return df
 
 
@@ -950,10 +945,8 @@ def view(params):
         fig = make_subplots(rows=1, cols=1)
         fig.add_trace(go.Scattergl(x=df['Sample'],y=df['Avg']))
         fig.add_vline(x=anchor_name, line_dash="dash", line_color="darkblue")
-        #fig.add_vline(x=anchor_name)
         fig.update_yaxes(title_text="Average k-mer",)
         fig.update_layout(font=dict(size=20,))
-        #fig.add_trace(go.Scattergl(x=list(genome_comp_totals.keys()),y=tmp[]))
         return fig
 
     def make_avg_kmer_fig(chrs_comp, this_anchor):
@@ -1200,6 +1193,9 @@ def view(params):
     gene_content_plot = plot_gene_content(gene_names,universals,uniques,sizes,sort_by, 
         colors, uniq_avg, univ_avg, x_start_init, x_stop_init, anchor_name, chrs)
 
+    print(index.chrs)
+    print(index.chr_bins)
+
     x, z_1, z_9, y = {}, {}, {}, {}
     chr_fig = plot_chr_whole(x_start_init, x_stop_init, anchor_name, chrs)
     whole_genome_fig = plot_whole_genome(anchor_name)
@@ -1207,207 +1203,214 @@ def view(params):
     #Now we need to make the pangenome plot
     #This is going to be a bar chart 
 
-    whole_genome_hists, chrs_comp = read_genome_comp(anchor_name)
-    all_genomes_dend, ordered_labels = make_all_genome_dend(labels)
-    pangenome_comp, genome_comp_totals = read_pangenome_comp()
-    tmp_df = find_avgs(genome_comp_totals)
-    pangenome_avg = plot_avgs(anchor_name, tmp_df)
-    pg_sizes, pg_num_seqs = read_genome_size_files()
-    pangenome_sizes, pangenome_num_seqs = make_genome_size_plots(anchor_name, pg_sizes, pg_num_seqs)
-    avg_kmer_per_chr_fig = make_avg_kmer_fig(chrs_comp, anchor_name)
-    genes_per_chr_fig = make_genes_per_chr_fig(anchor_name)
-    gene_content_per_genome_fig = make_gene_per_genome_fig(anchor_name)
+    whole_genome_hists, chrs_comp       = read_genome_comp(anchor_name)
+    all_genomes_dend, ordered_labels    = make_all_genome_dend(labels)
+    pg_sizes, pg_num_seqs               = read_genome_size_files()
+    pangenome_comp_fig, genome_comp_totals  = read_pangenome_comp()
+    print(genome_comp_totals)
+    tmp_df                              = find_avgs(genome_comp_totals)
+    pangenome_avg_fig                   = plot_avgs(anchor_name, tmp_df)
+    pangenome_sizes_fig, pangenome_num_seqs_fig = make_genome_size_plots(anchor_name, pg_sizes, pg_num_seqs)
+    avg_kmer_per_chr_fig                = make_avg_kmer_fig(chrs_comp, anchor_name)
+    genes_per_chr_fig                   = make_genes_per_chr_fig(anchor_name)
+    gene_content_per_genome_fig         = make_gene_per_genome_fig(anchor_name)
+
     chrs = index.chrs.loc[anchor_name].index[0] #"chr1"
+
+    config = {"toImageButtonOptions" : {"format" : "svg", "width" : None, "height" : None} , "scrollZoom": False}
+    tab_style = {"background-color": "lightgrey", "font-size": 36}
+
+    PANGENOME_TAB = [
+            html.Div(id="PanInfo1", children=[
+                html.I("Panagram of " + str(num_samples) + " genomes"),
+                html.Br(),
+                html.Label('Select a genome: '),
+                dcc.Dropdown(labels, anchor_name, style=dict(width='40%', height='110%', verticalAlign="middle"), id="pangenome_tab_dropdown"),
+                html.Br(),
+            ], style={'padding':'1%', 'font-size':'24px', 'textAlign': 'left', "border":"2px grey solid"}),
+            html.Div(className="w3-half", children=[
+                dcc.Graph(id="all_genomes",style={"font-size": 20, "height" : 1500},
+                    figure = all_genomes_dend, config=config
+                ),
+            ]),
+            html.Div(className="w3-half", children=[
+                dcc.Graph(id="all_genomes_kmer_comp",
+                    figure = pangenome_comp_fig, config=config, style={"font-size": 30, "height" : 1500}
+                )
+            ]),
+            html.Div(className="w3-third", children=[
+                dcc.Graph(id="all_genome_sizes",
+                    figure = pangenome_sizes_fig, config=config, style={"font-size": 30, "height" : 500}
+                )
+            ]),
+            html.Div(className="w3-third", children=[
+                dcc.Graph(id="average_kmer_content",
+                    figure = pangenome_avg_fig, config=config, style={"font-size": 30, "height" : 500}
+                )
+            ]),
+            html.Div(className="w3-third", children=[
+                dcc.Graph(id="pangenome_num_seqs",
+                    figure = pangenome_num_seqs_fig, config=config, style={"font-size": 30, "height" : 500}
+                )
+            ])]
+
+    #def render_anchor_tab():
+    #    return 
+    ANCHOR_TAB = [
+            html.Div(children=[
+                    html.I("Anchor genome " + anchor_name, id="anchor_labels"),
+                    html.Br(),
+                    html.Label('Select a chromosome: '),
+                    dcc.Dropdown(chrs_list[anchor_name], chrs, style=dict(width='40%', height='110%', verticalAlign="middle", ), id="Anchor_tab_dropdown"),
+                    html.Br(),
+                ], style={'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 'font-size':'24px', 'textAlign': 'left', "border":"2px grey solid", }),
+            html.Div(className="w3-third",children=[
+                dcc.Graph(id="gene_content",
+                figure = gene_content_per_genome_fig, config=config), #gene_content_fig)
+            ],), 
+            html.Div(className="w3-third",children=[
+                dcc.Graph(id="genes_per_chr",
+                figure = genes_per_chr_fig, config=config)
+            ],),
+            html.Div(className="w3-third",children=[
+                dcc.Graph(id="avg_kmer_chr", figure = avg_kmer_per_chr_fig, config=config)
+            ],),
+            html.Div(className="w3-threequarter",children=[
+                dcc.Graph(id="all_chromosomes",
+                figure = whole_genome_fig, config=config, style={"height" : num_chrs[anchor_name]*250})
+            ]),
+            html.Div(className="w3-quarter",children=[
+                dcc.Graph(id="all_chromosomes_hists", style={"height" : num_chrs[anchor_name]*250},
+                    figure = whole_genome_hists, config=config
+                )
+            ]),
+        ]
+
+    #def render_chromosome_tab():
+    #    return [
+    CHROMOSOME_TAB = [
+            html.Div(children=[ # info panel
+                html.Div(children=[ #left side
+                    html.I(anchor_name + "." + chrs + ":", id="chr_name"),
+                    dcc.Input(id="Chrs_Info", placeholder=str(x_start_init) + "-" + str(x_stop_init), ),
+                    html.Br(),
+                    html.I("Genes in this region: " + str(local_genes), id='regional_genes'),
+                    html.Br(),
+                    html.Label('Pre-selected regions: '),
+                    dcc.Dropdown(pre_bed_info[anchor_name], chrs + ":" + str(x_start_init) + "-" + str(x_stop_init) , style=dict(width='100%', height='110%', verticalAlign="middle", ), id="pre_regions_dropdown"),
+                ],style={"display": "inline-block"}),
+                
+                html.Div(children=[#right side
+                    html.I("K-mer length: " + str(kmer_len),style={"display": "inline-block",}),
+                    html.Br(),
+                    html.I("Number of bins: " + str(bins), style={'display': 'inline-block'}),
+                    html.Br(),
+                    html.I("Step size: " + str(n_skips_start), style={"display": "inline-block",}, id='step_size_out'),
+                    html.Br(),
+                ], style={"display": "inline-block", 'padding-left' : '10%'}),
+
+            ], style = {'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 'font-size':'24px', "border":"2px grey solid"}),
+
+            html.Div(children=[ #summary 
+                html.Div(className="w3-container", children=[
+                        #left figure
+                        dcc.Graph(id="chromosome",
+                            figure = chr_fig, config=config, style={"font-size": 20, "height" : 350})
+                ])
+            ]),
+
+            html.Div(children=[ 
+                html.Div(className="w3-container", children=[
+                    html.Div(className="w3-threequarter", children=[
+                        #left figure - calling this the "Main" figure
+                        dcc.Graph(id="primary",figure = main_fig, config=config, 
+                            style={"height": 1000,  "font-size": 20})
+                    ]), #style={'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 
+                    html.Div(className="w3-quarter", children=[
+                        dcc.Graph(id="Secondary", 
+                            #Now we have the phylogenetic tree
+                            figure = get_local_info(names_simp[x_start_init:x_stop_init], #exon_comp[chrs], 
+                                #gene_comp[anchor_name][chrs], 
+                                bar_sum_regional, bar_sum_global[anchor_name][chrs], anchor_name, chrs), 
+                            config=config,
+                            style={"height": 1000, "font-size": 20}),
+                    ])
+                ])
+            ]),
+            html.Div(children=[
+                html.Div(className="w3-container", children=[
+                    html.Div(className="w3-third", children=[
+                        dcc.Graph(id="Genes", 
+                            figure=gene_content_plot, 
+                            config=config,
+                            style={"font-size": 20}),
+                    ]),
+                    html.Div(className="w3-twothird", children=[
+                        dcc.Graph(id="Third", 
+                            #This is the histogram section
+                            figure = create_tree( x_start_init,x_stop_init, all_chrs[chrs][int(x_start_init/n_skips_start):int(x_stop_init/n_skips_start)], n_skips_start),
+                            config=config,
+                            style={"font-size": 20}),
+                    ]),
+                ])
+            ])
+        ]
+
+    #def render_annotation_tab():
+    #    return [
+    ANNOTATION_TAB = html.Div(children=[
+            dcc.Graph(id="annotation_conservation",
+                figure=plot_anno_conserve(anchor_name),
+                config=config,
+                style={"height": 1000, "font-size": 20}
+            )
+        ])
+
+    #TAB_RENDERERS = {
+    #    "pangenome"  :   render_pangenome_tab,
+    #    "anchor"      :  render_anchor_tab,
+    #    "chromosome" :   render_chromosome_tab,
+    #    "annotation"  :  render_annotation_tab
+    #}
 
     app = dash.Dash(
         external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css"],
-        url_base_pathname=params.url_base
+        url_base_pathname=params.url_base,
+        suppress_callback_exceptions=True
     ) 
     #app = Dash(__name__, external_stylesheets=[dbc.themes.PULSE, dbc_css])
-    config = {"toImageButtonOptions" : {"format" : "svg", "width" : None, "height" : None} , "scrollZoom": True}
     app.layout = html.Div([
         #html.Div(id = 'parent', children = [
         html.H1(id = 'H1', children = 'Panagram', style = {'textAlign':'center', "font-size": 64}), 
         dcc.Tabs(id="tabs", value="pangenome", style={"font-size": 36}, children=[
-            dcc.Tab(value="pangenome", label='Pangenome', style={"background-color": "lightgrey", "font-size": 36,}, 
-                children=[
-                    html.Div(id="PanInfo1", children=[
-                        html.I("Panagram of " + str(num_samples) + " genomes"),
-                        html.Br(),
-                        html.Label('Select a genome: '),
-                        dcc.Dropdown(labels, anchor_name, style=dict(width='40%', height='110%', verticalAlign="middle"), id="pangenome_tab_dropdown"),
-                        html.Br(),
-                        ],style={'padding':'1%', #'flex':1, #'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 
-                        'font-size':'24px',
-                        'textAlign': 'left', "border":"2px grey solid"}),
-                    html.Div(className="w3-half", children=[
-                        dcc.Graph(id="all_genomes",style={"font-size": 20, "height" : 1500},
-                            figure = all_genomes_dend, config=config
-                            ),
-                        ]),
-                    html.Div(className="w3-half", children=[
-                        dcc.Graph(id="all_genomes_kmer_comp",
-                            figure = pangenome_comp, config=config, style={"font-size": 30, "height" : 1500}
-                            )
-                        ]),
-                    html.Div(className="w3-third", children=[
-                        dcc.Graph(id="all_genome_sizes",
-                            figure = pangenome_sizes, config=config, style={"font-size": 30, "height" : 500}
-                            )
-                        ]),
-                    html.Div(className="w3-third", children=[
-                        dcc.Graph(id="average_kmer_content",
-                            figure = pangenome_avg, config=config, style={"font-size": 30, "height" : 500}
-                            )
-                        ]),
-                    html.Div(className="w3-third", children=[
-                        dcc.Graph(id="pangenome_num_seqs",
-                            figure = pangenome_num_seqs, config=config, style={"font-size": 30, "height" : 500}
-                            )
-                        ]),
-                ]),
-            dcc.Tab(value="anchor", label='Anchor genome', style={"background-color": "lightgrey", "font-size": 36,}, 
-                children=[
-                    html.Div(children=[
-                        html.I("Anchor genome " + anchor_name, id="anchor_labels"),
-                        html.Br(),
-                        html.Label('Select a chromosome: '),
-                        dcc.Dropdown(chrs_list[anchor_name], chrs, style=dict(width='40%', height='110%', verticalAlign="middle", ), id="Anchor_tab_dropdown"),
-                        html.Br(),
-                        ], style={'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 
-                        'padding-right' : '1%', 'font-size':'24px',
-                        'textAlign': 'left', "border":"2px grey solid", }),
-                    html.Div(className="w3-third",children=[
-                        dcc.Graph(id="gene_content",
-                            figure = gene_content_per_genome_fig, config=config), #gene_content_fig)
-                        ],), 
-                    html.Div(className="w3-third",children=[
-                        dcc.Graph(id="genes_per_chr",
-                            figure = genes_per_chr_fig, config=config)
-                        ], ),
-                    html.Div(className="w3-third",children=[
-                        dcc.Graph(id="avg_kmer_chr",
-                            figure = avg_kmer_per_chr_fig, config=config)
-                        ], ),
-
-                    html.Div(className="w3-threequarter",children=[
-                                dcc.Graph(id="all_chromosomes",
-                                    figure = whole_genome_fig, config=config, style={"height" : num_chrs[anchor_name]*250})
-                        ]),
-                    html.Div(className="w3-quarter",children=[
-                                dcc.Graph(id="all_chromosomes_hists", style={"height" : num_chrs[anchor_name]*250},
-                                    figure = whole_genome_hists, config=config
-                                    )
-                                ]),
-                ]),
-            dcc.Tab(value="chromosome", label='Chromosome', style={"background-color": "lightgrey", "font-size": 36,},
-                children=[
-                    html.Div(children=[ #id="Chrs_Info", children=[
-                        html.Div(children=[
-                        html.I(anchor_name + "." + chrs + ":", id="chr_name"),
-                        dcc.Input(id="Chrs_Info", placeholder=str(x_start_init) + "-" + str(x_stop_init), ),
-                        html.Br(),
-                        html.I("Genes in this region: " + str(local_genes), id='regional_genes'),
-                        html.Br(),
-                        html.Label('Pre-selected regions: '),
-                        dcc.Dropdown(pre_bed_info[anchor_name], chrs + ":" + str(x_start_init) + "-" + str(x_stop_init) , style=dict(width='100%', height='110%', verticalAlign="middle", ), id="pre_regions_dropdown"),
-                        ],style={"display": "inline-block"}),
-                        
-                        html.Div(children=[
-                        
-                        html.I("K-mer length: " + str(kmer_len),style={"display": "inline-block",}),
-                        html.Br(),
-                        html.I("Number of bins: " + str(bins), style={'display': 'inline-block'}),
-                        html.Br(),
-                        html.I("Step size: " + str(n_skips_start), style={"display": "inline-block",}, id='step_size_out'),
-                        html.Br(),
-                        ],style={"display": "inline-block", 'padding-left' : '10%'}),
-                        
-
-                        ],
-                    style={'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 
-                    'font-size':'24px',
-                                "border":"2px grey solid"}
-                                ),
-                html.Div(children=[
-                    html.Div(className="w3-container", children=[
-                            #left figure
-                            dcc.Graph(id="chromosome",
-                                figure = chr_fig, config=config, style={"font-size": 20, "height" : 350})
-                    ])
-                ]),
-                html.Div(children=[
-                    html.Div(className="w3-container", children=[
-                        html.Div(className="w3-threequarter", children=[
-                            #left figure - calling this the "Main" figure
-                            dcc.Graph(id="primary",figure = main_fig, config=config, 
-                                style={"height": 1000,  "font-size": 20})
-                        ]), #style={'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 
-                        html.Div(className="w3-quarter", children=[
-                            dcc.Graph(id="Secondary", 
-                                #Now we have the phylogenetic tree
-                                figure = get_local_info(names_simp[x_start_init:x_stop_init], #exon_comp[chrs], 
-                                    #gene_comp[anchor_name][chrs], 
-                                    bar_sum_regional, bar_sum_global[anchor_name][chrs], anchor_name, chrs), 
-                                config=config,
-                                style={"height": 1000, "font-size": 20}),
-                        ])
-                    ])
-                ]),
-                html.Div(children=[
-                    html.Div(className="w3-container", children=[
-                        html.Div(className="w3-third", children=[
-                                dcc.Graph(id="Genes", 
-                                    figure=gene_content_plot, 
-                                    config=config,
-                                    style={"font-size": 20}),
-                            ]),
-                        html.Div(className="w3-twothird", children=[
-                            dcc.Graph(id="Third", 
-                                #This is the histogram section
-                                
-                                figure = create_tree( x_start_init,x_stop_init, all_chrs[chrs][int(x_start_init/n_skips_start):int(x_stop_init/n_skips_start)], n_skips_start),
-                                config=config,
-                                style={"font-size": 20}),
-                        ]),
-                        
-                        
-                        ])
-                    ])
-            ]), 
-            dcc.Tab(value="annotation", label='Annotation', style={"background-color": "lightgrey", "font-size": 36,},
-                children=[
-                    html.Div(children=[
-                            dcc.Graph(id="annotation_conservation",
-                                figure=plot_anno_conserve(anchor_name),
-                                config=config,
-                                style={"height": 1000, "font-size": 20}
-                            )
-                        ]),
-                ]), 
+            dcc.Tab(value="pangenome", label='Pangenome', style=  tab_style, children=PANGENOME_TAB),
+            dcc.Tab(value="anchor", label='Anchor genome', style= tab_style, children=ANCHOR_TAB),
+            dcc.Tab(value="chromosome", label='Chromosome', style=tab_style, children=CHROMOSOME_TAB), 
+            dcc.Tab(value="annotation", label='Annotation', style=tab_style, children=ANNOTATION_TAB), 
         ]),
+
+        html.Div(id="tab-content"),
 
         html.Div(chrs, style={"display" : "none"}, id="selected-chrom-state"),
         html.Div(anchor_name, style={"display" : "none"}, id="selected-anchor-state"),
-        #html.Div("chr1", style={"display" : "none"}, id="prev_selected-state"),
         
         html.Div(x_start_init,id='num-start',style={"display" : "none"} ),
         html.Div(x_stop_init,id='num-stop',style={"display" : "none"} ),
-        #html.Div( [], style={"display" : "none"}, id="selected-chrom-data") #style={"display" : "none"}, 
     ])
 
     def get_buffer(tmp_start, tmp_stop, n_skips):
         min_dist = n_skips*bins*8
         act_dist = tmp_stop-tmp_start
-        #print("getting buffer")
-        #print(min_dist)
-        #print(act_dist)
         if act_dist >= min_dist:
             return 0 #The distance between start and stop are good enough 
         else: #
             return 1 #int((min_dist - act_dist)/2)+1 
-    #app.config.requests_pathname_prefix = app.config.routes_pathname_prefix.split('/')[-1]
     last_reset_click = 0
+
+    #@app.callback(Output('tab-content', 'children'),
+    #              Input('tabs', 'value'))
+    #def render_content(tab):
+    #    return TAB_RENDERERS[tab]()
 
     @app.callback(
         Output('chromosome','figure'),
@@ -1939,7 +1942,7 @@ def view(params):
             for c in index.chrs.loc[anchor_name].index:
                 tmp = []
                 for n in range(1, num_samples+1):
-                    tmp.append(index.chrs.loc[anchor_name, c]["total_occ_"+str(n)])
+                    tmp.append(index.chrs.loc[anchor_name, ("total",n)])#["total_occ_"+str(n)])
                 chrs_comp.append(tmp)
             #print("Made it to redowg")
             tab2_avg_fig = make_avg_kmer_fig(chrs_comp, anchor_name)

@@ -214,6 +214,17 @@ class Index:
 
     def _load_chrs(self):
         self.chrs = pd.read_csv(f"{self.prefix}/chrs.csv").set_index(["genome","chr"])
+        names = self.chrs.columns.str
+
+        total_cols = names.startswith("total_occ_")
+        gene_cols = names.startswith("gene_occ_")
+        occ_cols = total_cols | gene_cols
+        self.chr_occs = self.chrs.loc[:,total_cols | gene_cols]
+        cols = self.chr_occs.columns.str.split("_occ_", expand=True)
+        self.chr_occs.columns = cols.set_levels(cols.levels[1].astype(int), 1)
+
+        #TODO remove self.chrs.*_occs_*? would need to replace on CSV write
+
         self._init_genomes()
 
     def _init_genomes(self):
@@ -221,8 +232,9 @@ class Index:
         if self.anchor_genomes is None:
             self.anchor_genomes = self.chrs.query("size > 0").index.unique("genome")
         self.ngenomes = len(self.genomes)
-        self._total_occ_idx = pd.Index([f"total_occ_{i+1}" for i in range(self.ngenomes)])
-        self._gene_occ_idx = pd.Index([f"gene_occ_{i+1}" for i in range(self.ngenomes)])
+        self._occ_idx = pd.RangeIndex(1, self.ngenomes+1)
+        self._total_occ_idx = pd.MultiIndex.from_product([["total"], self._occ_idx]) 
+        self._gene_occ_idx = pd.MultiIndex.from_product([["gene"], self._occ_idx])  
 
     def _run_mash(self):
         mash_files = list()
