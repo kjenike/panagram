@@ -219,19 +219,44 @@ class Index:
         total_cols = names.startswith("total_occ_")
         gene_cols = names.startswith("gene_occ_")
         occ_cols = total_cols | gene_cols
-        self.chr_occs = self.chrs.loc[:,total_cols | gene_cols]
-        cols = self.chr_occs.columns.str.split("_occ_", expand=True)
-        self.chr_occs.columns = cols.set_levels(cols.levels[1].astype(int), 1)
+        self.chr_occ = self.chrs.loc[:,total_cols | gene_cols]
+        cols = self.chr_occ.columns.str.split("_occ_", expand=True)
+        self.chr_occ.columns = cols.set_levels(cols.levels[1].astype(int), level=1)
 
-        #TODO remove self.chrs.*_occs_*? would need to replace on CSV write
+        self.genome_occ = self.chr_occ.groupby(level="genome", sort=False).sum()
+        normalize = lambda df: df.divide(df.sum(axis=1), axis=0)
+        
+        self.genome_occ_freq = pd.concat({
+            "total" : normalize(self.genome_occ["total"]),
+            "gene" : normalize(self.genome_occ["gene"]),
+        }, axis=1)
+        
+        self.chr_occ_freq = pd.concat({
+            "total" : normalize(self.chr_occ["total"]),
+            "gene" : normalize(self.chr_occ["gene"]),
+        }, axis=1)
 
         self._init_genomes()
+
+        self.genome_occ_avg = (self.genome_occ_freq["total"]*self._occ_idx).sum(axis=1).sort_values()
+        self.chr_occ_avg = (self.chr_occ_freq["total"]*self._occ_idx).sum(axis=1).sort_values()
+
+    @property
+    def genome_occs():
+        return self.genome_occs.divide(self.genome_occs.sum(axis=1))
 
     def _init_genomes(self):
         self.genomes = self.chrs.index.unique("genome")
         if self.anchor_genomes is None:
             self.anchor_genomes = self.chrs.query("size > 0").index.unique("genome")
         self.ngenomes = len(self.genomes)
+
+        g = self.chrs["size"].groupby("genome")
+        self.genome_sizes = pd.DataFrame({
+            "length" : g.sum(),
+            "chr_count" : g.count()
+        })
+
         self._occ_idx = pd.RangeIndex(1, self.ngenomes+1)
         self._total_occ_idx = pd.MultiIndex.from_product([["total"], self._occ_idx]) 
         self._gene_occ_idx = pd.MultiIndex.from_product([["gene"], self._occ_idx])  
