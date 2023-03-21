@@ -179,7 +179,7 @@ class Index:
         arr = arr.reshape((len(arr)//self.ngenomes, self.ngenomes))
 
         idx = pd.MultiIndex.from_frame(pd.concat([self.chr_bin_coords(*ch).drop(columns=["end"]) for ch in self.chrs.index]))
-        self.chr_bins = pd.DataFrame(arr, columns=self._total_occ_idx, index=idx)
+        self.chr_bins = pd.DataFrame(arr, columns=self._total_occ_idx, index=idx).sort_index()
         #self.chr_bins = pd.read_pickle(self.chr_bins_fname)
 
     def init_dir(self, path):
