@@ -41,8 +41,9 @@ def view(params):
         anchor_name = params.genome
     if params.chrom is not None:
         chrs = params.chrom
+
     x_start_init = 0 if params.start is None else params.start
-    x_stop_init  = 1000000 if params.end is None else params.end
+    x_stop_init  =  index.chrs.loc[(anchor_name,chrs),"size"] if params.end is None else params.end
     bins = 200#params.max_chr_bins
     opt_bed_file = params.bookmarks
     window_size = index.chr_bin_kbp*1000
@@ -111,7 +112,7 @@ def view(params):
             calc_row(tree.root)
         return ycoords
 
-    def get_clade_lines(orientation='horizontal', y_curr=0, x_start=0, x_curr=0, y_bot=0, y_top=0,
+    def get_clade_lines(orientation='horizontal', y_curr=0, start_coord=0, x_curr=0, y_bot=0, y_top=0,
                         line_color='rgb(25,25,25)', line_width=0.5):
         #Adapted from:
         #https://github.com/plotly/dash-phylogeny
@@ -123,7 +124,7 @@ def view(params):
                                      width=line_width)
                            )
         if orientation == 'horizontal':
-            branch_line.update(x0=x_start,
+            branch_line.update(x0=start_coord,
                                y0=y_curr,
                                x1=x_curr,
                                y1=y_curr)
@@ -149,7 +150,7 @@ def view(params):
             clade_num = kmer_num[tmp_name]
             return clade_num
 
-    def draw_clade(color_code, total_kmers, kmer_num, palette, clade, x_start, line_shapes, line_color="grey", line_width=5, x_coords=0, y_coords=0):
+    def draw_clade(color_code, total_kmers, kmer_num, palette, clade, start_coord, line_shapes, line_color="grey", line_width=5, x_coords=0, y_coords=0):
         #Adapted from:
         #https://github.com/plotly/dash-phylogeny
         """Recursively draw the tree branches, down from the given clade"""
@@ -164,7 +165,7 @@ def view(params):
             #line_color = "grey"
             #Now we have to find the all of the children, and which one has the highest value   
         # Draw a horizontal line from start to here
-        branch_line = get_clade_lines(orientation='horizontal', y_curr=y_curr, x_start=x_start, x_curr=x_curr,
+        branch_line = get_clade_lines(orientation='horizontal', y_curr=y_curr, start_coord=start_coord, x_curr=x_curr,
                                       line_color=line_color, line_width=line_width)
         line_shapes.append(branch_line)
         if clade.clades:
@@ -283,9 +284,9 @@ def view(params):
         layout = dict(#title=graph_title,
                       paper_bgcolor='rgba(0,0,0,0)',
                       #dragmode="select",
-                      font=dict(family='Balto', size=22),
+                      #font=dict(family='Balto', size=22),
                       # width=1000,
-                      height=1500,
+                      #height=1500,
                       autosize=True,
                       showlegend=True,
                       xaxis=dict(showline=True,
@@ -373,7 +374,7 @@ def view(params):
         
         return fig
 
-    def plot_interactive(n_skips, layout, bins, names_simp, name, zs_tmp, plot_rep, plot_gene, x_start, x_stop, gene_locals, gene_names, anchor_name, chrs):
+    def plot_interactive(n_skips, layout, bins, names_simp, name, zs_tmp, plot_rep, plot_gene, start_coord, end_coord, gene_locals, gene_names, anchor_name, chrs):
         window_filter = SG_window
         poly_order = SG_polynomial_order
         shared_kmers = [1]
@@ -392,12 +393,12 @@ def view(params):
         t = time.time()
 
         #We are adjusting the start and stop positions to account for the skipping. 
-        #The adjusted value should be the index, whereas the x_start and x_stop are the real coordinates 
-        adjusted_x_start = int(x_start/n_skips)
-        adjusted_x_stop = int(x_stop/n_skips)
+        #The adjusted value should be the index, whereas the start_coord and end_coord are the real coordinates 
+        adjusted_x_start = int(start_coord/n_skips)
+        adjusted_x_stop = int(end_coord/n_skips)
 
         #Get the bins
-        bin_size = ((x_stop-x_start)/bins)
+        bin_size = ((end_coord-start_coord)/bins)
         adjusted_bin_size = (bin_size/n_skips)
         cntr = 0
         
@@ -409,13 +410,13 @@ def view(params):
 
         adjusted_bin_size_init = int(adjusted_bin_size) + 1
 
-        cntr = x_start
+        cntr = start_coord
         x = []
-        while cntr < x_stop:
+        while cntr < end_coord:
             x.append(cntr)
             cntr += bin_size_int
         cntr = 0
-        for i in names_simp: #[adjusted_x_start:adjusted_x_stop] : #range(x_start, x_stop): #names_simp[x_start:x_stop]:#range(x_start, x_stop):#names_simp:
+        for i in names_simp: #[adjusted_x_start:adjusted_x_stop] : #range(start_coord, end_coord): #names_simp[start_coord:end_coord]:#range(start_coord, end_coord):#names_simp:
             #i tells us which y axis to use. 
             #cntr tells us what x axis to use 
             if (cntr % adjusted_bin_size_init) == 0 : #Is the x position within the same bin? Or do we need to move to the next bin? 
@@ -432,7 +433,7 @@ def view(params):
             cntr = 0
 
             for i in rep_list: #rep_types.keys():
-                df = index.query_anno(anchor_name, chrs, x_start, x_stop)
+                df = index.query_anno(anchor_name, chrs, start_coord, end_coord)
                 if i == "exon":
                     exon_y   = []
                     exon_tmp = []
@@ -451,7 +452,7 @@ def view(params):
                 else:
                     rep_y = []
                     rep_types_tmp = []
-                    #df = index.query_anno(anchor_name, chrs, x_start, x_stop)
+                    #df = index.query_anno(anchor_name, chrs, start_coord, end_coord)
                     df = df[df["type"]==i]
                     bounds = df.loc[:, ["start", "end"]]
                     bounds["break"] = None #pd.NA
@@ -529,13 +530,13 @@ def view(params):
 
         #Now we add the reference sequence:
         y_ref = [1, 1]
-        x_ref = [x_start, x_stop]
+        x_ref = [start_coord, end_coord]
         tickvals = []
         ticktxt = []
-        cntr = x_start
+        cntr = start_coord
         yvals = []
-        interval = int((x_stop-x_start)/10)
-        while cntr <= x_stop:
+        interval = int((end_coord-start_coord)/10)
+        while cntr <= end_coord:
             tickvals.append(cntr)
             ticktxt.append(str(cntr))
             yvals.append(1)
@@ -549,7 +550,7 @@ def view(params):
         fig.update_layout(template="simple_white" ) #,
         fig.update_xaxes(title_text="Sequence position", row=6, col=1)
         fig.update_yaxes(title_text="# of k-mers", range=[0,adjusted_bin_size_init]  , row=6, col=1)
-        fig.update_layout(height=1000, xaxis_range=[x_start,x_stop], font=dict(size=16))
+        fig.update_layout(height=1000, xaxis_range=[start_coord,end_coord], font=dict(size=16))
         return fig, bar_sum_names, bar_sum_regional, colors, gene_names_tmp
 
     def make_gene_whole_chr(x, locs):
@@ -562,7 +563,7 @@ def view(params):
             g += 1
         return z_genes
 
-    def plot_chr_whole( x_start, x_stop, anchor_name, this_chr): 
+    def plot_chr_whole( start_coord, end_coord, anchor_name, this_chr): 
         z_1 = index.chr_bins.loc[anchor_name, ("total",1)][this_chr]
         z_9 = index.chr_bins.loc[anchor_name, ("total", num_samples)][this_chr]
         y, x = [], []
@@ -577,7 +578,6 @@ def view(params):
             try:
                 genes = index.query_genes(anchor_name, this_chr, 0, index.chrs.loc[anchor_name, this_chr]["size"])
             except ValueError:
-                print("Skipping " + l + "\t" + c)
                 genes = None
 
             if genes is not None:
@@ -593,19 +593,19 @@ def view(params):
             )
 
         chr_fig.add_trace(go.Heatmap(x=x, z=z_9, y=y, type = 'heatmap', colorscale='magma_r', showlegend=False, showscale=False), row=1, col=1)
-        chr_fig.add_trace(go.Scatter(x=[x_start, x_start, None, x_stop, x_stop, None, x_start, x_stop, ], showlegend=False,
+        chr_fig.add_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord, None, start_coord, end_coord, ], showlegend=False,
                        y=[0.5, 1.5, None, 0.5, 1.5, None, 1.45, 1.45 ],
                        mode='lines',
                        line_color='#1dd3b0', line_width=8), row=1, col=1)
 
         chr_fig.add_trace(go.Heatmap(x=x, z=z_1, y=y, type = 'heatmap', colorscale='magma', showscale=False), row=2, col=1)
-        chr_fig.add_trace(go.Scatter(x=[x_start, x_start, None, x_stop, x_stop], showlegend=False,
+        chr_fig.add_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord], showlegend=False,
                        y=[0.5, 1.5, None, 0.5, 1.5],
                        mode='lines',
                        line_color='#1dd3b0', line_width=8), row=2, col=1)
 
         chr_fig.add_trace(go.Heatmap(x=x, z=z_genes, y=y, type = 'heatmap', colorscale='magma_r', showscale=False ), row=3, col=1)
-        chr_fig.add_trace(go.Scatter(x=[x_start, x_start, None, x_stop, x_stop, None, x_start, x_stop,], showlegend=False, 
+        chr_fig.add_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord, None, start_coord, end_coord,], showlegend=False, 
                        y=[0.5, 1.5, None, 0.5, 1.5, None, 0.55, 0.55],
                        mode='lines',
                        line_color='#1dd3b0', line_width=8), row=3, col=1)
@@ -662,7 +662,7 @@ def view(params):
         wg_fig.update_layout(height=h)
         return wg_fig
 
-    def plot_gene_content(gene_names,universals,uniques,sizes, sort_by, colors, uniq_avg, univ_avg, x_start, x_stop, anchor_name, chrs):
+    def plot_gene_content(gene_names,universals,uniques,sizes, sort_by, colors, uniq_avg, univ_avg, start_coord, end_coord, anchor_name, chrs):
         colors = ['#ffd60a', '#440154']
         d = {
             "Names":gene_names,
@@ -689,7 +689,8 @@ def view(params):
             cntr += 1
         fig.update_layout(clickmode='event+select')    
         fig.update_layout(hovermode='x unified')
-        local_genes = index.query_genes(anchor_name, chrs, x_start, x_stop)
+        print("query", anchor_name, chrs, start_coord, end_coord)
+        local_genes = index.query_genes(anchor_name, chrs, start_coord, end_coord)
         local_gene_list = [g.split(';')[0].split("=")[1] for g in local_genes['attr']]
         df2 = df_sorted.loc[df_sorted['Names'].isin(local_gene_list)]
 
@@ -700,7 +701,7 @@ def view(params):
 
         fig.add_hline(y=uniq_avg, line_dash='dash', line_color='goldenrod')
         fig.add_hline(y=univ_avg, line_dash='dash', line_color='#440154')
-        fig.update_layout(height=1500)
+        #fig.update_layout(height=500)
         fig.update_layout(
             title={"text":"k-mer content in individual genes",
                 "xanchor": "center",
@@ -721,9 +722,6 @@ def view(params):
         )
         return fig
 
-    def update_output_div(input_value):
-        return f'Output: {input_value}'
-
     #Tab 1 bar chart of each genome 
     def read_pangenome_comp():
 
@@ -735,7 +733,7 @@ def view(params):
                 marker_line=dict(color=colors[i]), orientation='h',
                 ), row=1, col=1)
         fig.update_layout(barmode='stack' )#,orientation='h')
-        fig.update_layout(height=1500, font=dict(
+        fig.update_layout(font=dict( #height=1500, 
             size=26,
             ), plot_bgcolor='rgba(0,0,0,0)')
         fig.update_layout(
@@ -1213,7 +1211,7 @@ def view(params):
             ]),
             html.Div(className="w3-quarter",children=[
                 dcc.Graph(id="all_chromosomes_hists", style={"height" : num_chrs[anchor_name]*250},
-                    #figure = whole_genome_hists_fig, 
+                    figure = whole_genome_hists_fig, 
                     config=config
                 )
             ]),
@@ -1225,7 +1223,7 @@ def view(params):
             html.Div(children=[ # info panel
                 html.Div(children=[ #left side
                     html.I(anchor_name + "." + chrs + ":", id="chr_name"),
-                    dcc.Input(id="Chrs_Info", placeholder=str(x_start_init) + "-" + str(x_stop_init), ),
+                    dcc.Input(id="Chrs_Info", placeholder=str(x_start_init) + "-" + str(x_stop_init), debounce=True),
                     html.Br(),
                     html.I("Genes in this region: " + str(local_genes), id='regional_genes'),
                     html.Br(),
@@ -1276,14 +1274,14 @@ def view(params):
                         dcc.Graph(id="Genes", 
                             #figure=gene_content_plot, 
                             config=config,
-                            style={"font-size": 20}),
+                            style={"font-size": 20, "height":750}),
                     ]),
                     html.Div(className="w3-twothird", children=[
                         dcc.Graph(id="Third", 
                             #This is the histogram section
                             #figure = create_tree( x_start_init,x_stop_init, all_chrs[chrs][int(x_start_init/n_skips_start):int(x_stop_init/n_skips_start)], n_skips_start),
                             config=config,
-                            style={"font-size": 20}),
+                            style={"font-size": 20, "height":750}),
                     ]),
                 ])
             ])
@@ -1340,13 +1338,33 @@ def view(params):
             return 1 #int((min_dist - act_dist)/2)+1 
     last_reset_click = 0
 
+    def set_coords(anchor, chrom=None, start=0, end=None):
+        anchor_chrs = index.chrs.loc[anchor].index
+        if chrom not in anchor_chrs:
+            chrom = anchor_chrs[0]
+        if end is None:
+            end = index.chrs.loc[(anchor, chrom), "size"]
+        return anchor, chrom, start, end
+
     @app.callback(
         Output('selected-anchor-state', 'children'), #pangenome
         Output('selected-chrom-state', 'children'),  #anchor
-        Output('start-coord-state','children'),   #x_start div (constant?)
+        Output('start-coord-state','children'),   #start_coord div (constant?)
         Output('end-coord-state','children'),   #x_end div (constant?)
+        Output('chromosome', 'relayoutData'),        #chromosome
+        Output('Chrs_Info', 'value'),                #chromosome
+        Output('chr_name', 'children'),              #chromosome
+
         Input('genome_select_dropdown', 'value'),     #pangenome, anchor, chromosome
         Input('chr_select_dropdown', 'value'),   #anchor, chromosome
+        Input('all_chromosomes','relayoutData'), #anchor -> chromosome
+        Input('primary', 'clickData'),           #chromosome
+        Input('primary', 'relayoutData'),        #chromosome
+        Input('chromosome', 'selectedData'),     #chromosome
+        Input('Genes', 'clickData'),             #chromosome
+        Input('Chrs_Info', 'value'),             #chromosome
+        Input('pre_regions_dropdown', 'value'),  #chromosome
+
         #Input('all_chromosomes','relayoutData'), #anchor -> chromosome
 
         State('selected-anchor-state', 'children'),
@@ -1354,19 +1372,100 @@ def view(params):
         State('start-coord-state', 'children'),
         State('end-coord-state', 'children'),
     )
-    def nav_callback(anchor_dropdown, chr_dropdown, anchor, chrom, start, end):
+    def nav_callback(anchor_dropdown, chr_dropdown, anctab_chrs_relayout, chrtab_primary_click, chrtab_primary_relayout, chrtab_chr_select, chrtab_gene_click, user_chr_coords, pre_selected_region, anchor, chrom, start_coord, end_coord):
         triggered_id = ctx.triggered_id
 
+        print("TRIG", triggered_id)
+        n_skips = 100
+        click_me_genes = True
+        click_me_rep = True
+
         if triggered_id == "genome_select_dropdown":
-            anchor = anchor_dropdown
-            anchor_chrs = index.chrs.loc[anchor].index
-            if chrom not in anchor_chrs:
-                chrom = anchor_chrs[0]
+            anchor, chrom, start_coord, end_coord = set_coords(anchor_dropdown)
 
         elif triggered_id == "chr_select_dropdown":
-            chrom = chr_dropdown
+            anchor, chrom, start_coord, end_coord = set_coords(anchor, chr_dropdown)
 
-        return anchor, chrom, start, end
+        elif triggered_id == "pre_regions_dropdown":
+            if pre_selected_region != None:
+                chrom = pre_selected_region.split(":")[0]
+
+                start_coord = int(pre_selected_region.split(":")[1].split("-")[0])
+                end_coord = int(pre_selected_region.split(":")[1].split("-")[1])
+                n_skips = 1
+
+        #Select start/end coordinates, triggers CHROMOSOME
+        elif triggered_id == 'Chrs_Info':
+            start_coord = int(user_chr_coords.strip().split('-')[0]) 
+            end_coord  = int(user_chr_coords.strip().split('-')[1])
+
+        #Select chromosome (region) in anchors tab, triggers CHROMOSOME
+        elif triggered_id == 'all_chromosomes':
+            #Get the chromosome number 
+            if anctab_chrs_relayout != None and len(anctab_chrs_relayout)>1:
+                chr_num_tmp = list(anctab_chrs_relayout.keys())[0].split('.')[0].split('axis')[1] #if anctab_chrs_relayout != None and len(anctab_chrs_relayout)>1:
+                if len(chr_num_tmp) == 0:
+                    chr_num = 1
+                else:
+                    chr_num = int(int(chr_num_tmp)/3)+1
+                
+                chrom = index.chrs.index[chr_num-1]
+                anchor, chrom, start_coord, end_coord = set_coords(anchor, chrom)
+                print("set", anchor, chrom, start_coord, end_coord)
+
+        #Chromosome gene plot, triggers CHROMOSOME
+        elif triggered_id == 'Genes':
+            if chrtab_gene_click != None:
+                this_gene_name = chrtab_gene_click['points'][0]['text']
+
+                genes = index.query_genes(anchor, chrom, int(start_coord), int(end_coord))
+                genes["name"] = genes["attr"].str.extract("Name=([^;]+)")
+                
+                genes["name"] = genes["attr"].str.extract("Name=([^;]+)")
+                this_gene = genes[genes["name"] == this_gene_name]
+                print(this_gene)
+
+                start_coord = int(this_gene['start'])
+                end_coord = int(this_gene['end'])
+
+        #Chromosome top plot, triggers CHROMOSOME
+        elif triggered_id == 'chromosome':
+            if not "range" in chrtab_chr_select:
+                return (no_update,)*7
+            #chromosome_gene_triggered(gene_jump_bottom, n_skips, click_me_genes, click_me_rep, chrtab_chr_select, chrom, anchor_name)
+            print("CRHOM", chrtab_chr_select)
+            if "x2" in chrtab_chr_select['range'].keys():
+                start_coord = int(chrtab_chr_select['range']['x2'][0])
+                end_coord = int(chrtab_chr_select['range']['x2'][1])
+            elif "x" in chrtab_chr_select['range'].keys():
+                start_coord = int(chrtab_chr_select['range']['x'][0])
+                end_coord = int(chrtab_chr_select['range']['x'][1])
+            else:
+                start_coord = int(chrtab_chr_select['range']['x3'][0])
+                end_coord = int(chrtab_chr_select['range']['x3'][1])
+        
+
+        #Chromosome main plot, triggers CHROMOSOME
+        elif triggered_id == 'primary':
+            if chrtab_primary_relayout != None and 'xaxis4.range[0]' in chrtab_primary_relayout.keys():
+                start_coord = int(chrtab_primary_relayout['xaxis4.range[0]'])
+                end_coord = int(chrtab_primary_relayout['xaxis4.range[1]'])
+            else:
+                print("OTHER CLICK", chrtab_primary_click)
+            #elif chrtab_primary_click != None:
+
+        if (end_coord - start_coord) <= bins:
+            start_coord = start_coord - 175
+            end_coord = end_coord + 175
+
+        print("coordinates are",  anchor, chrom, start_coord, end_coord)
+
+        return (
+            anchor, chrom, start_coord, end_coord,
+            chrtab_chr_select,
+            update_output_div(chrom, start_coord, end_coord, anchor), 
+            update_out_chr(chrom, anchor), 
+        )
 
 
     @app.callback(
@@ -1377,7 +1476,7 @@ def view(params):
         Output('all_genome_sizes', 'figure'),        #pangenome
 
         Input('tabs', 'value'),
-        Input('genome_select_dropdown', 'value')     #pangenome, anchor, chromosome
+        Input('selected-anchor-state', 'children')
     )
     def pangenome_callback(tab, anchor_name):
         if tab != "pangenome":
@@ -1394,38 +1493,13 @@ def view(params):
         #Output('selected-chrom-state', 'children'),  #anchor
 
         Input('tabs', 'value'),
-        Input('all_chromosomes','relayoutData'), #anchor -> chromosome
-        Input('chr_select_dropdown', 'value'),   #anchor, chromosome
-        Input('genome_select_dropdown', 'value'),#pangenome, anchor, chromosome
-        State('selected-chrom-state', 'children'),
-        State('selected-anchor-state', 'children')
+        Input('selected-anchor-state', 'children')
     )
-    def anchor_callback(tab, wgr, chr_select_dropdown, genome_select_dropdown, chrs, anchor_name):
+    def anchor_callback(tab, anchor_name):
         if tab != "anchor":
             return ({},)*4 + (no_update,)*2
         triggered_id = ctx.triggered_id
 
-        if triggered_id == 'chr_select_dropdown':
-            chrs = chr_select_dropdown
-            chr_num = chrs_list[anchor_name].get_loc(chrs)
-
-        elif triggered_id == 'genome_select_dropdown':
-            anchor_name = genome_select_dropdown
-            chrs = chrs_list[anchor_name][0]
-            chr_num = 1 #chrs_list[anchor_name].index(chrs) #int(chrs.split('r')[1])
-
-        elif triggered_id == 'all_chromosomes' and wgr != None and len(wgr)>1:
-            #Get the chromosome number 
-            chr_num_tmp = list(wgr.keys())[0].split('.')[0].split('axis')[1] #if wgr != None and len(wgr)>1:
-            if len(chr_num_tmp) == 0:
-                chr_num = 1
-            else:
-                chr_num = int(int(chr_num_tmp)/3)+1
-            chrs = index.chrs.loc[anchor_name].index[chr_num-1]
-
-        print("REFRESH", anchor_name)
-        print(chrs, anchor_name)
-        
         return (
             plot_whole_genome(anchor_name),
             make_gene_per_genome_fig(anchor_name),
@@ -1433,7 +1507,6 @@ def view(params):
             make_avg_kmer_fig(anchor_name),
             update_chromosome_list(anchor_name), 
             anchor_name, 
-            #chrs,
         )
         
     @app.callback(
@@ -1442,115 +1515,30 @@ def view(params):
         Output('Secondary', 'figure'),               #chromosome
         Output('Third', 'figure'),                   #chromosome
         Output('Genes', 'figure'),                   #chromosome
-        Output('chromosome', 'relayoutData'),        #chromosome
-        Output('Chrs_Info', 'value'),                #chromosome
-        Output('chr_name', 'children'),              #chromosome
         Output('regional_genes', 'children'),        #chromosome
 
         Input('tabs', 'value'),                  #all
-        Input('all_chromosomes','relayoutData'), #anchor -> chromosome
-        Input('start-coord-state','children'),   #x_start div (constant?)
+        Input('start-coord-state','children'),   #start_coord div (constant?)
         Input('end-coord-state','children'),   #x_end div (constant?)
-        Input('primary', 'clickData'),           #chromosome
-        Input('primary', 'relayoutData'),        #chromosome
-        Input('chromosome', 'selectedData'),     #chromosome
-        Input('Genes', 'clickData'),             #chromosome
-        Input('Chrs_Info', 'value'),             #chromosome
-        Input('pre_regions_dropdown', 'value'),  #chromosome
 
         State('selected-chrom-state', 'children'),
         State('selected-anchor-state', 'children'),
     )
-    def chromosome_callback(tab, wgr, #chr_fig, fig1, fig2, fig3, fig4, #clicker, 
-        x_start, x_stop, clickData, relayoutData, chr_relayoutData, gene_jump_bottom, user_chr_coords, 
-        pre_selected_region, chrs, anchor_name): #chr_select_dropdown, genome_select_dropdown, 
+    def chromosome_callback(tab, start_coord, end_coord, chrs, anchor_name):
 
-        print(tab, "BLAH")
         if tab != "chromosome":
-            print("RESET")
-            return ({},)*5 + (no_update,)*4
+            return ({},)*5 + (no_update,)#+ (no_update,)*4
 
         triggered_id = ctx.triggered_id
-
-        print("trig", triggered_id, chrs, anchor_name)
 
         n_skips = 100
         click_me_genes = True
         click_me_rep = True
-
-        #Selects which chromosome to view, currently on anchor tab
-        #triggers CHROMOSOME tab, maybe anchor tab in future
-        #if triggered_id == 'chr_select_dropdown':
-        #    print("a")
-        #    chrs = chr_select_dropdown
-        #    chr_num = chrs_list[anchor_name].get_loc(chrs)
-            #return update_all_figs(chr_num, chr_relayoutData, click_me_rep, click_me_genes, chrs, anchor_name, 0, x_start_init, x_stop_init, n_skips_start)
+        chr_num = chrs_list[anchor_name].get_loc(chrs)+1
 
         #Bookmarks, select from chromosome, triggers CHROMOSOME
-        if triggered_id == "pre_regions_dropdown":
-            print("b")
-            if pre_selected_region != None:
-                chrs = pre_selected_region.split(":")[0]
 
-                x_start = int(pre_selected_region.split(":")[1].split("-")[0])
-                x_stop = int(pre_selected_region.split(":")[1].split("-")[1])
-                n_skips = 1
-
-        #elif triggered_id == 'genome_select_dropdown':
-        #    print("c")
-        #    anchor_name = genome_select_dropdown
-        #    chrs = chrs_list[anchor_name][0]
-        #    chr_num = 1 #chrs_list[anchor_name].index(chrs) #int(chrs.split('r')[1])
-        #    #return update_all_figs(chr_num, chr_relayoutData, click_me_rep, click_me_genes, chrs, anchor_name, 1, x_start_init, x_stop_init, n_skips_start)
-
-        #Select start/end coordinates, triggers CHROMOSOME
-        elif triggered_id == 'Chrs_Info':
-            print("d")
-            if user_chr_coords.count(' ') > 0:
-                new_x_start = int(user_chr_coords.strip().split('-')[0]) 
-                new_x_stop  = int(user_chr_coords.strip().split('-')[1])
-                user_chr_coords_triggered(new_x_start, new_x_stop, click_me_genes, click_me_rep, chr_relayoutData, chrs, n_skips_start, anchor_name)
-            #else:
-            #    return (no_update,)*13 
-
-        #Select chromosome (region) in anchors tab, triggers CHROMOSOME
-        elif triggered_id == 'all_chromosomes':
-            print("e")
-            #Get the chromosome number 
-            if wgr != None and len(wgr)>1:
-                chr_num_tmp = list(wgr.keys())[0].split('.')[0].split('axis')[1] #if wgr != None and len(wgr)>1:
-                if len(chr_num_tmp) == 0:
-                    chr_num = 1
-                else:
-                    chr_num = int(int(chr_num_tmp)/3)+1
-                #return update_all_figs(chr_num, chr_relayoutData, click_me_rep, click_me_genes, chrs, anchor_name, 0, x_start_init, x_stop_init,n_skips_start) 
-
-        #Chromosome gene plot, triggers CHROMOSOME
-        elif triggered_id == 'Genes':
-            sorted_gene_fig(gene_jump_bottom, n_skips, click_me_genes, click_me_rep, chr_relayoutData, chrs, anchor_name)
-
-        #Chromosome top plot, triggers CHROMOSOME
-        elif triggered_id == 'chromosome':
-            print("g")
-            chromosome_gene_triggered(gene_jump_bottom, n_skips, click_me_genes, click_me_rep, chr_relayoutData, chrs, anchor_name)
-
-        #Chromosome main plot, triggers CHROMOSOME
-        elif triggered_id == 'primary':
-            print("h", chrs, anchor_name, x_start, x_stop)
-            primary_fig_triggered(gene_jump_bottom, n_skips, click_me_genes, click_me_rep, chr_relayoutData, relayoutData, clickData, x_start, x_stop, chrs, anchor_name)
-
-        chr_num = chrs_list[anchor_name].get_loc(chrs)+1
-        local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
-        local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
-
-        return update_all_figs(chr_num, chr_relayoutData, click_me_rep, click_me_genes, chrs, anchor_name, 0, x_start, x_stop,n_skips) 
-
-        #return (
-        #    chr_fig, fig1, fig2, fig3, fig4, chr_relayoutData, 
-        #    update_output_div(chrs,x_start,x_stop,anchor_name), 
-        #    update_out_chr(chrs, anchor_name), 
-        #    update_gene_locals(local_gene_list, chrs, x_start, x_stop, anchor_name), 
-        #)
+        return update_all_figs(chr_num, click_me_rep, click_me_genes, chrs, anchor_name, 0, start_coord, end_coord,n_skips) 
 
     def user_chr_coords_triggered(new_x_start, new_x_stop, click_me_genes, click_me_rep, chr_relayoutData, chrs, n_skips_start, anchor_name):
 
@@ -1565,12 +1553,14 @@ def view(params):
             exact_mini_counts = index.query_bitmap(anchor_name, chrs, new_x_start, new_x_stop, n_skips)
             simple_cnts_for_plots = exact_mini_counts.sum(axis=1)
             n_skips = n_skips_start
+
         chr_num = chrs_list[anchor_name].get_loc(chrs)
-        #chr_num = chrs_list[anchor_name].index(chrs)#int(chrs.split('r')[1])
         genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
+
         #[g.split(';')[1].split('=')[1] for g in genes['attr']]
         bounds = genes.loc[:, ["start", "end"]]
         bounds["break"] = None
+
         #gene_locals[l][chrom] = bounds.to_numpy().flatten()
         gene_names = [g.split(';')[0].split("=")[1] for g in genes['attr']]
         fig1, bar_sum_names, bar_sum_regional, colors, gene_names_tmp = plot_interactive( n_skips, 
@@ -1604,12 +1594,9 @@ def view(params):
         uniques = genes["unique"]
         sizes = genes["end"]-genes["start"]
         fig4 = plot_gene_content(gene_names,universals,uniques,sizes, sort_by, colors, uniq_avg, 
-            univ_avg, int(new_x_start), int(new_x_stop), anchor_name, chrs)
+                                 univ_avg, int(new_x_start), int(new_x_stop), anchor_name, chrs)
         return (
             chr_fig, fig1, fig2, fig3, fig4, chr_relayoutData, 
-            update_output_div(chrs,new_x_start,new_x_stop,anchor_name), 
-            update_out_chr(chrs, anchor_name), 
-            update_gene_locals(local_gene_list, chrs, new_x_start, new_x_stop, anchor_name), 
         )
 
     def sorted_gene_fig(gene_jump_bottom, n_skips, click_me_genes, click_me_rep, chr_relayoutData, chrs, anchor_name):
@@ -1633,28 +1620,28 @@ def view(params):
             if get_buffer(this_start,this_stop, n_skips_start) == 1:
                 #we need to move to single nucleotide resoltion               
                 if (this_stop - this_start) <= bins:
-                    x_start = this_start - 175
-                    x_stop = this_stop + 175
+                    start_coord = this_start - 175
+                    end_coord = this_stop + 175
                 else:
-                    x_start = this_start-1
-                    x_stop = this_stop+1
-                exact_mini_counts = index.query_bitmap(anchor_name, chrs, x_start, x_stop, 1)
+                    start_coord = this_start-1
+                    end_coord = this_stop+1
+                exact_mini_counts = index.query_bitmap(anchor_name, chrs, start_coord, end_coord, 1)
                 simple_cnts_for_plots = exact_mini_counts.sum(axis=1)
-                #simple_cnts_for_plots, exact_mini_counts = read_mini_count_files(x_start, x_stop)
+                #simple_cnts_for_plots, exact_mini_counts = read_mini_count_files(start_coord, end_coord)
                 n_skips = 1
             else: 
-                x_start = this_start - buff #int(1000*n_skips/2)
-                x_stop = this_stop + buff #int(1000*n_skips/2)
+                start_coord = this_start - buff #int(1000*n_skips/2)
+                end_coord = this_stop + buff #int(1000*n_skips/2)
                 n_skips = n_skips_start
-                simple_cnts_for_plots = names_simp[int(x_start/n_skips):int(x_stop/n_skips)]
-                exact_mini_counts = all_chrs[chrs][int(x_start/n_skips):int(x_stop/n_skips)]
+                simple_cnts_for_plots = names_simp[int(start_coord/n_skips):int(end_coord/n_skips)]
+                exact_mini_counts = all_chrs[chrs][int(start_coord/n_skips):int(end_coord/n_skips)]
             
             fig1, bar_sum_names, bar_sum_regional, colors, gene_names_tmp = plot_interactive( n_skips, #int(SG_window), 
                 #int(SG_polynomial_order), SG_check,
                 layout, #exon_comp[chrs], 
                 bins, simple_cnts_for_plots, chrs, zs_tmp, 
                 click_me_rep, click_me_genes,  
-                int(x_start), int(x_stop), gene_locals, 
+                int(start_coord), int(end_coord), gene_locals, 
                 [g.split(';')[0].split('=')[1] for g in genes['attr']], #gene_names[anchor_name][chrs], 
                 anchor_name, chrs
                 #exon_locals[anchor_name][chrs], exon_names[anchor_name][chrs],
@@ -1663,17 +1650,17 @@ def view(params):
                 simple_cnts_for_plots, #exon_comp[chrs], 
                 #gene_comp[anchor_name][chrs], 
                 bar_sum_regional, bar_sum_global[anchor_name][chrs], anchor_name, chrs)
-            fig3 = create_tree(x_start, x_stop, exact_mini_counts, n_skips)
+            fig3 = create_tree(start_coord, end_coord, exact_mini_counts, n_skips)
             gene_jump = ""
-            if x_start_init != x_start:
+            if x_start_init != start_coord:
                 chr_fig = plot_chr_whole(
-                    x_start, x_stop, anchor_name, chrs)
+                    start_coord, end_coord, anchor_name, chrs)
         #local_gene_list = []
         #cntr = 0
         #while cntr < len(gene_names_tmp):
         #    local_gene_list.append(gene_names_tmp[cntr])
         #    cntr += 3
-        local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
+        local_gene_list = index.query_genes(anchor_name, chrs, int(start_coord), int(end_coord))
         local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
 
         genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
@@ -1682,14 +1669,9 @@ def view(params):
         uniques = genes["unique"]
         sizes = genes["end"]-genes["start"]
         fig4 = plot_gene_content(gene_names,universals,uniques,sizes,
-            sort_by, colors, uniq_avg, univ_avg, int(x_start), int(x_stop),anchor_name, chrs)
+            sort_by, colors, uniq_avg, univ_avg, int(start_coord), int(end_coord),anchor_name, chrs)
         return (
-            chr_fig, fig1, fig2, fig3, fig4, chr_relayoutData, 
-            #chrs, 
-            update_output_div(chrs,x_start,x_stop,anchor_name), 
-            update_out_chr(chrs, anchor_name), 
-            update_gene_locals(local_gene_list, chrs, x_start, x_stop, anchor_name), 
-            #no_update, no_update, no_update, no_update, no_update, no_update#, no_update, no_update, no_update 
+            chr_fig, fig1, fig2, fig3, fig4
         )
     
     def chromosome_gene_triggered(gene_jump_bottom,n_skips, click_me_genes, click_me_rep, chr_relayoutData, chrs, anchor_name):
@@ -1697,28 +1679,28 @@ def view(params):
         names_simp = index.query_bitmap(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"], n_skips_start).sum(axis=1) #all_chrs[chrs].sum(axis=1)
         
         if "x2" in chr_relayoutData['range'].keys():
-                x_start = int(chr_relayoutData['range']['x2'][0])
-                x_stop = int(chr_relayoutData['range']['x2'][1])
+            start_coord = int(chr_relayoutData['range']['x2'][0])
+            end_coord = int(chr_relayoutData['range']['x2'][1])
         elif "x" in chr_relayoutData['range'].keys():
-                x_start = int(chr_relayoutData['range']['x'][0])
-                x_stop = int(chr_relayoutData['range']['x'][1])
+            start_coord = int(chr_relayoutData['range']['x'][0])
+            end_coord = int(chr_relayoutData['range']['x'][1])
         else:
-                x_start = int(chr_relayoutData['range']['x3'][0])
-                x_stop = int(chr_relayoutData['range']['x3'][1])
-        if get_buffer(x_start, x_stop, n_skips_start) == 1:
+            start_coord = int(chr_relayoutData['range']['x3'][0])
+            end_coord = int(chr_relayoutData['range']['x3'][1])
+        if get_buffer(start_coord, end_coord, n_skips_start) == 1:
             #we need to move to single nucleotide resoltion
-            if (x_stop - x_start) <= bins:
-                x_start = x_start - 175
-                x_stop = x_stop + 175
-            exact_mini_counts = index.query_bitmap(anchor_name, chrs, x_start, x_stop, 1)
+            if (end_coord - start_coord) <= bins:
+                start_coord = start_coord - 175
+                end_coord = end_coord + 175
+            exact_mini_counts = index.query_bitmap(anchor_name, chrs, start_coord, end_coord, 1)
             simple_cnts_for_plots = exact_mini_counts.sum(axis=1)
             n_skips = 1
         else:
-            exact_mini_counts = index.query_bitmap(anchor_name, chrs, int(x_start/n_skips_start), int(x_stop/n_skips_start), n_skips_start)#all_chrs[chrs][int(x_start/n_skips_start):int(x_stop/n_skips_start)]
-            simple_cnts_for_plots = names_simp[int(x_start/n_skips_start):int(x_stop/n_skips_start)]
+            exact_mini_counts = index.query_bitmap(anchor_name, chrs, int(start_coord/n_skips_start), int(end_coord/n_skips_start), n_skips_start)#all_chrs[chrs][int(start_coord/n_skips_start):int(end_coord/n_skips_start)]
+            simple_cnts_for_plots = names_simp[int(start_coord/n_skips_start):int(end_coord/n_skips_start)]
             n_skips = n_skips_start
         
-        genes = index.query_genes(anchor_name, chrs, x_start, x_stop)
+        genes = index.query_genes(anchor_name, chrs, start_coord, end_coord)
         #[g.split(';')[1].split('=')[1] for g in genes['attr']]
         bounds = genes.loc[:, ["start", "end"]]
         bounds["break"] = None
@@ -1726,7 +1708,7 @@ def view(params):
                 layout, #exon_comp[chrs], 
                 bins, simple_cnts_for_plots, chrs, zs_tmp,  
                 click_me_rep, click_me_genes,  
-                int(x_start), int(x_stop), 
+                int(start_coord), int(end_coord), 
                 bounds.to_numpy().flatten(),#gene_locals[anchor_name][chrs], 
                 [g.split(';')[0].split('=')[1] for g in genes['attr']],#gene_names[anchor_name][chrs], 
                 anchor_name, chrs
@@ -1737,17 +1719,17 @@ def view(params):
                 #gene_comp[anchor_name][chrs], 
                 bar_sum_regional, bar_sum_global[anchor_name][chrs], anchor_name, chrs)
         #And now we update the histograms 
-        fig3 = create_tree( x_start, x_stop, exact_mini_counts, n_skips)
+        fig3 = create_tree( start_coord, end_coord, exact_mini_counts, n_skips)
         chr_relayoutData = None#{'autosize': True}
-        if x_start_init != x_start:
+        if x_start_init != start_coord:
             chr_fig = plot_chr_whole(
-                x_start, x_stop, anchor_name, chrs)
+                start_coord, end_coord, anchor_name, chrs)
         #local_gene_list = []
         #cntr = 0
         #while cntr < len(gene_names_tmp):
         #    local_gene_list.append(gene_names_tmp[cntr])
         #    cntr += 3
-        local_gene_list = genes #index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
+        local_gene_list = genes #index.query_genes(anchor_name, chrs, int(start_coord), int(end_coord))
         local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
         genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
         gene_names = [g.split(';')[0].split("=")[1] for g in genes['attr']]
@@ -1755,71 +1737,48 @@ def view(params):
         uniques = genes["unique"]
         sizes = genes["end"]-genes["start"]
         fig4 = plot_gene_content(gene_names,universals,uniques,sizes, 
-            sort_by, colors, uniq_avg, univ_avg, x_start, x_stop, anchor_name, chrs)
+            sort_by, colors, uniq_avg, univ_avg, start_coord, end_coord, anchor_name, chrs)
         return (
-            chr_fig, fig1, fig2, fig3, fig4, chr_relayoutData, 
-            #chrs, 
-            update_output_div(chrs,x_start,x_stop,anchor_name), 
-            update_out_chr(chrs, anchor_name), 
-            update_gene_locals(local_gene_list, chrs, x_start, x_stop, anchor_name), 
-            #no_update, no_update, no_update, no_update, no_update, no_update#, no_update, no_update, no_update 
+            chr_fig, fig1, fig2, fig3, fig4
         )
 
-    def primary_fig_triggered(gene_jump_bottom, #SG_window, SG_polynomial_order,
-        n_skips, click_me_genes, click_me_rep, chr_relayoutData, relayoutData, clickData, 
-        x_start, x_stop, chrs, anchor_name ):
+    def primary_fig_triggered(gene_jump_bottom, n_skips, click_me_genes, click_me_rep, chr_relayoutData, relayoutData, clickData, start_coord, end_coord, chrs, anchor_name):
         chr_num = chrs_list[anchor_name].get_loc(chrs)
         chr_size = index.chrs.loc[(anchor_name, chrs), "size"]
         names_simp = index.query_bitmap(anchor_name, chrs, 0, chr_size, n_skips_start).sum(axis=1)#all_chrs[chrs].sum(axis=1)
         genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
+
         #[g.split(';')[1].split('=')[1] for g in genes['attr']]
         bounds = genes.loc[:, ["start", "end"]]
         bounds["break"] = None
         gene_locals = bounds.to_numpy().flatten()
         #int(chrs.split('r')[1])
         if relayoutData != None and 'xaxis4.range[0]' in relayoutData.keys():
-            x_start = int(relayoutData['xaxis4.range[0]'])
-            x_stop = int(relayoutData['xaxis4.range[1]'])
+            start_coord = int(relayoutData['xaxis4.range[0]'])
+            end_coord = int(relayoutData['xaxis4.range[1]'])
 
-            local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
-            local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
-            #fig4 = plot_gene_content(gene_names,universals,uniques,sizes, 
-            #    sort_by, colors, uniq_avg, univ_avg, int(x_start), int(x_stop), anchor_name, chrs)
         elif clickData != None:
             this_gene_name = clickData['points'][0]['text']
             
             genes["name"] = genes["attr"].str.extract("Name=([^;]+)")
             this_gene = genes[genes["name"] == this_gene_name]
 
-            x_start = int(this_gene['start'])
-            x_stop = int(this_gene['end'])
+            start_coord = int(this_gene['start'])
+            end_coord = int(this_gene['end'])
 
-            local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
-            local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
-            #local_gene_list = []
-            #cntr = 0
-            #while cntr < len(gene_names_tmp):
-            #    local_gene_list.append(gene_names_tmp[cntr])
-            #    cntr += 3 
-            #local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
-            #local_gene_list = [g.split(';')[1].split("=")[1] for g in local_gene_list['attr']]
-            #fig4 = plot_gene_content(gene_names,universals,uniques,sizes, 
-            #    sort_by, colors, uniq_avg, univ_avg, int(x_start), int(x_stop), anchor_name, chrs)   
-        else:
-            local_gene_list = index.query_genes(anchor_name, chrs, x_start_init,x_stop_init)
-            local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
-            #local_gene_list = [g.split(';')[0].split("=")[1] for g in local_gene_list['attr']]
+        local_gene_list = index.query_genes(anchor_name, chrs, int(start_coord), int(end_coord))
+        local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
 
-        if get_buffer(x_start, x_stop, n_skips_start) == 1:
-            if (x_stop - x_start) <= bins:
-                x_start = x_start - 175
-                x_stop = x_stop + 175
-            exact_mini_counts = index.query_bitmap(anchor_name, chrs, x_start, x_stop, 1)
+        if get_buffer(start_coord, end_coord, n_skips_start) == 1:
+            if (end_coord - start_coord) <= bins:
+                start_coord = start_coord - 175
+                end_coord = end_coord + 175
+            exact_mini_counts = index.query_bitmap(anchor_name, chrs, start_coord, end_coord, 1)
             simple_cnts_for_plots = exact_mini_counts.sum(axis=1)
             n_skips = 1
         else:
-            exact_mini_counts = all_chrs[chrs][int(x_start/n_skips_start):int((x_stop)/n_skips_start)]
-            simple_cnts_for_plots = names_simp[int(x_start/n_skips_start):int((x_stop)/n_skips_start)]
+            exact_mini_counts = all_chrs[chrs][int(start_coord/n_skips_start):int((end_coord)/n_skips_start)]
+            simple_cnts_for_plots = names_simp[int(start_coord/n_skips_start):int((end_coord)/n_skips_start)]
             n_skips = n_skips_start 
 
         genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
@@ -1828,71 +1787,66 @@ def view(params):
         uniques = genes["unique"]
         sizes = genes["end"]-genes["start"]
 
-        chr_fig = plot_chr_whole(x_start, x_stop, anchor_name, chrs)
+        chr_fig = plot_chr_whole(start_coord, end_coord, anchor_name, chrs)
         fig1, bar_sum_names, bar_sum_regional, colors, gene_names_tmp = plot_interactive(
             n_skips, layout, bins, simple_cnts_for_plots, chrs, zs_tmp, click_me_rep, click_me_genes,  
-            int(x_start), int(x_stop), gene_locals, [g.split(';')[0].split('=')[1] for g in genes['attr']],
+            int(start_coord), int(end_coord), gene_locals, [g.split(';')[0].split('=')[1] for g in genes['attr']],
             anchor_name, chrs
         )
         fig2 = get_local_info(simple_cnts_for_plots, bar_sum_regional, bar_sum_global[anchor_name][chrs], anchor_name, chrs)
-        fig3 = create_tree(x_start, x_stop, exact_mini_counts, n_skips)
+        fig3 = create_tree(start_coord, end_coord, exact_mini_counts, n_skips)
         fig4 = plot_gene_content(gene_names,universals,uniques,sizes, 
-            sort_by, colors, uniq_avg, univ_avg, int(x_start), int(x_stop), anchor_name, chrs)   
+            sort_by, colors, uniq_avg, univ_avg, int(start_coord), int(end_coord), anchor_name, chrs)   
         return (
-            chr_fig, fig1, fig2, fig3, fig4, chr_relayoutData, 
-            #chrs, 
-            update_output_div(chrs,x_start,x_stop,anchor_name), 
-            update_out_chr(chrs, anchor_name), 
-            update_gene_locals(local_gene_list, chrs, x_start, x_stop, anchor_name), 
-            #anchor_name, 
-            #no_update, no_update, no_update,no_update, no_update, no_update, #no_update, no_update, no_update 
+            chr_fig, fig1, fig2, fig3, fig4, 
         )
 
-    def update_all_figs(chr_num, chr_relayoutData, click_me_rep, click_me_genes, #SG_window, SG_polynomial_order,
-        chrs, anchor_name, redo_wg, x_start, x_stop, n_skips):
-        chrs = index.chrs.loc[anchor_name].index[chr_num-1]#"chr" + str(chr_num)
-        names_simp = index.query_bitmap(anchor_name, chrs, x_start, x_stop, n_skips).sum(axis=1)
-        genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
-        #[g.split(';')[1].split('=')[1] for g in genes['attr']]
+    def update_all_figs(chr_num, click_me_rep, click_me_genes, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
+        chrom = index.chrs.loc[anchor_name].index[chr_num-1]#"chr" + str(chr_num)
+
+        genes = index.query_genes(anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"])
         bounds = genes.loc[:, ["start", "end"]]
         bounds["break"] = None
-        #gene_locals = bounds.to_numpy().flatten()
         gene_names = [g.split(';')[0].split("=")[1] for g in genes['attr']]
-        fig1, bar_sum_names, bar_sum_regional, colors, gene_names_tmp = plot_interactive( n_skips, #int(SG_window), 
-            layout, #exon_comp[chrs], 
-            bins, names_simp, #names_simp[x_start_init_adjust:x_stop_init_adjust], 
-            chrs, zs_tmp, click_me_rep, click_me_genes,  
-            int(x_start), int(x_stop), 
-            bounds.to_numpy().flatten(),#gene_locals[anchor_name][chrs], 
-            gene_names,
-            anchor_name, chrs
+
+        if get_buffer(start_coord, end_coord, n_skips_start) == 1:
+            exact_mini_counts = index.query_bitmap(anchor_name, chrs, start_coord, end_coord, 1)
+            simple_cnts_for_plots = exact_mini_counts.sum(axis=1)
+            n_skips = 1
+
+        names_simp = index.query_bitmap(anchor_name, chrom, start_coord, end_coord, n_skips).sum(axis=1)
+
+        fig1, bar_sum_names, bar_sum_regional, colors, gene_names_tmp = plot_interactive(
+            n_skips, layout, bins, names_simp, 
+            chrom, zs_tmp, click_me_rep, click_me_genes,  
+            int(start_coord), int(end_coord), 
+            bounds.to_numpy().flatten(), 
+            gene_names, anchor_name, chrom
         )
 
-        local_gene_list = index.query_genes(anchor_name, chrs, int(x_start), int(x_stop))
+        local_gene_list = index.query_genes(anchor_name, chrom, int(start_coord), int(end_coord))
         local_gene_list["name"] = local_gene_list["attr"].str.extract("Name=([^;]+)")
 
         sort_by = ["Unique","Universal"]
-        tmp = [(i/sum(bar_sum_global[anchor_name][chrs])*100) for i in bar_sum_global[anchor_name][chrs]]
+        tmp = [(i/sum(bar_sum_global[anchor_name][chrom])*100) for i in bar_sum_global[anchor_name][chrom]]
         uniq_avg = tmp[1]
         univ_avg = tmp[-1]
 
         universals = genes["universal"]
         uniques = genes["unique"]
         sizes = genes["end"]-genes["start"]
-        fig4 = plot_gene_content(gene_names,universals,uniques,sizes,sort_by, colors, uniq_avg, univ_avg, int(x_start), int(x_stop), anchor_name, chrs)
-        
-        chr_fig = plot_chr_whole(x_start, x_stop, anchor_name, chrs)
 
-        fig2 = get_local_info(names_simp,
-                #names_simp[x_start_init_adjust:x_stop_init_adjust], #exon_comp[chrs], 
-                #gene_comp[anchor_name][chrs], 
-                bar_sum_regional, bar_sum_global[anchor_name][chrs], anchor_name, chrs)
+        fig4 = plot_gene_content(gene_names,universals,uniques,sizes,sort_by, colors, uniq_avg, univ_avg, int(start_coord), int(end_coord), anchor_name, chrom)
         
-        fig3 = create_tree(x_start, x_stop, 
-            index.query_bitmap(anchor_name, chrs, x_start, x_stop, n_skips),
-            #all_chrs[chrs][x_start_init_adjust:x_stop_init_adjust], 
+        chr_fig = plot_chr_whole(start_coord, end_coord, anchor_name, chrom)
+
+        fig2 = get_local_info(names_simp, bar_sum_regional, bar_sum_global[anchor_name][chrom], anchor_name, chrom)
+        
+        fig3 = create_tree(
+            start_coord, end_coord, 
+            index.query_bitmap(anchor_name, chrom, start_coord, end_coord, n_skips),
             n_skips)
-        #chr_fig = plot_chr_whole(x[chr_num-1], z_1[chr_num-1], z_9[chr_num-1], z_genes[chr_num-1], x_start_init, x_stop_init, y[chr_num-1])
+
         if redo_wg == 1:
             big_plot = plot_whole_genome(anchor_name)
             pg_sizes_fig = make_genome_size_plot(anchor_name)
@@ -1910,30 +1864,25 @@ def view(params):
             tab2_gene_density_fig = no_update
             tab2_avg_fig = no_update
             tab2_sorted_genes = no_update
+
         return (
-            chr_fig, fig1, fig2, fig3, fig4, chr_relayoutData, 
-            #chrs, 
-            update_output_div(chrs,x_start_init,x_stop_init, anchor_name), 
-            update_out_chr(chrs,anchor_name), 
-            update_gene_locals(local_gene_list, chrs, x_start, x_stop, anchor_name), 
-            #big_plot, 
-            #update_anchor_name(anchor_name), 
-            #update_chromosome_list(anchor_name), 
-            #tab2_sorted_genes, tab2_gene_density_fig, tab2_avg_fig
+            chr_fig, fig1, fig2, fig3, fig4,  
+            update_gene_locals(local_gene_list, chrom, start_coord, end_coord, anchor_name)
         )
 
     def update_output_div(chrs, start, stop, anchor_name):
+        print("SET", start, stop)
         return f'{start}-{stop}'
 
     def update_out_chr(chrs, anchor_name):
         return f'{anchor_name}.{chrs}:'
 
-    def update_gene_locals(local_gene_list, chrs, x_start, x_stop, anchor_name):
+    def update_gene_locals(local_gene_list, chrs, start_coord, end_coord, anchor_name):
         printme = ""
         if len(local_gene_list)==1:
             printme += "Genes: "
             printme += local_gene_list['name'][0] + ": "
-            printme += local_gene_list['attr'][0] #index.query_anno(anchor_name, chrs, x_start, x_stop)['attr']
+            printme += local_gene_list['attr'][0] #index.query_anno(anchor_name, chrs, start_coord, end_coord)['attr']
         elif len(local_gene_list)<=25:
             printme += "Genes: "
             for i in local_gene_list['name']:
