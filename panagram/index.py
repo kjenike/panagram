@@ -520,14 +520,18 @@ class Index:
     def query_bitmap(self, genome, chrom, start=None, end=None, step=1):
         return self.bitmaps[genome].query(chrom, start, end, step)
 
-    def query_genes(self, genome, chrom, start, end):
+    def query_genes(self, genome, chrom, start, end, attrs=["Name"]):
         if self.gene_tabix.get(genome, None) is None:
             return pd.DataFrame(columns=GENE_TABIX_COLS)
         try:
             rows = self.gene_tabix[genome].fetch(chrom, start, end)
         except ValueError:
             rows = []
-        return pd.DataFrame(rows, columns=GENE_TABIX_COLS).astype(GENE_TABIX_TYPES)
+
+        ret = pd.DataFrame(rows, columns=GENE_TABIX_COLS).astype(GENE_TABIX_TYPES)
+        for a in attrs:
+            ret[a.lower()] = ret["attr"].str.extract(f"{a}=([^;]+)")
+        return ret
 
     def query_anno(self, genome, chrom, start, end):
         if self.gene_tabix.get(genome, None) is None:
