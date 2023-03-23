@@ -523,14 +523,21 @@ class Index:
     def query_genes(self, genome, chrom, start, end):
         if self.gene_tabix.get(genome, None) is None:
             return pd.DataFrame(columns=GENE_TABIX_COLS)
-        rows = self.gene_tabix[genome].fetch(chrom, start, end)
+        try:
+            rows = self.gene_tabix[genome].fetch(chrom, start, end)
+        except ValueError:
+            rows = []
         return pd.DataFrame(rows, columns=GENE_TABIX_COLS).astype(GENE_TABIX_TYPES)
 
     def query_anno(self, genome, chrom, start, end):
         if self.gene_tabix.get(genome, None) is None:
             return pd.DataFrame(columns=TABIX_COLS)
-        rows = self.anno_tabix[genome].fetch(chrom, start, end)
+        try:
+            rows = self.anno_tabix[genome].fetch(chrom, start, end)
+        except ValueError:
+            rows = []
         return pd.DataFrame(rows, columns=TABIX_COLS).astype(TABIX_TYPES)
+    
     
     #def _query_tabix(self, tabix genome, chrom, start, end):
 
