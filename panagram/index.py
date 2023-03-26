@@ -219,7 +219,7 @@ class Index:
         total_cols = names.startswith("total_occ_")
         gene_cols = names.startswith("gene_occ_")
         occ_cols = total_cols | gene_cols
-        self.chr_occ = self.chrs.loc[:,total_cols | gene_cols]
+        self.chr_occ = self.chrs.loc[:,total_cols | gene_cols].copy()
         cols = self.chr_occ.columns.str.split("_occ_", expand=True)
         self.chr_occ.columns = cols.set_levels(cols.levels[1].astype(int), level=1)
 
@@ -331,7 +331,8 @@ class Index:
 
             self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
             self._init_genomes()
-            self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+            #self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+            self._write_chrs()
 
         if self.anchor_only or self.anno_only:
             pre = f""
@@ -392,7 +393,8 @@ class Index:
 
         chr_bins_out.close()
 
-        self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+        #self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+        self._write_chrs()
 
         print("Computing mash distance")
         self._run_mash()
@@ -410,7 +412,8 @@ class Index:
             if self.gff_anno_types is None:
                 self.gff_anno_types = list(self.all_anno_types)
 
-        self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+        #self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+        self._write_chrs()
 
         with open(self.index_config_file, "w") as conf_out:
             toml.dump(self.params, conf_out)
@@ -461,6 +464,20 @@ class Index:
                 raise FileNotFoundError("Index file not found: '{fname}.csi' or '{fname.tbi}' must be preset")
 
         return pysam.TabixFile(fname, parser=pysam.asTuple(), index=index_fname)
+    
+    def _write_chrs(self):
+        cols_out = ["_occ_".join(map(str, c)) if isinstance(c, tuple) else c
+                    for c in self.chrs.columns]
+
+        #for c in self.chrs.columns:
+        #    print(c, type(c))
+        #print(self.chrs)
+        #join = self.chrs.columns.str.join("_occ_")
+        #print(join)
+        print(cols_out)
+        out = self.chrs.set_axis(cols_out, axis="columns")
+        print(out)
+        out.to_csv(f"{self.prefix}/chrs.csv")
 
     def tabix_fname(self, genome, typ):
         return os.path.join(self.anno_dir, f"{genome}.{typ}.bed{TABIX_SUFFIX}") 

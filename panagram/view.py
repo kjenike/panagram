@@ -561,7 +561,7 @@ def view(params):
             g += 1
         return z_genes
 
-    def plot_chr_whole( start_coord, end_coord, anchor_name, this_chr): 
+    def plot_chr_whole( start_coord, end_coord, anchor_name, this_chr, genes): 
         z_1 = index.chr_bins.loc[anchor_name, ("total",1)][this_chr]
         z_9 = index.chr_bins.loc[anchor_name, ("total", num_samples)][this_chr]
         y, x = [], []
@@ -573,12 +573,8 @@ def view(params):
 
         z_genes = [0]*len(x)
         if index.gene_tabix[anchor_name] is not None:
-            try:
-                genes = index.query_genes(anchor_name, this_chr, 0, index.chrs.loc[anchor_name, this_chr]["size"])
-            except ValueError:
-                genes = None
-
-            if genes is not None:
+            #genes = index.query_genes(anchor_name, this_chr, 0, index.chrs.loc[anchor_name, this_chr]["size"])
+            if len(genes) > 0:
                 bounds = genes["start"].to_numpy() #genes.loc[:, ["start"]].to_numpy()
                 z_genes = make_gene_whole_chr(x, bounds) #[g.split(';')[1].split('=')[1] for g in genes['attr']]) 
                 
@@ -1504,10 +1500,10 @@ def view(params):
         return update_all_figs(chr_num, click_me_rep, click_me_genes, chrs, anchor_name, 0, start_coord, end_coord,n_skips) 
 
     def update_all_figs(chr_num, click_me_rep, click_me_genes, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
-        genes = index.query_genes(anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"])
-        bounds = genes.loc[:, ["start", "end"]]
+        all_genes = index.query_genes(anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"])
+        bounds = all_genes.loc[:, ["start", "end"]]
         bounds["break"] = None
-        gene_names = genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
+        gene_names = all_genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
 
         if get_buffer(start_coord, end_coord, n_skips_start) == 1:
             n_skips = 1
@@ -1530,13 +1526,13 @@ def view(params):
         uniq_avg = tmp[1]
         univ_avg = tmp[-1]
 
-        universals = genes["universal"]
-        uniques = genes["unique"]
-        sizes = genes["end"]-genes["start"]
+        universals = all_genes["universal"]
+        uniques = all_genes["unique"]
+        sizes = all_genes["end"]-all_genes["start"]
 
         fig4 = plot_gene_content(gene_names,universals,uniques,sizes,sort_by, colors, uniq_avg, univ_avg, int(start_coord), int(end_coord), anchor_name, chrom)
         
-        chr_fig = plot_chr_whole(start_coord, end_coord, anchor_name, chrom)
+        chr_fig = plot_chr_whole(start_coord, end_coord, anchor_name, chrom, all_genes)
 
         fig2 = get_local_info(bitmap_counts, bar_sum_regional, bar_sum_global[anchor_name][chrom], anchor_name, chrom)
         
