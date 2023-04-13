@@ -32,13 +32,13 @@ def view(params):
 
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
 
-    anchor_name, chrs = index.chrs.index[0]
-    #anchor_name = "kakapo"
-    #chrs = "S1"
-    if params.genome is not None:
-        anchor_name = params.genome
-    if params.chrom is not None:
-        chrs = params.chrom
+    #anchor_name, chrs = index.chrs.index[0]
+    anchor_name = "kakapo"
+    chrs = "S1"
+    #if params.genome is not None:
+    #    anchor_name = params.genome
+    #if params.chrom is not None:
+    #    chrs = params.chrom
 
     x_start_init = 0 if params.start is None else params.start
     xe = 1000000 #index.chrs.loc[(anchor_name,chrs),"size"]
@@ -346,8 +346,8 @@ def view(params):
         #.sum(axis=1)
         
         #fig.add_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(y, y_whole)], marker_color=colors, showlegend=False), row=2, col=1)
-        fig.add_trace(go.Bar(x=x, y=y, marker_color=colors, showlegend=False), row=2, col=1)
-        fig.add_trace(go.Bar(x=x, y=y_whole, marker_color=colors, showlegend=False), row=1, col=1)
+        fig.append_trace(go.Bar(x=x, y=y, marker_color=colors, showlegend=False), row=2, col=1)
+        fig.append_trace(go.Bar(x=x, y=y_whole, marker_color=colors, showlegend=False), row=1, col=1)
         #Genes
         #y=[(i/sum(gene_comp[1:])*100) for i in gene_comp[1:]]
         #fig.add_trace(go.Bar(x=x, y=y_whole, marker_color="#7400b8", showlegend=False), row=1, col=4)
@@ -361,7 +361,7 @@ def view(params):
         for t in gene_comp_tmp:
             gene_comp.append(t/totals*100)
         
-        fig.add_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(gene_comp, y_whole)], marker_color=colors, showlegend=False), row=2, col=2)
+        fig.append_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(gene_comp, y_whole)], marker_color=colors, showlegend=False), row=2, col=2)
         #fig.update_layout(xaxis_title_text="K-mers shared in X samples", yaxis_title_text='Frequency (log)')
         fig.update_xaxes(title_text="# of genomes", row=2, col=1)
         fig.update_yaxes(title_text="Difference from whole chromosome", row=2, col=1)
@@ -378,6 +378,7 @@ def view(params):
         poly_order = SG_polynomial_order
         shared_kmers = [1]
         tmp_lst = []
+        rep_colors = mcp.gen_color(cmap="plasma",n=len(rep_list ))
         fig = make_subplots(        
             rows=13, cols=1,
             shared_xaxes=True,
@@ -431,16 +432,19 @@ def view(params):
         plot_rep = True
         #Add a line plot that will cover the different repetative elements. 
         if plot_rep == True:
-            rep_colors = mcp.gen_color(cmap="plasma",n=len(rep_list ))
+            #rep_colors = mcp.gen_color(cmap="plasma",n=len(rep_list ))
             cntr = 0
+            anno_locals_all = []
+            all_y_reps = []
+            all_rep_colors = []
             df = index.query_anno(anchor_name, chrs, start_coord, end_coord)
             for i in rep_list: #rep_types.keys():
                 
                 if i == "exon":
-                    exon_y   = []
-                    exon_tmp = []
-                    df_tmp = df[df["type"]==i]
-                    bounds = df_tmp.loc[:, ["start", "end"]]
+                    #exon_y   = []
+                    #exon_tmp = []
+                    #df_tmp = df[df["type"]==i]
+                    bounds = df[df["type"]==i].loc[:, ["start", "end"]]
                     bounds["break"] = None #pd.NA
                     exon_tmp = bounds.to_numpy().flatten()
                     #e = 0
@@ -451,14 +455,14 @@ def view(params):
                     #    e += 3
                     #print(len(exon_tmp))
                     exon_y = [0.5,0.5,None]*(int(len(exon_tmp)/3))
-                    fig.add_trace(go.Scattergl(x=exon_tmp, y=exon_y, 
+                    fig.append_trace(go.Scattergl(x=exon_tmp, y=exon_y, 
                         line=dict(color="#a0da39", width=5), name=i), row=2, col=1)
                 else:
-                    rep_y = []
-                    rep_types_tmp = []
+                    #rep_y = []
+                    #rep_types_tmp = []
                     #df = index.query_anno(anchor_name, chrs, start_coord, end_coord)
-                    df_tmp = df[df["type"]==i]
-                    bounds = df_tmp.loc[:, ["start", "end"]]
+                    #df_tmp = df[df["type"]==i]
+                    bounds = df[df["type"]==i].loc[:, ["start", "end"]]
                     bounds["break"] = None #pd.NA
                     anno_locals_tmp = bounds.to_numpy().flatten()
                     #r = 0
@@ -467,11 +471,24 @@ def view(params):
                     #    rep_y.append(cntr)
                     #    rep_y.append(None)
                     #    r += 3
-                    rep_y = [cntr,cntr,None]*(int(len(anno_locals_tmp)/3))
-                    fig.add_trace(go.Scattergl(x=anno_locals_tmp, y=rep_y, 
-                        line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2", 
-                        legendgrouptitle_text="Annotations"), row=4, col=1)
+                    #print(len(anno_locals_tmp))
+                    if len(anno_locals_tmp) > 0:
+                        #bounds["break"] = None #pd.NA
+                        #anno_locals_tmp = bounds.to_numpy().flatten()
+                        rep_y = [cntr,cntr,None]*(int(len(anno_locals_tmp)/3))
+                        #anno_locals_all.extend(anno_locals_tmp)
+                        #all_rep_colors.extend([rep_colors[cntr]]*len(rep_y))
+                        fig.append_trace(go.Scattergl(x=anno_locals_tmp, y=rep_y, #mode='markers+lines',
+                            line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2", 
+                            legendgrouptitle_text="Annotations"
+                            ), #layout_yaxis_range=[0,(len(rep_list))],
+                            row=4, col=1)
                     cntr += 1
+            #fig.add_trace(go.Scattergl(x=anno_locals_all, y=all_y_reps, 
+                #line=dict(color=all_rep_colors), 
+            #    color="all_i",
+            #    name=all_i, legendgroup="group2", 
+            #    legendgrouptitle_text="Annotations"), row=4, col=1)
             fig.update_yaxes(visible=False, row=4, col=1)
             fig.update_xaxes(showticklabels=False, row=4, col=1)
         t4 = time.perf_counter()
@@ -488,7 +505,7 @@ def view(params):
             #gene_names_tmp = [val for val in gene_names for _ in (0, 1)]
             gene_y = [2]*len(gene_names_tmp)
 
-            fig.add_trace(go.Scattergl(x=gene_locals, y=gene_y, 
+            fig.append_trace(go.Scattergl(x=gene_locals, y=gene_y, 
                 line=dict(color="#3b528b", width=10), 
                 text=gene_names_tmp, hovertemplate='<br>x:%{x}<br>m:%{text}', legendgroup="group2", 
                 name="Gene"), row=2, col=1)
@@ -505,7 +522,7 @@ def view(params):
         bar_sum_names = []
         bar_sum_regional.append(sum(cats_tmp[0]))
         bar_sum_names.append(str(0))
-        fig.add_trace(go.Bar(x=x, y=cats_tmp[0], name=str(0),
+        fig.append_trace(go.Bar(x=x, y=cats_tmp[0], name=str(0),
                 legendgroup="group1", 
                 legendgrouptitle_text="Conserved K-mers",
                 marker=dict(color='grey'), 
@@ -519,7 +536,7 @@ def view(params):
             bar_sum_regional.append(sum(cats_tmp[i]))
             #bar_sum_global.append(names_simp.count(i))
             bar_sum_names.append(str(i))
-            fig.add_trace(go.Bar(x=x, y=cats_tmp[i], name=str(i),
+            fig.append_trace(go.Bar(x=x, y=cats_tmp[i], name=str(i),
                 legendgroup="group1", 
                 legendgrouptitle_text="Conserved K-mers",
                 marker=dict(color=colors[i-1]), 
@@ -536,7 +553,7 @@ def view(params):
             y_tmp = cats_tmp[int(sk)][:-1]
             for i in range(0, int(sk)):
                 y_tmp = [a + b for a, b in zip(y_tmp, cats_tmp[int(i)][:-1])] #cats_tmp[int(sk)][:-1]
-            fig.add_trace(go.Scatter(x=x, y=signal.savgol_filter(y_tmp,window_filter,poly_order), 
+            fig.append_trace(go.Scatter(x=x, y=signal.savgol_filter(y_tmp,window_filter,poly_order), 
                 name="Savitzky-Golay - "+str(sk), marker=dict(color="grey"), mode='lines'), row=6, col=1)
         t8 = time.perf_counter()
         print(f"\tSmoothing line {t8 - t7:0.4f} seconds")
@@ -557,7 +574,7 @@ def view(params):
         t9 = time.perf_counter()
         print(f"\tFinishing touches {t9 - t8:0.4f} seconds")
 
-        fig.add_trace(go.Scattergl(x=tickvals, y=yvals, text=ticktxt, 
+        fig.append_trace(go.Scattergl(x=tickvals, y=yvals, text=ticktxt, 
             textposition='top center', showlegend=False, 
             mode='lines+markers+text', line=dict(color="grey"), 
             marker = dict(size=5, symbol='line-ns')), row=1, col=1)
@@ -609,20 +626,20 @@ def view(params):
             vertical_spacing = 0.0
             )
 
-        chr_fig.add_trace(go.Heatmap(x=x, z=z_9, y=y, type = 'heatmap', colorscale='magma_r', showlegend=False, showscale=False), row=1, col=1)
-        chr_fig.add_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord, None, start_coord, end_coord, ], showlegend=False,
+        chr_fig.append_trace(go.Heatmap(x=x, z=z_9, y=y, type = 'heatmap', colorscale='magma_r', showlegend=False, showscale=False), row=1, col=1)
+        chr_fig.append_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord, None, start_coord, end_coord, ], showlegend=False,
                        y=[0.5, 1.5, None, 0.5, 1.5, None, 1.45, 1.45 ],
                        mode='lines',
                        line_color='#1dd3b0', line_width=8), row=1, col=1)
 
-        chr_fig.add_trace(go.Heatmap(x=x, z=z_1, y=y, type = 'heatmap', colorscale='magma', showscale=False), row=2, col=1)
-        chr_fig.add_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord], showlegend=False,
+        chr_fig.append_trace(go.Heatmap(x=x, z=z_1, y=y, type = 'heatmap', colorscale='magma', showscale=False), row=2, col=1)
+        chr_fig.append_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord], showlegend=False,
                        y=[0.5, 1.5, None, 0.5, 1.5],
                        mode='lines',
                        line_color='#1dd3b0', line_width=8), row=2, col=1)
 
-        chr_fig.add_trace(go.Heatmap(x=x, z=z_genes, y=y, type = 'heatmap', colorscale='magma_r', showscale=False ), row=3, col=1)
-        chr_fig.add_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord, None, start_coord, end_coord,], showlegend=False, 
+        chr_fig.append_trace(go.Heatmap(x=x, z=z_genes, y=y, type = 'heatmap', colorscale='magma_r', showscale=False ), row=3, col=1)
+        chr_fig.append_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord, None, start_coord, end_coord,], showlegend=False, 
                        y=[0.5, 1.5, None, 0.5, 1.5, None, 0.55, 0.55],
                        mode='lines',
                        line_color='#1dd3b0', line_width=8), row=3, col=1)
@@ -666,9 +683,9 @@ def view(params):
         for chrom in index.chrs.loc[anchor_name].index:
             x = list(index.chr_bins.loc[(anchor_name, chrom)].index)
             if len(x)!=1:
-                wg_fig.add_trace(go.Heatmap(x=x, z=index.chr_bins.loc[anchor_name, ("total",num_samples)][chrom], 
+                wg_fig.append_trace(go.Heatmap(x=x, z=index.chr_bins.loc[anchor_name, ("total",num_samples)][chrom], 
                     y=[1]*(len(x)), type = 'heatmap', colorscale='magma_r', showlegend=False,showscale=False), row=((cntr*3)-2), col=1)
-                wg_fig.add_trace(go.Heatmap(x=x, z=index.chr_bins.loc[anchor_name, ("total",1)][chrom], 
+                wg_fig.append_trace(go.Heatmap(x=x, z=index.chr_bins.loc[anchor_name, ("total",1)][chrom], 
                     y=[1]*(len(x)), type = 'heatmap', colorscale='magma', showscale=False), row=((cntr*3)-1), col=1)
             
             if cntr == 1:
@@ -889,8 +906,8 @@ def view(params):
 
     def make_genome_count_plot(anchor_name):
         counts = index.genome_sizes["chr_count"].sort_values()
-        fig = make_subplots(rows=1, cols=1)
-        fig.add_trace(go.Scattergl(x=counts.index,y=counts))
+        #fig = make_subplots(rows=1, cols=1)
+        fig = go.Figure(data=[go.Scattergl(x=counts.index,y=counts)])
         fig.update_yaxes(title_text="# of scaffolds",)
         fig.add_vline(x=anchor_name, line_dash="dash", line_color="darkblue")
         fig.update_layout(font=dict(size=20,))
@@ -898,8 +915,8 @@ def view(params):
 
     def make_genome_size_plot(anchor_name):
         lens = index.genome_sizes["length"].sort_values()
-        fig = make_subplots(rows=1, cols=1)
-        fig.add_trace(go.Scattergl(x=lens.index,y=lens))
+        #fig = make_subplots(rows=1, cols=1)
+        fig = go.Figure(data=[go.Scattergl(x=lens.index,y=lens)])
         fig.update_yaxes(title_text="Size of genome",)
         fig.add_vline(x=anchor_name, line_dash="dash", line_color="darkblue")
         fig.update_layout(font=dict(size=20,))
@@ -907,19 +924,19 @@ def view(params):
         return fig
 
     def plot_avgs(anchor_name):
-        fig = make_subplots(rows=1, cols=1)
-        fig.add_trace(go.Scattergl(x=index.genome_occ_avg.index,y=index.genome_occ_avg))
+        #fig = make_subplots(rows=1, cols=1)
+        fig = go.Figure(data=[ go.Scattergl(x=index.genome_occ_avg.index,y=index.genome_occ_avg)])
         fig.add_vline(x=anchor_name, line_dash="dash", line_color="darkblue")
         fig.update_yaxes(title_text="Average k-mer",)
         fig.update_layout(font=dict(size=20,))
         return fig
 
     def make_avg_kmer_fig(this_anchor):
-        fig = make_subplots(rows=1, cols=1)
+        #fig = make_subplots(rows=1, cols=1)
 
         avgs = index.chr_occ_avg[this_anchor]
 
-        fig.add_trace(go.Scattergl(x=avgs.index, y=avgs))
+        fig = go.Figure(data=[go.Scattergl(x=avgs.index, y=avgs)])
         fig.update_yaxes(title_text="Average k-mer",)
         fig.update_xaxes(title_text="Chromosome",)
         fig.update_layout(plot_bgcolor='rgba(0,0,0,0)',  font=dict(size=20))
@@ -944,7 +961,7 @@ def view(params):
         return fig
 
     def make_genes_per_chr_fig(anchor_name):
-        fig = make_subplots(rows=1, cols=1)
+        #fig = go.Figure(data=[(rows=1, cols=1)
         x = []
         y = []
         for c in range(0, len(chrs_list[anchor_name])):
@@ -954,7 +971,7 @@ def view(params):
                 y.append(len(index.query_genes(anchor_name, this_chrom, 0, index.chrs.loc[anchor_name, this_chrom]["size"]))/index.chrs.loc[anchor_name, this_chrom]["size"])
             except :
                 print(anchor_name + "\t" + this_chrom)
-        fig.add_trace(go.Scattergl(x=x, y=y))
+        fig = go.Figure(data=[(go.Scattergl(x=x, y=y))])
         fig.update_yaxes(title_text="Gene density",)
         fig.update_xaxes(title_text="Chromosome",)
         fig.update_layout(plot_bgcolor='rgba(0,0,0,0)',  font=dict(size=20))
@@ -1534,7 +1551,10 @@ def view(params):
     def update_all_figs(chr_num, click_me_rep, click_me_genes, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
         print("update_all_figs")
         tic = time.perf_counter()
-        all_genes = index.query_genes(anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"])
+        try:
+            all_genes = index.query_genes(anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"])
+        except: 
+            print("updating figs exception")
         bounds = all_genes.loc[:, ["start", "end"]]
         bounds["break"] = None
         gene_names = all_genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
