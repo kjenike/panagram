@@ -1511,7 +1511,7 @@ def view(params):
 
         Input('tabs', 'value'),                  #all
         Input('start-coord-state','children'),   #start_coord div (constant?)
-        Input('end-coord-state','children'),   #x_end div (constant?)
+        Input('end-coord-state','children'),     #x_end div (constant?)
 
         State('selected-chrom-state', 'children'),
         State('selected-anchor-state', 'children'),
