@@ -4,6 +4,7 @@ import pysam
 import os.path
 from os import path
 from mycolorpy import colorlist as mcp
+from matplotlib.colors import hex2color
 from plotly.subplots import make_subplots
 import plotly.figure_factory as ff
 import seaborn as sns
@@ -373,7 +374,7 @@ def view(params):
         
         return fig
 
-    def plot_interactive(n_skips, layout, bins, names_simp, name, zs_tmp, plot_rep, plot_gene, start_coord, end_coord, gene_locals, gene_names, anchor_name, chrs):
+    def plot_interactive(n_skips, layout, bins, bitmap_counts, name, zs_tmp, plot_rep, plot_gene, start_coord, end_coord, gene_locals, gene_names, anchor_name, chrs):
         window_filter = SG_window
         poly_order = SG_polynomial_order
         shared_kmers = [1]
@@ -402,7 +403,6 @@ def view(params):
         adjusted_bin_size = (bin_size/n_skips)
         cntr = 0
         
-        cats_tmp = [([0] * (bins+1)) for _ in range(num_samples+1)]
         cntr = 0
         x_tracker = 0
         #Here we are filling in the bins for the main figure.    
@@ -418,15 +418,29 @@ def view(params):
         t2 = time.perf_counter()
         print(f"\tMains set up {t2 - t_start:0.4f} seconds")
         cntr = 0
-        for i in names_simp: #[adjusted_x_start:adjusted_x_stop] : #range(start_coord, end_coord): #names_simp[start_coord:end_coord]:#range(start_coord, end_coord):#names_simp:
-            #i tells us which y axis to use. 
-            #cntr tells us what x axis to use 
-            if (cntr % adjusted_bin_size_init) == 0 : #Is the x position within the same bin? Or do we need to move to the next bin? 
-                x_tracker += 1 #X-tracker keeps track of which bin we are using (on the x-axis)
-            
-            if (i) < len(cats_tmp) and x_tracker < len(cats_tmp[i]):
-                cats_tmp[i][x_tracker] += 1 
-            cntr += 1 #n_skips
+        
+        cats_tmp = np.zeros((bins+1,num_samples+1), int)
+        start = 0
+        for i in range(bins):
+            end = min(start + adjusted_bin_size_init, len(bitmap_counts))
+            vals,counts = np.unique(bitmap_counts[start:end], return_counts=True)
+            cats_tmp[i+1][vals] = counts
+            start = end
+
+        cats_tmp = cats_tmp.T
+
+        #cats_tmp = [([0] * (bins+1)) for _ in range(num_samples+1)]
+
+        #for i in bitmap_counts:
+        #    #i tells us which y axis to use. 
+        #    #cntr tells us what x axis to use 
+        #    if (cntr % adjusted_bin_size_init) == 0 : #Is the x position within the same bin? Or do we need to move to the next bin? 
+        #        x_tracker += 1 #X-tracker keeps track of which bin we are using (on the x-axis)
+        #    
+        #    if (i) < len(cats_tmp) and x_tracker < len(cats_tmp[i]):
+        #        cats_tmp[i][x_tracker] += 1 
+        #    cntr += 1 #n_skips
+        #print(np.array(cats_tmp))
         t3 = time.perf_counter()
         print(f"\tBuilding the bins {t3 - t2:0.4f} seconds")
         plot_rep = True
@@ -438,6 +452,28 @@ def view(params):
             all_y_reps = []
             all_rep_colors = []
             df = index.query_anno(anchor_name, chrs, start_coord, end_coord)
+            #pd.Series(
+            #    df["type"], 
+            #    index=pd.IntervalIndex.from_arrays(df["start"], df["end"])
+            #).sort_index()
+
+            width = end_coord - start_coord
+            if width < 1000:
+                mat_width = width
+            else:
+                mat_width = 1000
+
+            mat_bounds = np.linspace(start_coord, end_coord, mat_width, dtype=int)
+            anno_mat = np.full((len(rep_list), mat_width), np.nan)
+
+            anno_bounds = pd.DataFrame({
+                "type" : df["type"],
+                "start" : df["start"] // mat_width,
+                "end" : (df["end"] // mat_width) + 1
+            }).sort_values(["type", "start","end"]) \
+              .drop_duplicates() \
+              .set_index("type")
+
             for i in rep_list: #rep_types.keys():               
                 if i == "exon":
                     bounds = df[df["type"]==i].loc[:, ["start", "end"]]
@@ -448,21 +484,32 @@ def view(params):
                     fig.append_trace(go.Scattergl(x=exon_tmp, y=exon_y, 
                         line=dict(color="#a0da39", width=5), name=i, hoverinfo='none'), row=2, col=1)
                 else:
-                    bounds = df[df["type"]==i].loc[:, ["start", "end"]]
-                    bounds["break"] = None #pd.NA
-                    anno_locals_tmp = bounds.to_numpy().flatten()
 
-                    if len(anno_locals_tmp) > 0:
-                        rep_y = [cntr,cntr,None]*(int(len(anno_locals_tmp)/3))
-                        fig.append_trace(go.Scattergl(x=anno_locals_tmp, y=rep_y, #mode='markers+lines',
-                            line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2", 
-                            legendgrouptitle_text="Annotations", hoverinfo='name'
-                            #hovertemplate=i
-                            ), #layout_yaxis_range=[0,(len(rep_list))],
-                            row=4, col=1)
-                    cntr += 1
+                    if i in anno_bounds.index:
+                        for _,(start,end) in anno_bounds.loc[[i]].iterrows():
+                            anno_mat[cntr, start:end] = cntr #hex2color(rep_colors[cntr])
+                    #bounds = df[df["type"]==i].loc[:, ["start", "end"]]
+                    #bounds["break"] = None #pd.NA
+
+                    #anno_locals_tmp = bounds.to_numpy().flatten()
+
+                    #if len(anno_locals_tmp) > 0:
+                    #    rep_y = [cntr,cntr,None]*(int(len(anno_locals_tmp)/3))
+                    #    
+                    #    #fig.append_trace(go.Scattergl(x=anno_locals_tmp, y=rep_y, #mode='markers+lines',
+                    #    #    line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2", 
+                    #    #    legendgrouptitle_text="Annotations", hoverinfo='name'
+                    #    #    #hovertemplate=i
+                    #    #    ), #layout_yaxis_range=[0,(len(rep_list))],
+                    #    #    row=4, col=1)
+                    #cntr += 1
             fig.update_yaxes(visible=False, row=4, col=1)
             #fig.update_xaxes(showticklabels=False, row=4, col=1)
+        
+        fig.append_trace(
+            go.Heatmap(x=mat_bounds[:-1], z=anno_mat, colorscale="plasma"),
+            row=4, col=1
+        )
         t4 = time.perf_counter()
         print(f"\tRepeats {t4 - t3:0.4f} seconds")
         #print("just checking")
@@ -1060,7 +1107,7 @@ def view(params):
     chrs = index.chrs.loc[anchor_name].index[0] #"chr1"
 
     #Parsing the counts will return the number of genomes present at each kmer position, based on the counts
-    names_simp = all_chrs[chrs].sum(axis=1)#tmp.sum(axis=1)
+    #names_simp = all_chrs[chrs].sum(axis=1)#tmp.sum(axis=1)
     bar_sum_global = {}
 
     for l in labels:
