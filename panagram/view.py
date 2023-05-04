@@ -438,61 +438,34 @@ def view(params):
             all_y_reps = []
             all_rep_colors = []
             df = index.query_anno(anchor_name, chrs, start_coord, end_coord)
-            for i in rep_list: #rep_types.keys():
-                
+            for i in rep_list: #rep_types.keys():               
                 if i == "exon":
-                    #exon_y   = []
-                    #exon_tmp = []
-                    #df_tmp = df[df["type"]==i]
                     bounds = df[df["type"]==i].loc[:, ["start", "end"]]
                     bounds["break"] = None #pd.NA
                     exon_tmp = bounds.to_numpy().flatten()
-                    #e = 0
-                    #while e < len(exon_tmp):
-                    #    exon_y.append(0.5)#[cntr]*len(rep_types_tmp)
-                    #    exon_y.append(0.5)
-                    #    exon_y.append(None)
-                    #    e += 3
-                    #print(len(exon_tmp))
+
                     exon_y = [0.5,0.5,None]*(int(len(exon_tmp)/3))
                     fig.append_trace(go.Scattergl(x=exon_tmp, y=exon_y, 
-                        line=dict(color="#a0da39", width=5), name=i), row=2, col=1)
+                        line=dict(color="#a0da39", width=5), name=i, hoverinfo='none'), row=2, col=1)
                 else:
-                    #rep_y = []
-                    #rep_types_tmp = []
-                    #df = index.query_anno(anchor_name, chrs, start_coord, end_coord)
-                    #df_tmp = df[df["type"]==i]
                     bounds = df[df["type"]==i].loc[:, ["start", "end"]]
                     bounds["break"] = None #pd.NA
                     anno_locals_tmp = bounds.to_numpy().flatten()
-                    #r = 0
-                    #while r < len(anno_locals_tmp):
-                    #    rep_y.append(cntr)#[cntr]*len(rep_types_tmp)
-                    #    rep_y.append(cntr)
-                    #    rep_y.append(None)
-                    #    r += 3
-                    #print(len(anno_locals_tmp))
+
                     if len(anno_locals_tmp) > 0:
-                        #bounds["break"] = None #pd.NA
-                        #anno_locals_tmp = bounds.to_numpy().flatten()
                         rep_y = [cntr,cntr,None]*(int(len(anno_locals_tmp)/3))
-                        #anno_locals_all.extend(anno_locals_tmp)
-                        #all_rep_colors.extend([rep_colors[cntr]]*len(rep_y))
                         fig.append_trace(go.Scattergl(x=anno_locals_tmp, y=rep_y, #mode='markers+lines',
                             line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2", 
-                            legendgrouptitle_text="Annotations"
+                            legendgrouptitle_text="Annotations", hoverinfo='name'
+                            #hovertemplate=i
                             ), #layout_yaxis_range=[0,(len(rep_list))],
                             row=4, col=1)
                     cntr += 1
-            #fig.add_trace(go.Scattergl(x=anno_locals_all, y=all_y_reps, 
-                #line=dict(color=all_rep_colors), 
-            #    color="all_i",
-            #    name=all_i, legendgroup="group2", 
-            #    legendgrouptitle_text="Annotations"), row=4, col=1)
             fig.update_yaxes(visible=False, row=4, col=1)
-            fig.update_xaxes(showticklabels=False, row=4, col=1)
+            #fig.update_xaxes(showticklabels=False, row=4, col=1)
         t4 = time.perf_counter()
         print(f"\tRepeats {t4 - t3:0.4f} seconds")
+        #print("just checking")
         if plot_gene == True:
             gene_locals_tmp = []
             gene_names_tmp = []
@@ -1309,7 +1282,7 @@ def view(params):
             )
         ])
 
-    app = dash.Dash(
+    app = dash.Dash(__name__,
         external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css"],
         url_base_pathname=params.url_base,
         suppress_callback_exceptions=True
@@ -1318,12 +1291,16 @@ def view(params):
     app.layout = html.Div([
         #html.Div(id = 'parent', children = [
         html.H1(id = 'H1', children = 'Panagram', style = {'textAlign':'center', "font-size": 64}), 
-        dcc.Tabs(id="tabs", value="pangenome", style={"font-size": 36}, children=[
-            dcc.Tab(value="pangenome", label='Pangenome', style=  tab_style, children=PANGENOME_TAB),
-            dcc.Tab(value="anchor", label='Anchor genome', style= tab_style, children=ANCHOR_TAB),
-            dcc.Tab(value="chromosome", label='Chromosome', style=tab_style, children=CHROMOSOME_TAB), 
-            dcc.Tab(value="annotation", label='Annotation', style=tab_style, children=ANNOTATION_TAB), 
-        ]),
+        #html.Div(className="loader-wrapper", children=[
+            dcc.Loading(id='loading-tabs', parent_className='loading_wrapper', type="default", className='dash-spinner', 
+                children=dcc.Tabs(id="tabs", value="pangenome", style={"font-size": 36}, children=[
+                    dcc.Tab(value="pangenome", label='Pangenome', style=  tab_style, children=PANGENOME_TAB),
+                    dcc.Tab(value="anchor", label='Anchor genome', style= tab_style, children=ANCHOR_TAB),
+                    dcc.Tab(value="chromosome", label='Chromosome', style=tab_style, children=CHROMOSOME_TAB), 
+                    dcc.Tab(value="annotation", label='Annotation', style=tab_style, children=ANNOTATION_TAB), 
+                ]), #style={'backgroundColor': 'transparent'}
+            ),
+        #], style={'backgroundColor': 'transparent'}), #style={"maxHeight": "300vh",}),
 
         html.Div(id="tab-content"),
 
@@ -1353,6 +1330,15 @@ def view(params):
         genes = index.query_genes(anchor, chrom, start, end)
 
         return anchor, chrom, start, end
+    
+    #@app.callback(
+    #    Output("loading-tabs", "children"),
+    #    Input("loading-input-1", "value"),
+    #    prevent_initial_call=True,
+    #)
+    #def input_triggers_spinner(value):
+    #    time.sleep(2)
+    #return value
 
     @app.callback(
         Output('selected-anchor-state', 'children'), #pangenome
@@ -1577,7 +1563,7 @@ def view(params):
             gene_names, anchor_name, chrom
         )
         toc_tmp_2 = time.perf_counter()
-        print(f"main fig in {toc_tmp_2 - toc_tmp:0.4f} seconds")
+        print(f"main fig in {toc_tmp_2 - toc_tmp_1:0.4f} seconds")
         
         local_gene_list = index.query_genes(anchor_name, chrom, int(start_coord), int(end_coord))
 

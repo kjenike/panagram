@@ -1,0 +1,5 @@
+/* dcc.Loading component with transparent background */
+/* this defines a style for a Loading component with parent_className='loading-wrapper' */
+.loading_wrapper > div {
+    visibility: visible !important;
+}
