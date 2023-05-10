@@ -452,27 +452,9 @@ def view(params):
             all_y_reps = []
             all_rep_colors = []
             df = index.query_anno(anchor_name, chrs, start_coord, end_coord)
-            #pd.Series(
-            #    df["type"], 
-            #    index=pd.IntervalIndex.from_arrays(df["start"], df["end"])
-            #).sort_index()
-
-            width = end_coord - start_coord
-            if width < 1000:
-                mat_width = width
-            else:
-                mat_width = 1000
-
-            mat_bounds = np.linspace(start_coord, end_coord, mat_width, dtype=int)
-            anno_mat = np.full((len(rep_list), mat_width), np.nan)
-
-            anno_bounds = pd.DataFrame({
-                "type" : df["type"],
-                "start" : df["start"] // mat_width,
-                "end" : (df["end"] // mat_width) + 1
-            }).sort_values(["type", "start","end"]) \
-              .drop_duplicates() \
-              .set_index("type")
+            #anno_locals_tmp = []
+            #rep_y = []
+            #anno_colors = []
 
             for i in rep_list: #rep_types.keys():               
                 if i == "exon":
@@ -485,31 +467,42 @@ def view(params):
                         line=dict(color="#a0da39", width=5), name=i, hoverinfo='none'), row=2, col=1)
                 else:
 
-                    if i in anno_bounds.index:
-                        for _,(start,end) in anno_bounds.loc[[i]].iterrows():
-                            anno_mat[cntr, start:end] = cntr #hex2color(rep_colors[cntr])
-                    #bounds = df[df["type"]==i].loc[:, ["start", "end"]]
-                    #bounds["break"] = None #pd.NA
+                    #if i in anno_bounds.index:
+                    #    for _,(start,end) in anno_bounds.loc[[i]].iterrows():
+                    #        anno_mat[cntr, start:end] = cntr #hex2color(rep_colors[cntr])
+                    bounds = df[df["type"]==i].loc[:, ["start", "end"]]
+                    bounds["break"] = None #pd.NA
 
-                    #anno_locals_tmp = bounds.to_numpy().flatten()
-
-                    #if len(anno_locals_tmp) > 0:
-                    #    rep_y = [cntr,cntr,None]*(int(len(anno_locals_tmp)/3))
-                    #    
-                    #    #fig.append_trace(go.Scattergl(x=anno_locals_tmp, y=rep_y, #mode='markers+lines',
-                    #    #    line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2", 
-                    #    #    legendgrouptitle_text="Annotations", hoverinfo='name'
-                    #    #    #hovertemplate=i
-                    #    #    ), #layout_yaxis_range=[0,(len(rep_list))],
-                    #    #    row=4, col=1)
-                    #cntr += 1
+                    #print(anno_locals_tmp)
+                    anno_locals_tmp = bounds.to_numpy().flatten()
+                    #print(anno_locals_tmp_tmp)
+                    #anno_locals_tmp = anno_locals_tmp + anno_locals_tmp_tmp
+                    #anno_locals_tmp = np.concatenate((anno_locals_tmp, anno_locals_tmp_tmp))
+                    #print(anno_locals_tmp)
+                    #rep_y += [cntr,cntr,None]*(int(len(anno_locals_tmp_tmp)/3))
+                    #anno_colors.append([rep_colors[cntr]]*len(anno_locals_tmp_tmp))
+                    if len(anno_locals_tmp) > 0:
+                        rep_y = [cntr,cntr,None]*(int(len(anno_locals_tmp)/3))
+                        
+                        fig.append_trace(go.Scattergl(x=anno_locals_tmp, y=rep_y, #mode='markers+lines',
+                            line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2", 
+                            legendgrouptitle_text="Annotations", hoverinfo='name'
+                            #hovertemplate=i
+                            ), #layout_yaxis_range=[0,(len(rep_list))],
+                            row=4, col=1)
+                    cntr += 1
             fig.update_yaxes(visible=False, row=4, col=1)
             #fig.update_xaxes(showticklabels=False, row=4, col=1)
-        
-        fig.append_trace(
-            go.Heatmap(x=mat_bounds[:-1], z=anno_mat, colorscale="plasma"),
-            row=4, col=1
-        )
+            #fig.append_trace(go.Scattergl(x=anno_locals_tmp, y=rep_y, marker_color=anno_colors,
+            #    #line=dict(color=rep_colors[cntr]), 
+            #    legendgroup="group2", 
+            #    legendgrouptitle_text="Annotations", hoverinfo='name',),
+            #    row=4, col=1
+            #)
+        #fig.append_trace(
+        #    go.Heatmap(x=mat_bounds[:-1], z=anno_mat, colorscale="plasma"),
+        #    row=4, col=1
+        #)
         t4 = time.perf_counter()
         print(f"\tRepeats {t4 - t3:0.4f} seconds")
         #print("just checking")
@@ -569,12 +562,12 @@ def view(params):
         t7 = time.perf_counter()
         print(f"\tConserved kmers, non-grey {t7 - t6:0.4f} seconds")
         #Now we will add the smoothing line. There are three parameters that we adjust
-        for sk in shared_kmers:
-            y_tmp = cats_tmp[int(sk)][:-1]
-            for i in range(0, int(sk)):
-                y_tmp = [a + b for a, b in zip(y_tmp, cats_tmp[int(i)][:-1])] #cats_tmp[int(sk)][:-1]
-            fig.append_trace(go.Scatter(x=x, y=signal.savgol_filter(y_tmp,window_filter,poly_order), 
-                name="Savitzky-Golay - "+str(sk), marker=dict(color="grey"), mode='lines'), row=6, col=1)
+        #for sk in shared_kmers:
+        #    y_tmp = cats_tmp[int(sk)][:-1]
+        #    for i in range(0, int(sk)):
+        #        y_tmp = [a + b for a, b in zip(y_tmp, cats_tmp[int(i)][:-1])] #cats_tmp[int(sk)][:-1]
+        #    fig.append_trace(go.Scatter(x=x, y=signal.savgol_filter(y_tmp,window_filter,poly_order), 
+        #        name="Savitzky-Golay - "+str(sk), marker=dict(color="grey"), mode='lines'), row=6, col=1)
         t8 = time.perf_counter()
         print(f"\tSmoothing line {t8 - t7:0.4f} seconds")
         #Now we add the reference sequence:
@@ -591,13 +584,14 @@ def view(params):
             #yvals.append(1)
             cntr += interval
         yvals = [1]*len(tickvals)
-        t9 = time.perf_counter()
-        print(f"\tFinishing touches {t9 - t8:0.4f} seconds")
+        
 
         fig.append_trace(go.Scattergl(x=tickvals, y=yvals, text=ticktxt, 
             textposition='top center', showlegend=False, 
             mode='lines+markers+text', line=dict(color="grey"), 
             marker = dict(size=5, symbol='line-ns')), row=1, col=1)
+        t9 = time.perf_counter()
+        print(f"\tFinishing touches {t9 - t8:0.4f} seconds")
         fig.update_yaxes(visible=False, range=[0.9,4], row=1, col=1)
         fig.update_xaxes(visible=False, title_text="Sequence position", row=1, col=1)
         fig.update_layout(template="simple_white" ) #,
@@ -643,7 +637,8 @@ def view(params):
             shared_xaxes=True,
             subplot_titles=("K-mer and gene density accross whole chromosome", "",
                 ""),
-            vertical_spacing = 0.0
+            vertical_spacing = 0.0,
+            #height=350,
             )
 
         chr_fig.append_trace(go.Heatmap(x=x, z=z_9, y=y, type = 'heatmap', colorscale='magma_r', showlegend=False, showscale=False), row=1, col=1)
@@ -743,7 +738,13 @@ def view(params):
             cntr += 1
         fig.update_layout(clickmode='event+select')    
         fig.update_layout(hovermode='x unified')
+
+        sys.stderr.write("Quering genes 1\n")
+        sys.stderr.flush()
         local_genes = index.query_genes(anchor_name, chrs, start_coord, end_coord)
+        sys.stderr.write("Queried genes 1\n")
+        sys.stderr.flush()
+
         local_gene_list = local_genes['name']
         df2 = df_sorted.loc[df_sorted['Names'].isin(local_gene_list)]
 
@@ -988,7 +989,11 @@ def view(params):
             this_chrom = chrs_list[anchor_name][c]
             x.append(this_chrom)
             try:
+                sys.stderr.write("Quering genes 2\n")
+                sys.stderr.flush()
                 y.append(len(index.query_genes(anchor_name, this_chrom, 0, index.chrs.loc[anchor_name, this_chrom]["size"]))/index.chrs.loc[anchor_name, this_chrom]["size"])
+                sys.stderr.write("Queried genes 2\n")
+                sys.stderr.flush()
             except :
                 print(anchor_name + "\t" + this_chrom)
         fig = go.Figure(data=[(go.Scattergl(x=x, y=y))])
@@ -1024,7 +1029,11 @@ def view(params):
         genes = list()
         for chrom in index.chrs.loc[anchor_name].index:
             try:
+                sys.stderr.write("Quering genes 3\n")
+                sys.stderr.flush()
                 g = index.query_genes(anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"])
+                sys.stderr.write("Queried genes 3\n")
+                sys.stderr.flush()
             except : 
                 continue
             genes.append(g)
@@ -1152,7 +1161,11 @@ def view(params):
     #### NEED TO ADJUST THE START INIT AND STOP INIT SO THAT WE TAKE THE SKIPS INTO ACCOUNT
     #Here is where we make the main plot 
     #if len(index.chr_bins.loc[(anchor_name,chrs)]) > 1:
+    sys.stderr.write("Quering genes 4\n")
+    sys.stderr.flush()
     genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
+    sys.stderr.write("Queried genes 4\n")
+    sys.stderr.flush()
     #[g.split(';')[1].split('=')[1] for g in genes['attr']]
     bounds = genes.loc[:, ["start", "end"]]
     bounds["break"] = None #pd.NA
@@ -1163,8 +1176,11 @@ def view(params):
     #    layout, bins, names_simp[x_start_init_adjust:x_stop_init_adjust], chrs, zs_tmp, True, True, 
     #    x_start_init, x_stop_init, bounds.to_numpy().flatten(), gene_names, anchor_name, chrs
     #)
-
+    sys.stderr.write("Quering genes 5\n")
+    sys.stderr.flush()
     local_genes = len(index.query_genes(anchor_name, chrs, x_start_init, x_stop_init))
+    sys.stderr.write("Queried genes 5\n")
+    sys.stderr.flush()
 
     sort_by = ["Unique","Universal"]
     tmp = [(i/sum(bar_sum_global[anchor_name][chrs])*100) for i in bar_sum_global[anchor_name][chrs]]
@@ -1356,6 +1372,7 @@ def view(params):
         html.Div(x_start_init,id='start-coord-state',style={"display" : "none"} ),
         html.Div(x_stop_init,id='end-coord-state',style={"display" : "none"} ),
         html.Div(x_stop_init,id='chr-genes-state',style={"display" : "none"} ),
+        #html.Div([],id='gene-names-state',style={"display" : "none"} ),
     ])
 
     def get_buffer(tmp_start, tmp_stop, n_skips):
@@ -1373,8 +1390,11 @@ def view(params):
             chrom = anchor_chrs[0]
         if end is None:
             end = index.chrs.loc[(anchor, chrom), "size"]
-
+        sys.stderr.write("Quering genes 6\n")
+        sys.stderr.flush()
         genes = index.query_genes(anchor, chrom, start, end)
+        sys.stderr.write("Queried genes 6\n")
+        sys.stderr.flush()
 
         return anchor, chrom, start, end
     
@@ -1396,6 +1416,8 @@ def view(params):
         Output('chromosome', 'relayoutData'),        #chromosome
         Output('Chrs_Info', 'value'),                #chromosome
         Output('chr_name', 'children'),              #chromosome
+        #Output('chromosome','figure'),
+        #Output('gene-names-state','children'),
 
         Input('genome_select_dropdown', 'value'),     #pangenome, anchor, chromosome
         Input('chr_select_dropdown', 'value'),   #anchor, chromosome
@@ -1413,7 +1435,10 @@ def view(params):
         State('selected-chrom-state', 'children'),
         State('start-coord-state', 'children'),
         State('end-coord-state', 'children'),
+        
+
         State('chr-genes-state', 'children'),
+        #State('chromosome','figure'),
     )
     def nav_callback(anchor_dropdown, chr_dropdown, anctab_chrs_relayout, chrtab_primary_click, chrtab_primary_relayout, chrtab_chr_select, chrtab_gene_click, user_chr_coords, pre_selected_region, anchor, chrom, start_coord, end_coord, chr_genes):
         triggered_id = ctx.triggered_id
@@ -1422,7 +1447,7 @@ def view(params):
         click_me_genes = True
         click_me_rep = True
         print("Triggered_id: "+ str(triggered_id))
-
+        #gene_names = no_update
         if triggered_id == "genome_select_dropdown":
             anchor, chrom, start_coord, end_coord = set_coords(anchor_dropdown)
 
@@ -1454,14 +1479,26 @@ def view(params):
                 
                 chrom = index.chrs.index[chr_num-1]
                 anchor, chrom, start_coord, end_coord = set_coords(anchor, chrom)
+                #chrs_fig = plot_chr_whole(start_coord, end_coord, anchor_name, chrom, all_genes)
+                #try:
+                #    all_genes = index.query_genes(anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"])
+                #except: 
+                #    print("updating figs exception")
+                #bounds = all_genes.loc[:, ["start", "end"]]
+                #bounds["break"] = None
+                #gene_names = all_genes["name"]
 
         #Chromosome gene plot, triggers CHROMOSOME
         elif triggered_id == 'Genes':
             if chrtab_gene_click != None:
                 this_gene_name = chrtab_gene_click['points'][0]['text']
-
-                genes = index.query_genes(anchor, chrom, 0, index.chrs.loc[(anchor, chrom), "size"]).set_index("name")
-
+                
+                sys.stderr.write("Quering genes 7\n")
+                sys.stderr.flush()
+                genes = index.query_genes(anchor, chrom, 0, index.chrs.loc[anchor, chrom]["size"]).set_index("name")
+                sys.stderr.write("Queried genes 7\n")
+                sys.stderr.flush()
+                
                 this_gene = genes.loc[this_gene_name]
 
                 start_coord = int(this_gene['start'])
@@ -1498,6 +1535,8 @@ def view(params):
             chrtab_chr_select,
             update_output_div(chrom, start_coord, end_coord, anchor), 
             update_out_chr(chrom, anchor), 
+            #gene_names,
+            #chrs_fig
         )
 
 
@@ -1512,8 +1551,8 @@ def view(params):
         Input('selected-anchor-state', 'children')
     )
     def pangenome_callback(tab, anchor_name):
-        #if tab != "pangenome":
-        #    return ({},)*5 #+ (no_update,)
+        if tab != "pangenome":
+            return ({},)*5 #+ (no_update,)
         print("pangenome_callback")
         triggered_id = ctx.triggered_id            
         if triggered_id != "selected-anchor-state":
@@ -1533,8 +1572,8 @@ def view(params):
         Input('selected-anchor-state', 'children')
     )
     def anchor_callback(tab, anchor_name):
-        #if tab != "anchor":
-        #    return ({},)*4 + (no_update,)*2
+        if tab != "anchor":
+            return ({},)*4 + (no_update,)*2
         print("anchor_callback")
         triggered_id = ctx.triggered_id
         if triggered_id != "selected-anchor-state":
@@ -1560,12 +1599,14 @@ def view(params):
         Input('start-coord-state','children'),   #start_coord div (constant?)
         Input('end-coord-state','children'),     #x_end div (constant?)
 
+
         State('selected-chrom-state', 'children'),
         State('selected-anchor-state', 'children'),
+        #State('gene-names-state','children'),
     )
     def chromosome_callback(tab, start_coord, end_coord, chrs, anchor_name):
         print("chromosome_callback\t" + str(tab))
-        tic = time.perf_counter()
+        #tic = time.perf_counter()
         if tab != "chromosome":
             return ({},)*5 + (no_update,)#+ (no_update,)*4
 
@@ -1575,17 +1616,28 @@ def view(params):
         click_me_genes = True
         click_me_rep = True
         chr_num = chrs_list[anchor_name].get_loc(chrs)+1
-
+        #This should be the first time the chromosome callback is called? 
+        #try:
+        #    all_genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
+        #except: 
+        #    print("updating figs exception")
+        #bounds = all_genes.loc[:, ["start", "end"]]
+        #bounds["break"] = None
+        #gene_names = all_genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
         #Bookmarks, select from chromosome, triggers CHROMOSOME
-        toc = time.perf_counter()
-        print(f"pre update all in {toc - tic:0.4f} seconds")
-        return update_all_figs(chr_num, click_me_rep, click_me_genes, chrs, anchor_name, 0, start_coord, end_coord,n_skips) 
+        #toc = time.perf_counter()
+        #print(f"pre update all in {toc - tic:0.4f} seconds")
+        return update_all_figs( chr_num, click_me_rep, click_me_genes, chrs, anchor_name, 0, start_coord, end_coord,n_skips) 
 
-    def update_all_figs(chr_num, click_me_rep, click_me_genes, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
+    def update_all_figs( chr_num, click_me_rep, click_me_genes, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
         print("update_all_figs")
         tic = time.perf_counter()
         try:
+            sys.stderr.write("Quering genes 8\n")
+            sys.stderr.flush()
             all_genes = index.query_genes(anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"])
+            sys.stderr.write("Queried genes 8\n")
+            sys.stderr.flush()
         except: 
             print("updating figs exception")
         bounds = all_genes.loc[:, ["start", "end"]]
@@ -1612,7 +1664,13 @@ def view(params):
         toc_tmp_2 = time.perf_counter()
         print(f"main fig in {toc_tmp_2 - toc_tmp_1:0.4f} seconds")
         
+        #sys.stderr.write("Quering genes 9\n")
+        #sys.stderr.write(anchor_name+"\t"+chrom+"\t"+str(start_coord) + "\t"+str(end_coord)+"\n")
+        #sys.stderr.flush()
         local_gene_list = index.query_genes(anchor_name, chrom, int(start_coord), int(end_coord))
+        #sys.stderr.write("Queried genes 9\n")
+        #sys.stderr.flush()
+
 
         sort_by = ["Unique","Universal"]
         tmp = [(i/sum(bar_sum_global[anchor_name][chrom])*100) for i in bar_sum_global[anchor_name][chrom]]
@@ -1683,9 +1741,11 @@ def view(params):
         toc = time.perf_counter()
         print(f"Update all in {toc - tic:0.4f} seconds")
         return (
-            chr_fig, fig1, fig2, fig3, fig4,  
+            chr_fig, 
+            fig1, fig2, fig3, fig4,  
             update_gene_locals(local_gene_list, chrom, start_coord, end_coord, anchor_name)
         )
+
 
     def update_output_div(chrs, start, stop, anchor_name):
         return f'{start}-{stop}'
@@ -1695,7 +1755,9 @@ def view(params):
 
     def update_gene_locals(local_gene_list, chrs, start_coord, end_coord, anchor_name):
         printme = ""
-        if len(local_gene_list)==1:
+        if local_gene_list is None:
+            printme = ""
+        elif len(local_gene_list)==1:
             printme += "Genes: "
             printme += local_gene_list['name'][0] + ": "
             printme += local_gene_list['attr'][0] #index.query_anno(anchor_name, chrs, start_coord, end_coord)['attr']
@@ -1713,5 +1775,32 @@ def view(params):
     def update_chromosome_list(anchor_name):
         return_me = [{'label': i, 'value': i} for i in index.chrs.loc[anchor_name].index]
         return return_me 
+    
+    #@app.callback(
+    #    Output('chromosome','figure'),
+        
+    #    Input('tabs', 'value'),                  #all
+    #    Input('start-coord-state','children'),   #start_coord div (constant?)
+    #    Input('end-coord-state','children'),     #x_end div (constant?)#
+
+    #    State('selected-chrom-state', 'children'),
+    #    State('selected-anchor-state', 'children'),
+    #    State('chromosome','figure'),
+    #)
+
+    #def update_figure(tab, start_coord, end_coord, chrs, anchor_name, current_figure):
+    #    changed_figure = go.Figure(current_figure)
+    #    changed_figure.append_trace(
+    #        go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord, None, start_coord, end_coord, ], 
+    #            showlegend=False,)
+    #        )
+        #               y=[0.5, 1.5, None, 0.5, 1.5, None, 1.45, 1.45 ],
+        #               mode='lines',
+        #               line_color='#1dd3b0', line_width=8), row=1, col=1)
+        #changed_figure.add_scatter(
+        #    x=[0, random.randint(0, 10000)],
+        #    y=[0, random.randint(0, 10000)]
+        #)
+    #    return changed_figure
 
     app.run_server(host=params.host, port=params.port, debug=not params.ndebug)

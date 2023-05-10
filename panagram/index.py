@@ -541,13 +541,33 @@ class Index:
         if self.gene_tabix.get(genome, None) is None:
             return pd.DataFrame(columns=GENE_TABIX_COLS)
         try:
+            print("PUT STUFF HERE", chrom,  start, end)
+            sys.stderr.write("Different error\n")
+            sys.stderr.flush()
+            sys.stdout.flush()
             rows = self.gene_tabix[genome].fetch(chrom, start, end)
+            print("Finished STUFF HERE", chrom,  start, end)
+            sys.stderr.write("finished error\n")
+            sys.stderr.flush()
+            sys.stdout.flush()
         except ValueError:
             rows = []
 
+        print("next section start", chrom,  start, end)
+        print(rows)
+        #print("^^^^^^^^^^^^^^")
+        sys.stderr.write("next section start error\n")
+        sys.stderr.flush()
+        sys.stdout.flush()
         ret = pd.DataFrame(rows, columns=GENE_TABIX_COLS).astype(GENE_TABIX_TYPES)
+        print("next section finish", chrom,  start, end)
+        print(rows)
+        sys.stderr.write("next section finish error\n")
+        sys.stderr.flush()
+        sys.stdout.flush()
         for a in attrs:
             ret[a.lower()] = ret["attr"].str.extract(f"{a}=([^;]+)")
+        
         return ret
 
     def query_anno(self, genome, chrom, start, end):
