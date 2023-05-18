@@ -22,6 +22,7 @@ from io import StringIO
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import pdist, squareform
 from .index import Index 
+import dash_bootstrap_components as dbc
 
 def view(params):
     SG_window =53
@@ -34,8 +35,9 @@ def view(params):
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
 
     #anchor_name, chrs = index.chrs.index[0]
-    anchor_name = "kakapo"
-    chrs = "S1"
+    anchor_name = "aethiopicum3"
+    chrs = "chr1"
+    annotation_tab_file = "gene_vars.txt"
     #if params.genome is not None:
     #    anchor_name = params.genome
     #if params.chrom is not None:
@@ -57,6 +59,65 @@ def view(params):
     sns.set_palette('viridis', num_samples)
     colors = mcp.gen_color(cmap="viridis_r",n=num_samples)
 
+    def annotation_tab_info(file_name):
+        all_avgs = []
+        all_stds = []
+        all_names = []
+        all_lens = []
+        all_chrs = []
+        all_attr = []
+        all_starts = []
+        all_stops = []
+        with open(file_name, "r") as f:
+            line = f.readline()
+            while line:
+                tmp = line.strip().split('\t')
+                this_avg = float(tmp[4])
+                all_avgs.append(this_avg)
+                all_stds.append(float(tmp[5]))
+                all_names.append(tmp[0])
+                all_lens.append(int(tmp[3])-int(tmp[2]))
+                all_chrs.append(tmp[1])
+                all_attr.append(tmp[6])
+                all_starts.append(int(tmp[2]))
+                all_stops.append(int(tmp[3]))
+                line = f.readline()
+
+        d = {"Standard_dev":all_stds, #np.log10(all_stds),#all_stds,
+            "Average":all_avgs,
+            "Name":all_names,
+            "Length":all_lens,
+            "chr": all_chrs,
+            "attr": all_attr,
+            "start": all_starts,
+            "end": all_stops,
+        }
+        df = pd.DataFrame(d)
+        return df
+
+    def annotation_tab_plot(df, color_by, log2_true):
+        if log2_true == 0:
+            color_me = df[color_by] 
+        else:
+            color_me = np.log2(df[color_by]) 
+        if color_by == "chr":
+            colors = px.colors.sample_colorscale("plasma", [n/(num_chrs[anchor_name] -1) for n in range(num_chrs[anchor_name])])
+            fig = px.scatter(df,x="Average", y="Standard_dev", marginal_y='histogram', 
+                marginal_x='histogram',
+                hover_name="Name", 
+                opacity=0.5,
+                color_discrete_sequence=colors,#px.colors.sequential.Plasma,
+                color=color_me
+            )
+        else: 
+            fig = px.scatter(df,x="Average", y="Standard_dev", marginal_y='histogram', 
+                marginal_x='histogram',
+                hover_name="Name", 
+                opacity=0.5,
+                color=color_me
+            )
+        fig.update_layout(clickmode='event+select') 
+        return fig
 
     def get_newick(node, parent_dist, leaf_names, newick='') -> str:
         """
@@ -1205,14 +1266,17 @@ def view(params):
     config = {"toImageButtonOptions" : {"format" : "svg", "width" : None, "height" : None} , "scrollZoom": False}
     tab_style = {"background-color": "lightgrey", "font-size": 36}
 
+    #Annotation tab info 
+    annotation_tab_df = annotation_tab_info(annotation_tab_file)
+    #All tabs 
     PANGENOME_TAB = [
-            html.Div(id="PanInfo1", children=[
-                html.I("Panagram of " + str(num_samples) + " genomes"),
-                html.Br(),
-                html.Label('Select a genome: '),
-                dcc.Dropdown(labels, anchor_name, style=dict(width='40%', height='110%', verticalAlign="middle"), id="genome_select_dropdown"),
-                html.Br(),
-            ], style={'padding':'1%', 'font-size':'24px', 'textAlign': 'left', "border":"2px grey solid"}),
+            #html.Div(id="PanInfo1", children=[
+            #    html.I("Panagram of " + str(num_samples) + " genomes"),
+            #    html.Br(),
+                #html.Label('Select a genome: '),
+                #dcc.Dropdown(labels, anchor_name, style=dict(width='40%', height='110%', verticalAlign="middle"), id="genome_select_dropdown"),
+                #html.Br(),
+            #], style={'padding':'1%', 'font-size':'24px', 'textAlign': 'left', "border":"2px grey solid"}),
             html.Div(className="w3-half", children=[
                 dcc.Graph(id="all_genomes",style={"font-size": 20, "height" : 1500}, config=config),
             ]),
@@ -1243,8 +1307,8 @@ def view(params):
             html.Div(children=[
                     html.I("Anchor genome " + anchor_name, id="anchor_labels"),
                     html.Br(),
-                    html.Label('Select a chromosome: '),
-                    dcc.Dropdown(chrs_list[anchor_name], chrs, style=dict(width='40%', height='110%', verticalAlign="middle", ), id="chr_select_dropdown"),
+                    #html.Label('Select a chromosome: '),
+                    #dcc.Dropdown(chrs_list[anchor_name], chrs, style=dict(width='40%', height='110%', verticalAlign="middle", ), id="chr_select_dropdown"),
                     html.Br(),
                 ], style={'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 'font-size':'24px', 'textAlign': 'left', "border":"2px grey solid", }),
             html.Div(className="w3-third",children=[
@@ -1271,28 +1335,6 @@ def view(params):
     #def render_chromosome_tab():
     #    return [
     CHROMOSOME_TAB = [
-            html.Div(children=[ # info panel
-                html.Div(children=[ #left side
-                    html.I(anchor_name + "." + chrs + ":", id="chr_name"),
-                    dcc.Input(id="Chrs_Info", placeholder=str(x_start_init) + "-" + str(x_stop_init), debounce=True),
-                    html.Br(),
-                    html.I("Genes in this region: " + str(local_genes), id='regional_genes'),
-                    html.Br(),
-                    html.Label('Pre-selected regions: '),
-                    dcc.Dropdown(pre_bed_info[anchor_name], chrs + ":" + str(x_start_init) + "-" + str(x_stop_init) , style=dict(width='100%', height='110%', verticalAlign="middle", ), id="pre_regions_dropdown"),
-                ],style={"display": "inline-block"}),
-                
-                html.Div(children=[#right side
-                    html.I("K-mer length: " + str(kmer_len),style={"display": "inline-block",}),
-                    html.Br(),
-                    html.I("Number of bins: " + str(bins), style={'display': 'inline-block'}),
-                    html.Br(),
-                    html.I("Step size: " + str(n_skips_start), style={"display": "inline-block",}, id='step_size_out'),
-                    html.Br(),
-                ], style={"display": "inline-block", 'padding-left' : '10%'}),
-
-            ], style = {'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 'font-size':'24px', "border":"2px grey solid"}),
-
             html.Div(children=[ #summary 
                 html.Div(className="w3-container", children=[
                         #left figure
@@ -1338,22 +1380,88 @@ def view(params):
         ]
 
     ANNOTATION_TAB = html.Div(children=[
-            dcc.Graph(id="annotation_conservation",
-                figure=plot_anno_conserve(anchor_name),
-                config=config,
-                style={"height": 1000, "font-size": 20}
-            )
+        html.Div(className="w3-container", children=[
+
+            html.Div(className="w3-threequarter", children=[
+                dcc.Graph(id="annotation_conservation",
+                    figure= annotation_tab_plot(annotation_tab_df, "Length", 1), #plot_anno_conserve(anchor_name),
+                    config=config,
+                    style={"height": 1250, "font-size": 40}
+                    )
+                ]),
+            html.Div(className="w3-quarter", children=[
+                #Control panel for the annotation tab plots 
+                html.I("Color by: ", style={ "font-size": 40}),
+                html.Br(),
+                dcc.RadioItems(
+                    options = [
+                        {'label':' Log2 gene length', 'value':' Log2 gene length' },
+                        {'label':' Gene length', 'value':' Gene length' },
+                        {'label':' Chromosome', 'value':' Chromosome' },
+                        {'label':' Bed file [FUTURE FEATURE]', 'value':' Bed file [FUTURE FEATURE]', 'disabled':True },
+                        {'label':' Selected region [FUTURE FEATURE]', 'value':' Selected region [FUTURE FEATURE]', 'disabled':True }
+                    ], value = " Log2 gene length",
+                    #[' Log2 gene length', ' Gene length', ' Chromosome', ' Bed file [FUTURE FEATURE]'],
+                    #' Log2 gene length', 
+                    labelStyle={"display":"block"}, style={'font-size' : 30, }, id="radios", 
+                ),
+                html.Br(),
+                html.I("", style={ "font-size": 30}, id="annotation_tab_clickdata_Name"),
+                html.Br(),
+                html.I("", style={ "font-size": 30}, id="annotation_tab_clickdata_X"),
+                html.Br(),
+                html.I("", style={ "font-size": 30}, id="annotation_tab_clickdata_Y"),
+                html.Br(),
+                html.I("", style={ "font-size": 30}, id="annotation_tab_clickdata_Color"),
+                html.Br(),
+                html.P("", style={ "font-size": 30, "overflow-wrap": "break-word"}, id="annotation_tab_clickdata_Attr"),
+                
+                ], style={'padding' : '1%', "height": 1250}),
+            ])#"border":"2px grey solid"
         ])
 
     app = dash.Dash(__name__,
-        external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css"],
+        external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css" ], #, dbc.themes.BOOTSTRAP],
         url_base_pathname=params.url_base,
         suppress_callback_exceptions=True
     ) 
     #app = Dash(__name__, external_stylesheets=[dbc.themes.PULSE, dbc_css])
     app.layout = html.Div([
         #html.Div(id = 'parent', children = [
-        html.H1(id = 'H1', children = 'Panagram', style = {'textAlign':'center', "font-size": 64}), 
+        html.H1(id = 'H1', children = 'Panagram', style = {'textAlign':'center', "font-size": 64, 'padding' : '1%'}), 
+        html.Div(children=[
+            html.Div(children = [
+            #html.Br(),
+                html.I("Panagram of " + str(num_samples) + " genomes"),
+                html.Br(),
+                html.I("K-mer length: " + str(kmer_len),style={"display": "inline-block",}),
+                html.Br(),
+                html.I("Number of bins: " + str(bins), style={'display': 'inline-block'}),
+                html.Br(),
+                html.I("Step size: " + str(n_skips_start), style={"display": "inline-block",}, id='step_size_out'),
+                #html.Br()
+                ], style={"display": "inline-block", 'padding-left': '1%'}),
+            html.Div(children = [
+                html.Label('Select a genome: '),
+                dcc.Dropdown(labels, anchor_name, style=dict(width='110%', height='100%', verticalAlign="middle"), id="genome_select_dropdown"),
+                #html.Br(),#style=dict(width='100%', height='110%', verticalAlign="middle", )
+                html.Label('Select a chromosome: '),
+                dcc.Dropdown(chrs_list[anchor_name], "", style=dict(width='110%', height='100%', verticalAlign="middle", ), id="chr_select_dropdown"),
+
+                #html.Br(),
+            ], style={"display": "inline-block", 'padding-left' : '10%', 'vertical-align': 'text-bottom'}),
+            html.Div(children = [
+                html.I(anchor_name + "." + chrs + ":", id="chr_name"),
+                dcc.Input(id="Chrs_Info", placeholder=str(x_start_init) + "-" + str(x_stop_init)+ "          ", debounce=True),
+                html.Br(),
+                html.I("Genes in this region: " + str(local_genes), id='regional_genes'),
+                html.Br(),
+                html.Label('Pre-selected regions: '),
+                dcc.Dropdown(pre_bed_info[anchor_name], chrs + ":" + str(x_start_init) + "-" + str(x_stop_init) , style=dict(width='100%', height='110%', verticalAlign="middle", ), id="pre_regions_dropdown"),
+                
+            ], style={"display": "inline-block", 'padding-left' : '10%', 'vertical-align': 'text-bottom'}),
+
+        ], style = {'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 'font-size':'30px', "border":"2px grey solid"}),
         #html.Div(className="loader-wrapper", children=[
             dcc.Loading(id='loading-tabs', parent_className='loading_wrapper', type="default", className='dash-spinner', 
                 children=dcc.Tabs(id="tabs", value="pangenome", style={"font-size": 36}, children=[
@@ -1398,14 +1506,7 @@ def view(params):
 
         return anchor, chrom, start, end
     
-    #@app.callback(
-    #    Output("loading-tabs", "children"),
-    #    Input("loading-input-1", "value"),
-    #    prevent_initial_call=True,
-    #)
-    #def input_triggers_spinner(value):
-    #    time.sleep(2)
-    #return value
+
 
     @app.callback(
         Output('selected-anchor-state', 'children'), #pangenome
@@ -1418,7 +1519,14 @@ def view(params):
         Output('chr_name', 'children'),              #chromosome
         #Output('chromosome','figure'),
         #Output('gene-names-state','children'),
+        #Annotation output 
+        Output('annotation_tab_clickdata_Name', 'children'),
+        Output('annotation_tab_clickdata_X', 'children'),
+        Output('annotation_tab_clickdata_Y', 'children'),
+        Output('annotation_tab_clickdata_Color', 'children'),
+        Output('annotation_tab_clickdata_Attr', 'children'),
 
+        Input('annotation_conservation', 'clickData'),
         Input('genome_select_dropdown', 'value'),     #pangenome, anchor, chromosome
         Input('chr_select_dropdown', 'value'),   #anchor, chromosome
         Input('all_chromosomes','relayoutData'), #anchor -> chromosome
@@ -1440,14 +1548,16 @@ def view(params):
         State('chr-genes-state', 'children'),
         #State('chromosome','figure'),
     )
-    def nav_callback(anchor_dropdown, chr_dropdown, anctab_chrs_relayout, chrtab_primary_click, chrtab_primary_relayout, chrtab_chr_select, chrtab_gene_click, user_chr_coords, pre_selected_region, anchor, chrom, start_coord, end_coord, chr_genes):
+    def nav_callback(anno_clickdata, anchor_dropdown, chr_dropdown, anctab_chrs_relayout, chrtab_primary_click, chrtab_primary_relayout, chrtab_chr_select, chrtab_gene_click, user_chr_coords, pre_selected_region, anchor, chrom, start_coord, end_coord, chr_genes):
         triggered_id = ctx.triggered_id
 
         n_skips = 100
         click_me_genes = True
         click_me_rep = True
         print("Triggered_id: "+ str(triggered_id))
-        #gene_names = no_update
+        
+        tmp_name, tmp_x, tmp_y, tmp_color, tmp_attr = no_update, no_update, no_update, no_update, no_update #json.dumps(clickData, indent=2)
+
         if triggered_id == "genome_select_dropdown":
             anchor, chrom, start_coord, end_coord = set_coords(anchor_dropdown)
 
@@ -1479,14 +1589,6 @@ def view(params):
                 
                 chrom = index.chrs.index[chr_num-1]
                 anchor, chrom, start_coord, end_coord = set_coords(anchor, chrom)
-                #chrs_fig = plot_chr_whole(start_coord, end_coord, anchor_name, chrom, all_genes)
-                #try:
-                #    all_genes = index.query_genes(anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"])
-                #except: 
-                #    print("updating figs exception")
-                #bounds = all_genes.loc[:, ["start", "end"]]
-                #bounds["break"] = None
-                #gene_names = all_genes["name"]
 
         #Chromosome gene plot, triggers CHROMOSOME
         elif triggered_id == 'Genes':
@@ -1524,20 +1626,60 @@ def view(params):
             if chrtab_primary_relayout != None and 'xaxis4.range[0]' in chrtab_primary_relayout.keys():
                 start_coord = int(chrtab_primary_relayout['xaxis4.range[0]'])
                 end_coord = int(chrtab_primary_relayout['xaxis4.range[1]'])
-            #elif chrtab_primary_click != None:
+        
+        #Annotation tab triggered when gene is selected in annotation plot 
+        elif triggered_id == 'annotation_conservation':
+            this_gene_info = annotation_tab_df.loc[annotation_tab_df['Name'] == str(anno_clickdata['points'][0]['hovertext'])]
+            print(this_gene_info['chr'].iloc[0])
+            print(this_gene_info['start'].iloc[0])
+            print(this_gene_info['end'].iloc[0])
+            tmp_name = "Name: " + str(anno_clickdata['points'][0]['hovertext'])
+            tmp_x = "X: " + str(anno_clickdata['points'][0]['x'])
+            tmp_y = "Y: " + str(anno_clickdata['points'][0]['y'])
+            tmp_color = "Color: " + str(anno_clickdata['points'][0]['marker.color'])
+            chrom = this_gene_info['chr'].iloc[0]
+            start_coord = this_gene_info['start'].iloc[0]
+            end_coord = this_gene_info['end'].iloc[0]
+            tmp_attr = "Attributes: " + str(annotation_tab_df.loc[annotation_tab_df['Name'] == str(anno_clickdata['points'][0]['hovertext']), 'attr'].iloc[0])
+            
+            #tmp_name, tmp_x, tmp_y, tmp_color, tmp_attr#json.dumps(clickData, indent=2)
 
-        if (end_coord - start_coord) <= bins:
-            start_coord = start_coord - 175
-            end_coord = end_coord + 175
+        #if (end_coord - start_coord) <= bins:
+        #    start_coord = start_coord - 50
+        #    end_coord = end_coord + 50
 
         return (
             anchor, chrom, start_coord, end_coord, #chr_genes,
             chrtab_chr_select,
             update_output_div(chrom, start_coord, end_coord, anchor), 
             update_out_chr(chrom, anchor), 
-            #gene_names,
-            #chrs_fig
+            tmp_name, tmp_x, tmp_y, tmp_color, tmp_attr
         )
+
+
+    @app.callback(
+        Output("annotation_conservation", "figure"), 
+        Input("radios", "value"),
+        #State("parent", "children")
+    )
+    def annotation_tab_callback(radio_input):
+        print("Radio button")
+        print(radio_input)
+        log2_true = 0
+        if radio_input == " Log2 gene length":
+            color_by_input = "Length"
+            log2_true = 1 
+        elif radio_input == " Gene length":
+            color_by_input = "Length"
+        elif radio_input == " Chromosome":
+            color_by_input = "chr"
+        elif radio_input == "Bed file":
+            color_by_input = "bed"
+        else: 
+            color_by_input = "selected"
+
+        fig = annotation_tab_plot(annotation_tab_df, color_by_input, log2_true)
+        return fig
 
 
     @app.callback(
@@ -1554,18 +1696,21 @@ def view(params):
         if tab != "pangenome":
             return ({},)*5 #+ (no_update,)
         print("pangenome_callback")
-        triggered_id = ctx.triggered_id            
+        triggered_id = ctx.triggered_id 
+        print(triggered_id)  
+        if triggered_id == "tabs":
+            return all_genomes_dend_fig, pangenome_comp_fig, make_genome_count_plot(anchor_name), plot_avgs(anchor_name), make_genome_size_plot(anchor_name)      
         if triggered_id != "selected-anchor-state":
             return (no_update,)*5 
         return all_genomes_dend_fig, pangenome_comp_fig, make_genome_count_plot(anchor_name), plot_avgs(anchor_name), make_genome_size_plot(anchor_name)#, anchor_name
 
     @app.callback(
-        Output('all_chromosomes', 'figure'),         #anchor
-        Output('gene_content', 'figure'),            #anchor
-        Output('genes_per_chr', 'figure'),           #anchor
-        Output('avg_kmer_chr', 'figure'),            #anchor
-        Output('chr_select_dropdown', 'options'),    #anchor
-        Output('anchor_labels', 'children'),         #anchor
+        Output('all_chromosomes', 'figure'),          #anchor
+        Output('gene_content', 'figure'),             #anchor
+        Output('genes_per_chr', 'figure'),            #anchor
+        Output('avg_kmer_chr', 'figure'),             #anchor
+        Output('chr_select_dropdown', 'options'),     #anchor
+        Output('anchor_labels', 'children'),          #anchor
         #Output('selected-chrom-state', 'children'),  #anchor
 
         Input('tabs', 'value'),
@@ -1617,16 +1762,6 @@ def view(params):
         click_me_rep = True
         chr_num = chrs_list[anchor_name].get_loc(chrs)+1
         #This should be the first time the chromosome callback is called? 
-        #try:
-        #    all_genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
-        #except: 
-        #    print("updating figs exception")
-        #bounds = all_genes.loc[:, ["start", "end"]]
-        #bounds["break"] = None
-        #gene_names = all_genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
-        #Bookmarks, select from chromosome, triggers CHROMOSOME
-        #toc = time.perf_counter()
-        #print(f"pre update all in {toc - tic:0.4f} seconds")
         return update_all_figs( chr_num, click_me_rep, click_me_genes, chrs, anchor_name, 0, start_coord, end_coord,n_skips) 
 
     def update_all_figs( chr_num, click_me_rep, click_me_genes, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
@@ -1730,14 +1865,6 @@ def view(params):
         toc_tmp_11 = time.perf_counter()
         print(f"plots sorted in {toc_tmp_11 - toc_tmp_10:0.4f} seconds")
 
-        #else:
-        #    big_plot = no_update
-        #    pg_sizes_fig = no_update
-        #    pg_avgs = no_update
-        #    pg_scaffolds_fig = no_update
-        #    tab2_gene_density_fig = no_update
-        #    tab2_avg_fig = no_update
-        #    tab2_sorted_genes = no_update
         toc = time.perf_counter()
         print(f"Update all in {toc - tic:0.4f} seconds")
         return (
@@ -1775,32 +1902,5 @@ def view(params):
     def update_chromosome_list(anchor_name):
         return_me = [{'label': i, 'value': i} for i in index.chrs.loc[anchor_name].index]
         return return_me 
-    
-    #@app.callback(
-    #    Output('chromosome','figure'),
-        
-    #    Input('tabs', 'value'),                  #all
-    #    Input('start-coord-state','children'),   #start_coord div (constant?)
-    #    Input('end-coord-state','children'),     #x_end div (constant?)#
-
-    #    State('selected-chrom-state', 'children'),
-    #    State('selected-anchor-state', 'children'),
-    #    State('chromosome','figure'),
-    #)
-
-    #def update_figure(tab, start_coord, end_coord, chrs, anchor_name, current_figure):
-    #    changed_figure = go.Figure(current_figure)
-    #    changed_figure.append_trace(
-    #        go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord, None, start_coord, end_coord, ], 
-    #            showlegend=False,)
-    #        )
-        #               y=[0.5, 1.5, None, 0.5, 1.5, None, 1.45, 1.45 ],
-        #               mode='lines',
-        #               line_color='#1dd3b0', line_width=8), row=1, col=1)
-        #changed_figure.add_scatter(
-        #    x=[0, random.randint(0, 10000)],
-        #    y=[0, random.randint(0, 10000)]
-        #)
-    #    return changed_figure
 
     app.run_server(host=params.host, port=params.port, debug=not params.ndebug)
