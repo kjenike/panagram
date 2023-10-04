@@ -180,6 +180,11 @@ shigella = "gffs/shigella_GCF_000006925.2_ASM692v2_genomic.gff"
 - Right now, there is a bug (issue #7) when indexing very large genomes with very large chromosomes. We are activley working to fix this. 
 - Indexing sometimes fails when working with more than 32 genomes 
 - Mash dendogram leaf placement is not always perfect
-- Installing on a mac can be tricky. Will need to include a more detailed list of dependancies 
+- Installing on a mac can be tricky. Will need to include a more detailed list of dependancies
+
+# Ideas for improvement
+- Add a row for gene coverage (rather than just gene density) for the third tab.
+- Update the step size in the control panel.
+- Add the actual sequence. 
 
 ## More information coming soon!
