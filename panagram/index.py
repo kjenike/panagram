@@ -537,9 +537,9 @@ class Index:
     def query_bitmap(self, genome, chrom, start=None, end=None, step=1):
         return self.bitmaps[genome].query(chrom, start, end, step)
 
-    def query_genes(self, genome, chrom, start, end, attrs=["Name"]):
+    def query_genes(self, genome, chrom, start, end, attrs=["name"]):
         if self.gene_tabix.get(genome, None) is None:
-            return pd.DataFrame(columns=GENE_TABIX_COLS)
+            return pd.DataFrame(columns=GENE_TABIX_COLS+attrs)
         try:
             print("PUT STUFF HERE", chrom,  start, end)
             sys.stderr.write("Different error\n")
