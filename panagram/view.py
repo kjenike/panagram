@@ -22,7 +22,6 @@ from io import StringIO
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import pdist, squareform
 from .index import Index 
-import dash_bootstrap_components as dbc
 
 def view(params):
     SG_window =53
@@ -34,14 +33,12 @@ def view(params):
 
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
 
-    #anchor_name, chrs = index.chrs.index[0]
-    anchor_name = "aethiopicum3"
-    chrs = "chr1"
+    anchor_name, chrs = index.chrs.index[0]
     annotation_tab_file = "gene_vars.txt"
-    #if params.genome is not None:
-    #    anchor_name = params.genome
-    #if params.chrom is not None:
-    #    chrs = params.chrom
+    if params.genome is not None:
+        anchor_name = params.genome
+    if params.chrom is not None:
+        chrs = params.chrom
 
     x_start_init = 0 if params.start is None else params.start
     xe = 1000000 #index.chrs.loc[(anchor_name,chrs),"size"]
@@ -1267,7 +1264,7 @@ def view(params):
     tab_style = {"background-color": "lightgrey", "font-size": 36}
 
     #Annotation tab info 
-    annotation_tab_df = annotation_tab_info(annotation_tab_file)
+    #annotation_tab_df = annotation_tab_info(annotation_tab_file)
     #All tabs 
     PANGENOME_TAB = [
             #html.Div(id="PanInfo1", children=[
@@ -1384,7 +1381,7 @@ def view(params):
 
             html.Div(className="w3-threequarter", children=[
                 dcc.Graph(id="annotation_conservation",
-                    figure= annotation_tab_plot(annotation_tab_df, "Length", 1), #plot_anno_conserve(anchor_name),
+                    #figure= annotation_tab_plot(annotation_tab_df, "Length", 1), #plot_anno_conserve(anchor_name),
                     config=config,
                     style={"height": 1250, "font-size": 40}
                     )
@@ -1678,7 +1675,7 @@ def view(params):
         else: 
             color_by_input = "selected"
 
-        fig = annotation_tab_plot(annotation_tab_df, color_by_input, log2_true)
+        fig = go.Figure()#annotation_tab_plot(annotation_tab_df, color_by_input, log2_true)
         return fig
 
 
