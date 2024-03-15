@@ -33,13 +33,11 @@ def view(params):
 
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
 
-    #anchor_name, chrs = index.chrs.index[0]
-    anchor_name = "kakapo"
-    chrs = "S1"
-    #if params.genome is not None:
-    #    anchor_name = params.genome
-    #if params.chrom is not None:
-    #    chrs = params.chrom
+    anchor_name, chrs = index.chrs.index[0]
+    if params.genome is not None:
+        anchor_name = params.genome
+    if params.chrom is not None:
+        chrs = params.chrom
 
     x_start_init = 0 if params.start is None else params.start
     xe = 1000000 #index.chrs.loc[(anchor_name,chrs),"size"]
@@ -1642,6 +1640,7 @@ def view(params):
             print("updating figs exception")
         bounds = all_genes.loc[:, ["start", "end"]]
         bounds["break"] = None
+        print(all_genes)
         gene_names = all_genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
         toc_tmp = time.perf_counter()
         print(f"All_genes in {toc_tmp - tic:0.4f} seconds")
