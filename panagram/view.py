@@ -1774,6 +1774,7 @@ def view(params):
             print("updating figs exception")
         bounds = all_genes.loc[:, ["start", "end"]]
         bounds["break"] = None
+        print(all_genes)
         gene_names = all_genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
         toc_tmp = time.perf_counter()
         print(f"All_genes in {toc_tmp - tic:0.4f} seconds")
