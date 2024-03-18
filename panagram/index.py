@@ -108,6 +108,7 @@ class Index:
             else:
                 setattr(root, key, val)
 
+    #panagram index command
     def run(self):
         self.write()#args)
         self.close()
@@ -240,6 +241,7 @@ class Index:
 
         self.genome_occ_avg = (self.genome_occ_freq["total"]*self._occ_idx).sum(axis=1).sort_values()
         self.chr_occ_avg = (self.chr_occ_freq["total"]*self._occ_idx).sum(axis=1).sort_values()
+        self.chrs = self.chrs[self.chrs.columns[~(total_cols | gene_cols)]]
 
     @property
     def genome_occs():
@@ -466,17 +468,11 @@ class Index:
         return pysam.TabixFile(fname, parser=pysam.asTuple(), index=index_fname)
     
     def _write_chrs(self):
+        out = self.chrs.copy()
         cols_out = ["_occ_".join(map(str, c)) if isinstance(c, tuple) else c
-                    for c in self.chrs.columns]
+                    for c in out.columns]
 
-        #for c in self.chrs.columns:
-        #    print(c, type(c))
-        #print(self.chrs)
-        #join = self.chrs.columns.str.join("_occ_")
-        #print(join)
-        print(cols_out)
-        out = self.chrs.set_axis(cols_out, axis="columns")
-        print(out)
+        out = out.set_axis(cols_out, axis="columns")
         out.to_csv(f"{self.prefix}/chrs.csv")
 
     def tabix_fname(self, genome, typ):
@@ -541,30 +537,11 @@ class Index:
         if self.gene_tabix.get(genome, None) is None:
             return pd.DataFrame(columns=GENE_TABIX_COLS+attrs)
         try:
-            #print("PUT STUFF HERE", chrom,  start, end)
-            #sys.stderr.write("Different error\n")
-            #sys.stderr.flush()
-            #sys.stdout.flush()
             rows = self.gene_tabix[genome].fetch(chrom, start, end)
-            #print("Finished STUFF HERE", chrom,  start, end)
-            #sys.stderr.write("finished error\n")
-            #sys.stderr.flush()
-            #sys.stdout.flush()
         except ValueError:
             rows = []
 
-        #print("next section start", chrom,  start, end)
-        #print(rows)
-        #print("^^^^^^^^^^^^^^")
-        #sys.stderr.write("next section start error\n")
-        #sys.stderr.flush()
-        #sys.stdout.flush()
         ret = pd.DataFrame(rows, columns=GENE_TABIX_COLS).astype(GENE_TABIX_TYPES)
-        #print("next section finish", chrom,  start, end)
-        #print(rows)
-        #sys.stderr.write("next section finish error\n")
-        #sys.stderr.flush()
-        #sys.stdout.flush()
         for a in attrs:
             ret[a.lower()] = ret["attr"].str.extract(f"{a}=([^;]+)")
         
