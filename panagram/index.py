@@ -176,12 +176,27 @@ class Index:
         self._load_chr_bins()
 
     def _load_chr_bins(self):
-        arr = np.fromfile(self.chr_bins_fname, "uint32")
+        if not os.path.exists(self.chr_bins_fname) and os.path.exists(self.chr_bins_fname_old):
+            self._load_chr_bins_old()
+            return
+        df = pd.DataFrame(np.load(self.chr_bins_fname))#,columns=["genome","chr","start"]+list(self._total_occ_idx))
+        df[0] = self.genomes[df[0]]
+        df = df.set_index(0)
+        chrs = list()
+        for g in self.genomes:
+            chrs.append(self.chrs.loc[g].index[df.loc[g][1]].to_numpy())
+        df[1] = np.concatenate(chrs)
+        self.chr_bins = df.set_index([1,2],append=True)
+        self.chr_bins.index.names = ["genome","chr","start"]
+        self.chr_bins.columns = self._total_occ_idx
+        
+    def _load_chr_bins_old(self):
+        sys.stderr.write("Loading legacy chr_bins format\n")
+        arr = np.fromfile(self.chr_bins_fname_old, "uint32")
         arr = arr.reshape((len(arr)//self.ngenomes, self.ngenomes))
 
-        idx = pd.MultiIndex.from_frame(pd.concat([self.chr_bin_coords(*ch).drop(columns=["end"]) for ch in self.chrs.index]))
+        idx = pd.MultiIndex.from_frame(pd.concat([self.chr_bin_coords(*ch) for ch in self.chrs.index]))
         self.chr_bins = pd.DataFrame(arr, columns=self._total_occ_idx, index=idx).sort_index()
-        #self.chr_bins = pd.read_pickle(self.chr_bins_fname)
 
     def init_dir(self, path):
         d = os.path.join(self.prefix, path)
@@ -369,9 +384,10 @@ class Index:
         self.chrs[self._total_occ_idx] = 0
         self.chrs[self._gene_occ_idx] = 0
 
-        chr_bins_out = open(self.chr_bins_fname, "wb")
+        #chr_bins_out = open(self.chr_bins_fname_old, "wb")
         #bin_coords = list()
         #chr_bin_occs = list()
+        rows = list()
 
         prev_genome = None
         for (genome,chrom),size in self.chrs["size"].items():
@@ -385,15 +401,21 @@ class Index:
             chr_counts = self.count_occs(occs)
             self.chrs.loc[(genome,chrom), self._total_occ_idx] = chr_counts
 
-            coords = self.chr_bin_coords(genome,chrom)
+            coords = self.chr_bin_coords(genome,chrom,True)
+            #chr_bins_out.write(np.uint32(-1))
 
             for i,c in coords.iterrows():
                 st = c["start"] // self.lowres_step
-                en = c["end"] // self.lowres_step
+                en = (c["start"]+self.chr_bin_kbp*1000) // self.lowres_step
+#c["end"] // self.lowres_step
                 bin_counts = self.count_occs(occs[st:en])
-                chr_bins_out.write(bin_counts.tobytes())
+                rows.append(np.concatenate([c.to_numpy(), bin_counts]))
+                #chr_bins_out.write(row.tobytes())
+                #chr_bins_out.write(bin_counts.tobytes())
 
-        chr_bins_out.close()
+        #chr_bins_out.close()
+        out = np.array(rows)
+        np.save(self.chr_bins_fname,out,allow_pickle=False)
 
         #self.chrs.to_csv(f"{self.prefix}/chrs.csv")
         self._write_chrs()
@@ -425,15 +447,22 @@ class Index:
         return f"{self.prefix}/panagram.toml"
 
     @property
-    def chr_bins_fname(self):
+    def chr_bins_fname_old(self):
         return f"{self.prefix}/bins_{self.chr_bin_kbp}kbp.bin"
 
-    def chr_bin_coords(self, genome, chrom):
+    @property
+    def chr_bins_fname(self):
+        return f"{self.prefix}/bins_{self.chr_bin_kbp}kbp.npy"
+
+    def chr_bin_coords(self, genome, chrom, int_idx=False):
         binlen = self.chr_bin_kbp*1000
         size = self.chrs.loc[(genome,chrom),"size"]
         starts = np.arange(0,size,binlen)
-        ends = np.clip(starts+binlen, 0, size)
-        ret = pd.DataFrame({"genome" : genome, "chr" : chrom, "start" : starts, "end" : ends})
+        #ends = np.clip(starts+binlen, 0, size)
+        if int_idx:
+            chrom = self.chrs.loc[genome].index.get_loc(chrom)
+            genome = self.genomes.get_loc(genome)
+        ret = pd.DataFrame({"genome" : genome, "chr" : chrom, "start" : starts})#, "end" : ends
         return ret
 
     def query_occ_counts(self, genome, chrom, start, end, step=1):
