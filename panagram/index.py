@@ -167,36 +167,18 @@ class Index:
             self.gene_tabix[g] = self._load_tabix(g, "gene")
             self.anno_tabix[g] = self._load_tabix(g, "anno")
 
-        if self.chr_bin_kbp is None:
-            fnames = glob.glob(f"{self.prefix}/bins_*kbp.bin")
-            if len(fnames) != 1:
-                raise RuntimeError(f"Exactly one chromosome bin file must be present, found {len(fnames)}: {fnames}")
-            self.chr_bin_kbp = int(fnames[0].split("_")[-1][:-7])
+        self.chr_bins = pd.concat({
+            genome : self.bitmaps[genome].get_bin_counts().droplevel("end")
+            for genome in self.anchor_genomes
+        }, names=["genome","chr","start"]).sort_index()
 
-        self._load_chr_bins()
+        #if self.chr_bin_kbp is None:
+        #    fnames = glob.glob(f"{self.prefix}/bins_*kbp.bin")
+        #    if len(fnames) != 1:
+        #        raise RuntimeError(f"Exactly one chromosome bin file must be present, found {len(fnames)}: {fnames}")
+        #    self.chr_bin_kbp = int(fnames[0].split("_")[-1][:-7])
 
-    def _load_chr_bins(self):
-        if not os.path.exists(self.chr_bins_fname) and os.path.exists(self.chr_bins_fname_old):
-            self._load_chr_bins_old()
-            return
-        df = pd.DataFrame(np.load(self.chr_bins_fname))#,columns=["genome","chr","start"]+list(self._total_occ_idx))
-        df[0] = self.genomes[df[0]]
-        df = df.set_index(0)
-        chrs = list()
-        for g in self.genomes:
-            chrs.append(self.chrs.loc[g].index[df.loc[g][1]].to_numpy())
-        df[1] = np.concatenate(chrs)
-        self.chr_bins = df.set_index([1,2],append=True)
-        self.chr_bins.index.names = ["genome","chr","start"]
-        self.chr_bins.columns = self._total_occ_idx
-        
-    def _load_chr_bins_old(self):
-        sys.stderr.write("Loading legacy chr_bins format\n")
-        arr = np.fromfile(self.chr_bins_fname_old, "uint32")
-        arr = arr.reshape((len(arr)//self.ngenomes, self.ngenomes))
 
-        idx = pd.MultiIndex.from_frame(pd.concat([self.chr_bin_coords(*ch) for ch in self.chrs.index]))
-        self.chr_bins = pd.DataFrame(arr, columns=self._total_occ_idx, index=idx).sort_index()
 
     def init_dir(self, path):
         d = os.path.join(self.prefix, path)
@@ -407,7 +389,6 @@ class Index:
             for i,c in coords.iterrows():
                 st = c["start"] // self.lowres_step
                 en = (c["start"]+self.chr_bin_kbp*1000) // self.lowres_step
-#c["end"] // self.lowres_step
                 bin_counts = self.count_occs(occs[st:en])
                 rows.append(np.concatenate([c.to_numpy(), bin_counts]))
                 #chr_bins_out.write(row.tobytes())
@@ -742,6 +723,11 @@ class KmerBitmap:
                 step = int(fname.split(".")[-2])
                 self.steps.append(step)
 
+    @property
+    def bins_fname(self): 
+        kb = self.conf["chr_bin_kbp"]
+        return f"{self.prefix}.{kb}kb.csv"
+
     def bgz_fname(self, step): 
         return f"{self.prefix}.{step}.{BGZ_SUFFIX}"
 
@@ -757,6 +743,13 @@ class KmerBitmap:
 
         self.blocks = {s : self.load_bgz_blocks(self.idx_fname(s)) for s in self.steps}
         self.bitmaps = {s : bgzf.BgzfReader(self.bgz_fname(s), "rb") for s in self.steps}
+
+    def get_bin_counts(self):
+        df = pd.read_csv(self.bins_fname)
+        df["chr"] = self.chrs[df["chr"]]
+        df.set_index(["chr","start","end"],inplace=True)
+        df.columns = df.columns.astype(int)
+        return df
 
     @property
     def chrs(self):
@@ -840,6 +833,7 @@ class KmerBitmap:
 
         #self.bitmaps = {s : bgzf.BgzfWriter(self.bgz_fname(s), "wb") for s in self.steps}
         self.bitmaps = {s : bgzip.BGZipWriter(open(self.bgz_fname(s), "wb"))for s in self.steps}
+        bin_counts = dict()
 
         gi = self.anchor_id
         name = self.anchor_name
@@ -853,7 +847,7 @@ class KmerBitmap:
         #with open(self.fasta, "r") as fasta:
             t = time()
             #for seq_name in fasta.references: 
-            for rec in SeqIO.parse(fasta, "fasta"):
+            for i,rec in enumerate(SeqIO.parse(fasta, "fasta")):
                 seq_name = rec.id
                 seq = str(rec.seq)
 
@@ -861,10 +855,10 @@ class KmerBitmap:
                 #arrs_100nt = list()
                 byte_arrs = defaultdict(list)
 
-                def nbytes(i):
+                def nbytes(k):
                     if self.nbytes <= 4:
                         return self.nbytes
-                    elif i == len(self.kmc_dbs)-1 and self.nbytes % 4 > 0:
+                    elif k == len(self.kmc_dbs)-1 and self.nbytes % 4 > 0:
                         return self.nbytes % 4
                     else:
                         return 4
@@ -881,21 +875,36 @@ class KmerBitmap:
                         sizes[s].append(len(a))
 
                 size = None
+                arrs = dict()
                 for step,arr in byte_arrs.items():
-                    arr = np.concatenate(arr, axis=1)
-                    self.bitmaps[step].write(arr.tobytes())
-                    self.bitmap_lens[step] += len(arr)
+                    arrs[step] = np.concatenate(arr, axis=1)
+                    self.bitmaps[step].write(arrs[step].tobytes())
+                    self.bitmap_lens[step] += len(arrs[step])
                     if step == 1:
                         size = len(arr)
+
+                #pacbytes
+                occs = np.unpackbits(arrs[1], bitorder="little", axis=1)[:,:self.ngenomes].sum(axis=1)
+
+                binlen = self.conf["chr_bin_kbp"]*1000
+                starts = np.arange(0,len(occs),binlen)
+                ends = np.clip(starts+binlen, 0, len(occs))
+                coords = pd.MultiIndex.from_arrays([starts, ends])
+                cols = np.arange(self.ngenomes)+1
+                bin_counts[i] = pd.DataFrame([
+                    pd.value_counts(occs[st:en]).reindex(cols) for st,en in coords
+                ], index=coords)
 
                 self.seq_lens[gi][seq_name] = size
                 sys.stdout.write(f"Anchored {seq_name}\n")
                 sys.stdout.flush()
 
-
                 t = time()
 
         self.close()
+        
+        bin_counts = pd.concat(bin_counts,names=["chr","start","end"])
+        bin_counts.to_csv(self.bins_fname)
 
         for step in self.steps:
             subprocess.check_call([
