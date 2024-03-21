@@ -674,8 +674,8 @@ def view(params):
         return z_genes
 
     def plot_chr_whole( start_coord, end_coord, anchor_name, this_chr, genes): 
-        z_1 = index.chr_bins.loc[anchor_name, ("total",1)][this_chr]
-        z_9 = index.chr_bins.loc[anchor_name, ("total", num_samples)][this_chr]
+        z_1 = index.chr_bins.loc[(anchor_name,this_chr), 1]
+        z_9 = index.chr_bins.loc[(anchor_name,this_chr), num_samples]
         y, x = [], []
         cntr = 0
         for xtmp in z_1:
@@ -756,9 +756,9 @@ def view(params):
         for chrom in index.chrs.loc[anchor_name].index:
             x = list(index.chr_bins.loc[(anchor_name, chrom)].index)
             if len(x)!=1:
-                wg_fig.append_trace(go.Heatmap(x=x, z=index.chr_bins.loc[anchor_name, ("total",num_samples)][chrom], 
+                wg_fig.append_trace(go.Heatmap(x=x, z=index.chr_bins.loc[(anchor_name,chrom),num_samples], 
                     y=[1]*(len(x)), type = 'heatmap', colorscale='magma_r', showlegend=False,showscale=False), row=((cntr*3)-2), col=1)
-                wg_fig.append_trace(go.Heatmap(x=x, z=index.chr_bins.loc[anchor_name, ("total",1)][chrom], 
+                wg_fig.append_trace(go.Heatmap(x=x, z=index.chr_bins.loc[(anchor_name,chrom), 1], 
                     y=[1]*(len(x)), type = 'heatmap', colorscale='magma', showscale=False), row=((cntr*3)-1), col=1)
             
             if cntr == 1:
