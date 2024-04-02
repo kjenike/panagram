@@ -13,12 +13,13 @@ import pysam
 from collections import defaultdict
 from time import time
 from Bio import bgzf, SeqIO
-import toml
+import yaml
 import multiprocessing as mp
 from types import SimpleNamespace
 
 import dataclasses
 from simple_parsing import field
+from simple_parsing.helpers import Serializable
 from typing import Any, List, Tuple, Type, Union
 import argparse
 
@@ -35,12 +36,10 @@ GENE_TABIX_COLS = TABIX_COLS + ["unique","universal"]
 GENE_TABIX_TYPES = {"start" : int, "end" : int, "unique" : int, "universal" : int}
 TABIX_SUFFIX = ".bgz"
 
-REQUIRED_FILES = ["panagram.toml", "chrs.csv", "bins_*.bin", "anchors/*bgz", "anchors/*gzi"]
-
 MODES = {"r","w"}
 
 @dataclasses.dataclass
-class KMC:
+class KMC(Serializable):
     """Parameters for KMC kmer counting"""
     memory: int = field(default=8, dest="main.kmc.memory")
     processes: int = field(default=4, dest="main.kmc.processes")
@@ -50,11 +49,13 @@ class KMC:
     use_existing: bool = field(action="store_true", default=False)
 
 @dataclasses.dataclass
-class Index:
+class Index(Serializable):
     """Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap"""
 
-    #configuration file (toml)
+    #configuration file (yaml)
     input: str = field(positional=True, metavar="config_file")
+
+    mode: str = field(default=None, help=argparse.SUPPRESS)
 
     prefix: str = field(alias=["-o"], default=None)
 
@@ -84,7 +85,10 @@ class Index:
     #Only perform annotaion
     anno_only: bool = field(default=False, action="store_true")
 
-    kmc: KMC = KMC()
+    kmc: KMC = field(default_factory=lambda:KMC())
+
+    #Configuration file in YAML format
+    #config: str = field(default=None)
 
     fasta: dict = field(default_factory=dict,help=argparse.SUPPRESS)
     fastq: dict = field(default_factory=dict,help=argparse.SUPPRESS)
@@ -96,6 +100,7 @@ class Index:
     memory: int = field(default=1,help=argparse.SUPPRESS)
 
     def _load_dict(self, root, vals):
+        print(vals)
         for key,val in vals.items():
             dest = getattr(root, key, None)
             if dataclasses.is_dataclass(dest):
@@ -116,47 +121,110 @@ class Index:
     @property
     def params(self):
         return dataclasses.asdict(self)
-
+    
     def __post_init__(self):
 
-        self.write_mode = False
+        if not (self.mode is None or self.mode in MODES):
+            raise ValueError("Invalid mode '{self.mode}', must be 'r' or 'w'")
 
-        if self.input is not None:
+        if self.mode is None:
+            self.write_mode = os.path.isfile(self.input)
+        else:
+            self.write_mode = self.mode == "w"
+
+        if self.write_mode:
             if os.path.isdir(self.input):
                 self.prefix = self.input
+                if not (os.path.isfile(self.index_config_file) and os.path.isfile(self.index_samples_file)):
+                    raise ValueError("Index write directory not initialized")
 
-            elif os.path.exists(self.input):
-                d = toml.load(self.input)
-                self._load_dict(self, d)
-                self.write_mode = True
+            elif not os.path.isfile(self.input):
+                raise ValueError("Index input must be sample CSV/TSV or initialized directory")
+            
+            else:
+                if self.prefix is None:
+                    self.prefix = os.path.dirname(self.input)
+                if len(self.prefix) == 0:
+                    self.prefix = "."
+                samples = pd.read_table(self.input).set_index("name")
 
-            self.input = None
+                with open(self.index_config_file,"w") as f:
+                    yaml.dump(self.params, f)
 
-        if self.prefix is None:
-            raise ValueError("Must specify index prefix or valid configuration file")
+                samples.to_csv(self.index_samples_file, sep="\t")
 
-        #self.write_mode = hasattr(self, "fasta")
-        #for pattern in REQUIRED_FILES:
-        #    if len(glob.glob(pattern)) == 0:
-        #        print(pattern)
+        else:
+            if not os.path.isdir(self.input):
+                raise ValueError("Index input must be directory mode='r'")
+            self.prefix = self.input
+        self.samples = pd.read_table(self.index_samples_file).set_index("name")
+            
+
+        #if self.input is not None:
+        #    if os.path.isdir(self.input):
+        #        self.prefix = self.input
+
+        #    elif os.path.exists(self.input):
+        #        samples = pd.read_table(self.input)
+ 
+        #        if self.prefix is None:
+        #            self.prefix = os.path.dirname(self.input)
+        #            if len(self.prefix) == 0:
+        #                self.prefix = "."
+        #            print("FIDF", self.prefix)
+
+        #        #if self.config is not None:
+        #        #    self.load(self.config)
+
+        #        with open(self.index_config_file,"w") as f:
+        #            #self.dump_yaml(f)
+        #            yaml.dump(self.params, f)
+
+        #        samples.to_csv(self.index_samples_file, sep="\t")
+
         #        self.write_mode = True
-        #        break
 
-        self.count_dir =  self.init_dir("kmc_count")
-        self.onehot_dir = self.init_dir("kmc_onehot")
-        self.bitvec_dir = self.init_dir("kmc_bitvec")
-        self.tmp_dir =    self.init_dir("tmp")
-        self.anchor_dir = self.init_dir(ANCHOR_DIR)
-        self.anno_dir = self.init_dir("anno")
-        self.mash_dir = self.init_dir("mash")
+        #    self.input = None
+
+        #if self.prefix is None:
+        #    raise ValueError("Must specify index prefix or valid configuration file")
+
 
         if not self.write_mode:
+            print("ININITINT")
             self._init_read()
+
+    def kmc_prefix(self, *names):
+        return os.path.join(self.get_subdir("kmc"), ".".join(names))
+
+    def get_subdir(self,name):
+        return os.path.join(self.prefix, name)
+
+    @property
+    def tmp_dir(self):
+        return self.get_subdir("tmp")
+
+    @property
+    def anchor_dir(self):
+        return self.get_subdir("anchor")
+
+    @property
+    def anno_dir(self):
+        return self.get_subdir("anno")
+
+    @property
+    def mash_dir(self):
+        return self.get_subdir("mash")
+
+    @property
+    def chrs_file(self):
+        return f"{self.prefix}/chrs.tsv"
 
     def _init_read(self):
         self._load_chrs()
 
-        self._load_dict(self, toml.load(self.index_config_file))
+        with open(self.index_config_file) as f:
+            self._load_dict(self, yaml.load(f,yaml.Loader))
 
         self.bitmaps = dict()
         self.gene_tabix = dict()
@@ -211,7 +279,7 @@ class Index:
         return bitmap.anchor_name
 
     def _load_chrs(self):
-        self.chrs = pd.read_csv(f"{self.prefix}/chrs.csv").set_index(["genome","chr"])
+        self.chrs = pd.read_csv(self.chrs_file, sep="\t").set_index(["genome","chr"])
         names = self.chrs.columns.str
 
         total_cols = names.startswith("total_occ_")
@@ -262,7 +330,7 @@ class Index:
 
     def _run_mash(self):
         mash_files = list()
-        for i,(name,fasta) in enumerate(self.genome_files["fasta"].dropna().items()):
+        for i,(name,fasta) in enumerate(self.samples["fasta"].dropna().items()):
             cmd =[f"{EXTRA_DIR}/mash", "sketch", "-o", f"{self.mash_dir}/{name}", "-r", "-s", "10000", fasta]
             subprocess.check_call(cmd)
             mash_files.append(f"{self.mash_dir}/{name}.msh")
@@ -272,7 +340,7 @@ class Index:
         with open(triangle_fname, "w") as triangle_out:
             subprocess.check_call(cmd, stdout=triangle_out)
 
-        fasta_names = self.genome_files.reset_index().dropna(subset=["fasta"]).set_index("fasta")["index"]
+        fasta_names = self.samples.reset_index().dropna(subset=["fasta"]).set_index("fasta")["name"]
 
         with open(triangle_fname, "r") as infile, open(self.genome_dist_fname, "w") as outfile:
             line = infile.readline()
@@ -287,56 +355,27 @@ class Index:
         return os.path.join(self.prefix, "genome_dist.tsv")
 
     def write(self):
-        genomes = list()
-        self.genome_ids = dict()
-        self.genome_files = pd.DataFrame({
-            "fasta" : pd.Series(self.fasta),
-        })
+        #self.samples = pd.DataFrame({
+        #    "fasta" : pd.Series(self.fasta),
+        #})
 
-        if hasattr(self, "fastq"):
-            self.genome_files = pd.concat([self.genome_files, pd.Series(self.fastq, name="fastq")], axis=1)
+        #if hasattr(self, "fastq"):
+        #    self.samples = pd.concat([self.samples, pd.Series(self.fastq, name="fastq")], axis=1)
 
-        if hasattr(self, "gff"):
-            self.genome_files["gff"] = pd.Series(self.gff)
+        #if hasattr(self, "gff"):
+        #    self.samples["gff"] = pd.Series(self.gff)
 
+        print(self.samples)
         if self.anno_only:
             self._load_chrs()
         else:
-            genome_id = 0
-            for name,(fasta,fastq) in self.genome_files[["fasta", "fastq"]].iterrows():
-                if pd.isnull(fasta) == pd.isnull(fastq):
-                    raise ValueError(f"Must specify either FASTA or FASTQ for {name} (not both)")
-
-                self.genome_ids[name] = genome_id
-                genome_id += 1
-
-                is_anchor = pd.isnull(fastq) and (self.anchor_genomes is None or name in self.anchor_genomes)
-
-                if is_anchor:
-                    if not os.path.exists(fasta+".fai"):
-                        cmd = ["samtools", "faidx", fasta]
-                        subprocess.check_call(cmd)
-                    fa = pysam.FastaFile(fasta)
-
-                    genomes.append(pd.DataFrame(
-                        [(name, chrom, genome_id, fa.get_reference_length(chrom)-self.k+1) 
-                         for chrom in fa.references], 
-                        columns=["genome", "chr", "id", "size"]))
-
-                else:
-                    genomes.append(pd.DataFrame(
-                        {"genome" : [name], "id" : genome_id, "chr" : None, "size" : 0}
-                    ))
-
-            self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
-            self._init_genomes()
-            #self.chrs.to_csv(f"{self.prefix}/chrs.csv")
-            self._write_chrs()
+            self.init_chrs()
 
         if self.anchor_only or self.anno_only:
             pre = f""
             suf = ".kmc_pre"
-            bitvec_dbs = [f"{self.bitvec_dir}/{i}" for i in range(self.kmc_bitvec_count)]
+            #bitvec_dbs = [f"{self.bitvec_dir}/{i}" for i in range(self.kmc_bitvec_count)]
+            bitvec_dbs = [self.kmc_prefix(f"{i}") for i in range(self.kmc_bitvec_count)]
             #[f[:-len(suf)] 
             #    for f in glob.glob(f"{self.bitvec_dir}/*{suf}")]
 
@@ -344,7 +383,7 @@ class Index:
             bitvec_dbs = self._run_kmc()
         
         def iter_anchor_args():
-            for name,fasta in self.genome_files["fasta"].dropna().items():
+            for name,fasta in self.samples["fasta"].dropna().items():
                 if self.anchor_genomes is None or name in self.anchor_genomes:
                     yield (self.params, name, "w", self.chrs, fasta, bitvec_dbs)
 
@@ -404,7 +443,7 @@ class Index:
         print("Computing mash distance")
         self._run_mash()
 
-        if "gff" in self.genome_files.columns:
+        if "gff" in self.samples.columns:
 
             if self.gff_anno_types is None:
                 self.all_anno_types = pd.Index([])
@@ -421,11 +460,15 @@ class Index:
         self._write_chrs()
 
         with open(self.index_config_file, "w") as conf_out:
-            toml.dump(self.params, conf_out)
+            yaml.dump(self.params, conf_out)
 
     @property
     def index_config_file(self):
-        return f"{self.prefix}/panagram.toml"
+        return f"{self.prefix}/panagram.yaml"
+
+    @property
+    def index_samples_file(self):
+        return f"{self.prefix}/samples.csv"
 
     @property
     def chr_bins_fname_old(self):
@@ -477,13 +520,45 @@ class Index:
 
         return pysam.TabixFile(fname, parser=pysam.asTuple(), index=index_fname)
     
+    def init_chrs(self):
+        genomes = list()
+        genome_id = 0
+        for name,fasta in self.samples["fasta"].items():#, "fastq"]]
+            #if pd.isnull(fasta) == pd.isnull(fastq):
+            #    raise ValueError(f"Must specify either FASTA or FASTQ for {name} (not both)")
+
+            genome_id += 1
+
+            is_anchor = (self.anchor_genomes is None or name in self.anchor_genomes) #pd.isnull(fastq) and 
+
+            if is_anchor:
+                if not os.path.exists(fasta+".fai"):
+                    cmd = ["samtools", "faidx", fasta]
+                    subprocess.check_call(cmd)
+                fa = pysam.FastaFile(fasta)
+
+                genomes.append(pd.DataFrame(
+                    [(name, chrom, genome_id, fa.get_reference_length(chrom)-self.k+1) 
+                     for chrom in fa.references], 
+                    columns=["genome", "chr", "id", "size"]))
+
+            else:
+                genomes.append(pd.DataFrame(
+                    {"genome" : [name], "id" : genome_id, "chr" : None, "size" : 0}
+                ))
+
+        self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
+        self._init_genomes()
+        #self.chrs.to_csv(f"{self.prefix}/chrs.csv")
+        self._write_chrs()
+    
     def _write_chrs(self):
         out = self.chrs.copy()
         cols_out = ["_occ_".join(map(str, c)) if isinstance(c, tuple) else c
                     for c in out.columns]
 
         out = out.set_axis(cols_out, axis="columns")
-        out.to_csv(f"{self.prefix}/chrs.csv")
+        out.to_csv(self.chrs_file, sep="\t")
 
     def tabix_fname(self, genome, typ):
         return os.path.join(self.anno_dir, f"{genome}.{typ}.bed{TABIX_SUFFIX}") 
@@ -500,7 +575,7 @@ class Index:
     def _load_gffs(self, genome):
         genes = list()
         annos = list()
-        fname = self.genome_files.loc[genome, "gff"]
+        fname = self.samples.loc[genome, "gff"]
         if pd.isna(fname): return
 
         for df in self._iter_gff(fname):
@@ -608,34 +683,57 @@ class Index:
     def _iter_kmc_genome_args(self):
         i = 0
         db_i = 0
-        #for name,fasta in self.genome_files["fasta"].items():
-        for name,(fasta,fastq) in self.genome_files[["fasta", "fastq"]].iterrows():
-            fasta_in = pd.isnull(fastq)
-            if not fasta_in:
-                fasta = fastq
-
+        #for name,fasta in self.samples["fasta"].items():
+        for name,fasta in self.samples["fasta"].items():
             if i >= 32:
                 i = 0
                 db_i += 1
 
-            count_db = os.path.join(self.count_dir, name)
-            onehot_db = os.path.join(self.onehot_dir, name)
+            count_db = self.kmc_prefix(name, "count")
+            onehot_db = self.kmc_prefix(name, "onehot")
             tmp_dir = self.init_dir(f"tmp/{name}")
-            yield (self.params, db_i, i, name, fasta, count_db, onehot_db, tmp_dir, fasta_in)
+            yield (self.params, db_i, i, name, fasta, count_db, onehot_db, tmp_dir, fasta)
 
             i += 1
     
     @property
     def kmc_bitvec_count(self):
-        return int(np.ceil(self.ngenomes / 32.0))
+        return int(np.ceil(len(self.samples) / 32.0))
+    
+    @property
+    def opdef_filenames(self):
+        print(self.kmc_bitvec_count, len(self.samples))
+        return [self.kmc_prefix(f"{i}.opdef.txt") for i in range(self.kmc_bitvec_count)]
+
+    def init_opdefs(self):
+
+        genome_dbs = [list()]
+        i = 0
+        for name,fasta in self.samples["fasta"].items():
+            if i == 32:
+                genome_dbs.append(list())
+                i = 0
+            genome_dbs[-1].append((name,self.kmc_prefix(name,"onehot")))
+            i += 1
+
+        for i,fname in enumerate(fnames):
+            with open(fname, "w") as opdefs:                              
+                opdefs.write("INPUT:\n")                                        
+                for name, db in genome_dbs[i]: 
+                    opdefs.write(f"{name} = {db}\n")                            
+                    opdefs.write(f"OUTPUT:\n{bitvec_fname} = {genome_dbs[i][0][0]}")
+                    for name,_ in genome_dbs[i][1:]:                                
+                        opdefs.write(f" + {name}")                                  
+                        opdefs.write("\n-ocsum\n")                                      
 
     def _run_kmc(self):
 
         i = 0
-        samp_count = len(self.genome_files)
+        samp_count = len(self.samples)
         kmc_bitvec_count = int(np.ceil(samp_count / 32))
 
         genome_dbs = [list() for i in range(kmc_bitvec_count)]
+        print("PROCESS", self.kmc.processes)
         if self.kmc.processes == 1:
             for args in self._iter_kmc_genome_args():
                 i,name,db = self._run_kmc_genome(args)
@@ -655,8 +753,8 @@ class Index:
             else:
                 t = samp_count-32
 
-            opdef_fname = os.path.join(self.bitvec_dir, f"{i}.opdef.txt")
-            bitvec_fname = os.path.abspath(os.path.join(self.bitvec_dir, f"{i}"))
+            opdef_fname = self.kmc_prefix(f"{i}.opdef.txt")
+            bitvec_fname = self.kmc_prefix(f"{i}")
 
             with open(opdef_fname, "w") as opdefs:
                 opdefs.write("INPUT:\n")
@@ -722,11 +820,10 @@ class KmerBitmap:
             for fname in glob.glob(f"{self.prefix}.*.{BGZ_SUFFIX}"):
                 step = int(fname.split(".")[-2])
                 self.steps.append(step)
-
     @property
     def bins_fname(self): 
         kb = self.conf["chr_bin_kbp"]
-        return f"{self.prefix}.{kb}kb.csv"
+        return f"{self.prefix}.{kb}kb.tsv"
 
     def bgz_fname(self, step): 
         return f"{self.prefix}.{step}.{BGZ_SUFFIX}"
@@ -745,7 +842,7 @@ class KmerBitmap:
         self.bitmaps = {s : bgzf.BgzfReader(self.bgz_fname(s), "rb") for s in self.steps}
 
     def get_bin_counts(self):
-        df = pd.read_csv(self.bins_fname)
+        df = pd.read_table(self.bins_fname)
         df["chr"] = self.chrs[df["chr"]]
         df.set_index(["chr","start","end"],inplace=True)
         df.columns = df.columns.astype(int)
@@ -904,7 +1001,7 @@ class KmerBitmap:
         self.close()
         
         bin_counts = pd.concat(bin_counts,names=["chr","start","end"])
-        bin_counts.to_csv(self.bins_fname)
+        bin_counts.to_csv(self.bins_fname, sep="\t")
 
         for step in self.steps:
             subprocess.check_call([
