@@ -115,7 +115,7 @@ def comma_split(s):
     return s.split(",")
 
 def main():
-    parser = ArgumentParser()
+    parser = ArgumentParser(add_config_path_arg=True)
     parser.add_arguments(Main, dest="main")
     args = parser.parse_args()
     if args.main.cprof is None:
