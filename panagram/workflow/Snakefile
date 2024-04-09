@@ -1,0 +1,110 @@
+import pandas as pd
+from panagram.index import Index
+
+configfile: "panagram.yaml"
+
+#PREFIX = config["prefix"]
+index = Index(".", mode="w")
+
+#if PREFIX == ".":
+#    PREFIX = ""
+#elif len(PREFIX) > 0 and not PREFIX.endswith("/"):
+#    PREFIX = PREFIX+"/"
+
+
+#SAMPLES = pd.read_table(config["samples"]).set_index("name")
+SAMPLES = index.samples #pd.read_table(config["samples"]).set_index("name")
+
+#FASTAS = list(config["fasta"].values())
+#SAMPLES = list(config["fasta"].keys())
+#SAMPLE_IDS = {s : i for i,s in enumerate(SAMPLES)}
+TMPDIR = f"tmp/"
+KMC_EXTS = ["kmc_pre","kmc_suf"]
+
+def get_fasta(wildcards):
+    f = SAMPLES.loc[wildcards.sample, "fasta"]
+    return f
+
+def get_onehot_tag(wildcards):
+    i = SAMPLES.index.get_loc(wildcards.sample) % 32
+    #print(wildcards.sample, i)
+    return 1 << i
+
+rule anchor:
+    input:
+        kmc_pre=expand("kmc/{i}.bitvec.kmc_pre", i=range(index.kmc_bitvec_count)),
+        kmc_suf=expand("kmc/{i}.bitvec.kmc_suf", i=range(index.kmc_bitvec_count)),
+        fasta=get_fasta,
+        chrs="chrs.tsv" 
+    output:
+        expand("anchor/{{sample}}.{step}.{ext}", step=index.steps, ext=["bgz","gzi"])
+    run:
+        bitvecs = [k[:-8] for k in input.kmc_pre]
+        index.run_anchor((
+            index.params,wildcards.sample,"w",index.get_chrs(),input.fasta,SAMPLES.loc[wildcards.sample,"gff"],bitvecs
+        ))
+
+
+rule kmc_bitvec:
+    input:
+        "kmc/{i}.opdef.txt",
+    output:
+        expand("kmc/{{i}}.bitvec.{ext}", ext=KMC_EXTS)
+    shell:
+        "kmc_tools complex kmc/{wildcards.i}.opdef.txt"
+
+rule opdefs:
+    input:
+        expand("kmc/{sample}.onehot.{ext}", sample=list(SAMPLES.index), ext=KMC_EXTS)
+    output:
+        expand("kmc/{i}.opdef.txt", i=range(index.kmc_bitvec_count))
+    run:
+        index.init_opdefs()
+
+
+rule kmc_sample:
+    input:
+        get_fasta #"{fasta}"
+    output:
+        expand("kmc/{{sample}}.{db}.{ext}", db=["count","onehot"], ext=KMC_EXTS)
+    params:
+        tag = get_onehot_tag
+    shell:
+        f"mkdir -p {TMPDIR}{{wildcards.sample}}; "
+
+        "kmc -k{config[k]} -t{config[kmc][threads]} -m{config[kmc][memory]} "
+        f"-ci1 -cs1000 -fm {{input}} kmc/{{wildcards.sample}}.count {TMPDIR}{{wildcards.sample}};"
+
+        f"kmc_tools -t4 transform kmc/{{wildcards.sample}}.count " 
+        f"set_counts {{params.tag}} kmc/{{wildcards.sample}}.onehot"
+
+#rule mash_sketch:
+#    input:
+#        get_fasta
+#    output:
+#        f"
+
+
+rule faidx:
+    input:
+        "{fasta}"
+    output:
+        "{fasta}.fai"
+    shell:
+        "samtools faidx {input}"
+
+rule chrs:
+    input:
+        expand("{fasta}.fai", fasta=SAMPLES["fasta"])
+    output:
+        f"chrs.tsv"
+    run:
+        index.init_chrs()
+    #shell:
+    #    f"touch {PREFIX}chrs.tsv"
+        
+rule all:
+    input:
+        f"chrs.tsv",
+        #expand(f"an/{{sample}}.count.kmc_pre", sample=SAMPLES.index)
+        expand("anchor/{sample}.{step}.{ext}", sample=SAMPLES.index, step=index.steps, ext=["bgz","gzi"])
