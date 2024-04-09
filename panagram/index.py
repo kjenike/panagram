@@ -16,6 +16,8 @@ from Bio import bgzf, SeqIO
 import yaml
 import multiprocessing as mp
 from types import SimpleNamespace
+import shutil
+import snakemake
 
 import dataclasses
 from simple_parsing import field
@@ -23,8 +25,9 @@ from simple_parsing.helpers import Serializable
 from typing import Any, List, Tuple, Type, Union
 import argparse
 
-ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
-EXTRA_DIR = os.path.join(ROOT_DIR, "extra")
+SRC_DIR = os.path.dirname(os.path.realpath(__file__))
+EXTRA_DIR = os.path.join(SRC_DIR, "extra")
+SNAKEFILE = os.path.join(SRC_DIR, "workflow", "Snakefile")
 
 BGZ_SUFFIX = "bgz"
 IDX_SUFFIX = "gzi"
@@ -42,7 +45,6 @@ MODES = {"r","w"}
 class KMC(Serializable):
     """Parameters for KMC kmer counting"""
     memory: int = field(default=8, dest="main.kmc.memory")
-    processes: int = field(default=4, dest="main.kmc.processes")
     threads: int = field(default=1, dest="main.kmc.threads")
 
     #Use existing KMC count and onehot genome databases if present
@@ -63,7 +65,7 @@ class Index(Serializable):
     k: int = field(alias=["-k"], default=21)
 
     #Number of processes
-    processes: int = field(alias=["-p"], default=1)
+    cores: int = field(alias=["-c"], default=1)
 
     #Step size for low-resolution pan-kmer bitmap (in nucleotides, larger step = lower resolution)
     lowres_step: int = 100
@@ -76,6 +78,8 @@ class Index(Serializable):
 
     #Subset of genome IDs to generate anchor genomes for. Will use all genomes as anchors if not specified
     anchor_genomes: List[str] = field(default=None)
+
+    prepare: bool = field(alias=["-p"], default=False, action="store_true")
 
     #Only perform anchoring and annotation
     anchor_only: bool = field(default=False, action="store_true")
@@ -135,9 +139,32 @@ class Index(Serializable):
     def chrs_file(self):
         return os.path.join(self.prefix, "chrs.tsv")
 
+    @property
+    def snakefile(self):
+        return os.path.join(self.prefix,"Snakefile")
+
     #panagram index command
     def run(self):
-        self.write()#args)
+        #self.write()
+        #self.close()
+        #return
+        print('Wrote config.yaml and samples.tsv')
+
+        if not os.path.exists(self.snakefile):
+            print(f'Wrote {self.snakefile}')
+            shutil.copy(SNAKEFILE, self.snakefile)
+        else:
+            print(f'Using existing {self.snakefile}')
+
+        args = ["--cores", f"{self.cores}", "all"]
+        argstr = " ".join(args)
+
+        if self.prepare:
+            print(f"Prepared. Run 'snakemake {argstr}' to build index")
+        else:
+            print(f"Running 'snakemake {argstr}'")
+            snakemake.main(args)
+
         self.close()
     
     def __post_init__(self):
@@ -164,7 +191,8 @@ class Index(Serializable):
                     self.prefix = os.path.dirname(self.input)
                 if len(self.prefix) == 0:
                     self.prefix = "."
-                samples = pd.read_table(self.input).set_index("name")
+                samples = pd.read_table(self.input)[["name","fasta","gff"]]
+                samples.index.name = "id"
                 samples.to_csv(self.index_samples_file, sep="\t")
 
             os.chdir(self.prefix)
@@ -272,40 +300,20 @@ class Index(Serializable):
     def _run_mash(self):
         mash_files = list()
         for i,(name,fasta) in enumerate(self.samples["fasta"].dropna().items()):
-            cmd =[f"{EXTRA_DIR}/mash", "sketch", "-o", f"{self.mash_dir}/{name}", "-r", "-s", "10000", fasta]
+            cmd =[f"{EXTRA_DIR}/mash", "sketch", "-C", name, "-o", f"{self.mash_dir}/{name}", "-r", "-s", "10000", fasta]
             subprocess.check_call(cmd)
             mash_files.append(f"{self.mash_dir}/{name}.msh")
 
-        cmd = [f"{EXTRA_DIR}/mash", "triangle", "-E"] + mash_files
+        cmd = [f"{EXTRA_DIR}/mash", "triangle", "-C", "-E"] + mash_files
         triangle_fname = f"{self.mash_dir}/triangle.txt"
-        with open(triangle_fname, "w") as triangle_out:
-            subprocess.check_call(cmd, stdout=triangle_out)
-
-        fasta_names = self.samples.reset_index().dropna(subset=["fasta"]).set_index("fasta")["name"]
-
-        with open(triangle_fname, "r") as infile, open(self.genome_dist_fname, "w") as outfile:
-            line = infile.readline()
-            while line:
-                tmp = line.strip().split('\t')
-                outfile.write(fasta_names.loc[tmp[0]] + "\t" + fasta_names.loc[tmp[1]] + "\t" + tmp[2] + "\t" + tmp[3] + "\t" + tmp[4] + "\n")
-                line = infile.readline()
-
+        with open(self.genome_dist_fname, "w") as mash_out:
+            subprocess.check_call(cmd, stdout=mash_out)
 
     @property
     def genome_dist_fname(self):
         return os.path.join(self.prefix, "genome_dist.tsv")
 
     def write(self):
-        #self.samples = pd.DataFrame({
-        #    "fasta" : pd.Series(self.fasta),
-        #})
-
-        #if hasattr(self, "fastq"):
-        #    self.samples = pd.concat([self.samples, pd.Series(self.fastq, name="fastq")], axis=1)
-
-        #if hasattr(self, "gff"):
-        #    self.samples["gff"] = pd.Series(self.gff)
-
         if self.anno_only:
             self._load_chrs()
         else:
@@ -330,11 +338,11 @@ class Index(Serializable):
                     yield (self.params, name, "w", self.chrs, row["fasta"], row["gff"], bitvec_dbs)
 
         if not self.anno_only:
-            if self.processes == 1:
+            if self.cores == 1:
                 for args in iter_anchor_args():
                     print("Anchored", self.run_anchor(args))
             else:
-                with mp.Pool(processes=self.processes) as pool:
+                with mp.Pool(processes=self.cores) as pool:
                     for name in pool.imap_unordered(self.run_anchor, iter_anchor_args(), chunksize=1):
                         #print(f"Anchored {name}")
                         sys.stdout.flush()
@@ -678,12 +686,12 @@ class Index(Serializable):
 
         genome_dbs = [list() for i in range(kmc_bitvec_count)]
         #print("PROCESS", self.kmc.processes)
-        if self.kmc.processes == 1:
+        if self.cores == 1:
             for args in self._iter_kmc_genome_args():
                 i,name,db = self._run_kmc_genome(args)
                 genome_dbs[i].append((name,db))
         else:
-            with mp.Pool(processes=self.kmc.processes) as pool:
+            with mp.Pool(processes=self.cores) as pool:
                 for i,name,db in pool.imap(self._run_kmc_genome, self._iter_kmc_genome_args(), chunksize=1):
                     genome_dbs[i].append((name,db))
 
