@@ -32,6 +32,7 @@ def view(params):
     buff = 1000
 
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
+    print(index.chrs)
 
     anchor_name, chrs = index.chrs.index[0]
     annotation_tab_file = "gene_vars.txt"
@@ -411,14 +412,7 @@ def view(params):
         #y=[(i/sum(gene_comp[1:])*100) for i in gene_comp[1:]]
         #fig.add_trace(go.Bar(x=x, y=y_whole, marker_color="#7400b8", showlegend=False), row=1, col=4)
         totals = 0
-        gene_comp_tmp = []
-        gene_comp = []
-        for i in range(1, num_samples+1):
-            totals += index.chr_occ.loc[(anchor_name, chrs), ("gene",i)]
-            gene_comp_tmp.append(index.chr_occ.loc[(anchor_name, chrs), ("gene",i)])
-        
-        for t in gene_comp_tmp:
-            gene_comp.append(t/totals*100)
+        gene_comp = index.bitfreq_chrs.loc[anchor_name, chrs]*100
         
         fig.append_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(gene_comp, y_whole)], marker_color=colors, showlegend=False), row=2, col=2)
         #fig.update_layout(xaxis_title_text="K-mers shared in X samples", yaxis_title_text='Frequency (log)')
@@ -437,7 +431,7 @@ def view(params):
         poly_order = SG_polynomial_order
         shared_kmers = [1]
         tmp_lst = []
-        rep_colors = mcp.gen_color(cmap="plasma",n=len(rep_list ))
+        rep_colors = mcp.gen_color(cmap="plasma",n=len(index.genomes[anchor_name].gff_anno_types))
         fig = make_subplots(        
             rows=13, cols=1,
             shared_xaxes=True,
@@ -514,7 +508,7 @@ def view(params):
             #rep_y = []
             #anno_colors = []
 
-            for i in rep_list: #rep_types.keys():               
+            for i in index.genomes[anchor_name].gff_anno_types: #rep_types.keys():               
                 if i == "exon":
                     bounds = df[df["type"]==i].loc[:, ["start", "end"]]
                     bounds["break"] = None #pd.NA
@@ -674,8 +668,8 @@ def view(params):
         return z_genes
 
     def plot_chr_whole( start_coord, end_coord, anchor_name, this_chr, genes): 
-        z_1 = index.chr_bins.loc[(anchor_name,this_chr), 1]
-        z_9 = index.chr_bins.loc[(anchor_name,this_chr), num_samples]
+        z_1 = index.bitsum_bins.loc[(anchor_name,this_chr), 1]
+        z_9 = index.bitsum_bins.loc[(anchor_name,this_chr), num_samples]
         y, x = [], []
         cntr = 0
         for xtmp in z_1:
@@ -684,11 +678,11 @@ def view(params):
             cntr += window_size
 
         z_genes = [0]*len(x)
-        if index.gene_tabix[anchor_name] is not None:
-            #genes = index.query_genes(anchor_name, this_chr, 0, index.chrs.loc[anchor_name, this_chr]["size"])
-            if len(genes) > 0:
-                bounds = genes["start"].to_numpy() #genes.loc[:, ["start"]].to_numpy()
-                z_genes = make_gene_whole_chr(x, bounds) #[g.split(';')[1].split('=')[1] for g in genes['attr']]) 
+        print(genes)
+        #if index.gene_tabix[anchor_name] is not None:
+        if len(genes) > 0:
+            bounds = genes["start"].to_numpy() #genes.loc[:, ["start"]].to_numpy()
+            z_genes = make_gene_whole_chr(x, bounds) #[g.split(';')[1].split('=')[1] for g in genes['attr']]) 
                 
         chr_fig = make_subplots(rows=3, cols=1, 
             specs=[[{"type": "heatmap",}], [{"type": "heatmap",}], [{"type": "heatmap",}]],
@@ -754,11 +748,11 @@ def view(params):
             )
         cntr = 1
         for chrom in index.chrs.loc[anchor_name].index:
-            x = list(index.chr_bins.loc[(anchor_name, chrom)].index)
+            x = list(index.bitsum_bins.loc[(anchor_name, chrom)].index)
             if len(x)!=1:
-                wg_fig.append_trace(go.Heatmap(x=x, z=index.chr_bins.loc[(anchor_name,chrom),num_samples], 
+                wg_fig.append_trace(go.Heatmap(x=x, z=index.bitsum_bins.loc[(anchor_name,chrom),num_samples], 
                     y=[1]*(len(x)), type = 'heatmap', colorscale='magma_r', showlegend=False,showscale=False), row=((cntr*3)-2), col=1)
-                wg_fig.append_trace(go.Heatmap(x=x, z=index.chr_bins.loc[(anchor_name,chrom), 1], 
+                wg_fig.append_trace(go.Heatmap(x=x, z=index.bitsum_bins.loc[(anchor_name,chrom), 1], 
                     y=[1]*(len(x)), type = 'heatmap', colorscale='magma', showscale=False), row=((cntr*3)-1), col=1)
             
             if cntr == 1:
@@ -839,7 +833,7 @@ def view(params):
 
         fig = make_subplots(rows=1, cols=1)
         for i,g in enumerate(labels):
-            fig.add_trace(go.Bar(y=labels, x=index.genome_occ_freq["total", i+1], name=i+1, #orientation='h',
+            fig.add_trace(go.Bar(y=labels, x=index.bitfreq_totals[i+1], name=i+1, #orientation='h',
                 legendgrouptitle_text="# Samples",
                 marker=dict(color=colors[i]), 
                 marker_line=dict(color=colors[i]), orientation='h',
@@ -867,7 +861,7 @@ def view(params):
         return fig#, genome_comp_totals
 
     def read_genome_comp(anchor_name):
-        totals = index.chr_occ_freq.loc[anchor_name,"total"]
+        totals = index[anchor_name].bitfreq_chrs #.chr_occ_freq.loc[anchor_name,"total"]
 
         fig = make_subplots(rows=len(totals), cols=1)
 
@@ -885,8 +879,9 @@ def view(params):
         with open(index.genome_dist_fname) as f:
             for line in f:
                 f, t, d, p, x = line.rstrip().split("\t")
-                i = index.genomes.get_loc(f)
-                j = index.genomes.get_loc(t)
+                print(f,t)
+                i = index.genomes[f].id
+                j = index.genomes[t].id
                 dist_mat[i][j] = d
                 dist_mat[j][i] = d
 
@@ -1004,7 +999,7 @@ def view(params):
 
     def plot_avgs(anchor_name):
         #fig = make_subplots(rows=1, cols=1)
-        fig = go.Figure(data=[ go.Scattergl(x=index.genome_occ_avg.index,y=index.genome_occ_avg)])
+        fig = go.Figure(data=[ go.Scattergl(x=index.bitsum_totals_avg.index,y=index.bitsum_totals_avg)])
         fig.add_vline(x=anchor_name, line_dash="dash", line_color="darkblue")
         fig.update_yaxes(title_text="Average k-mer",)
         fig.update_layout(font=dict(size=20,))
@@ -1013,7 +1008,7 @@ def view(params):
     def make_avg_kmer_fig(this_anchor):
         #fig = make_subplots(rows=1, cols=1)
 
-        avgs = index.chr_occ_avg[this_anchor]
+        avgs = index.bitsum_chrs_avg[this_anchor]
 
         fig = go.Figure(data=[go.Scattergl(x=avgs.index, y=avgs)])
         fig.update_yaxes(title_text="Average k-mer",)
@@ -1182,7 +1177,7 @@ def view(params):
         cntr = 0
         if l in index.anchor_genomes:
             for c in index.chrs.loc[l].index:
-                counts = index.chr_bins.loc[(l,c)].sum(axis=0)
+                counts = index.bitsum_bins.loc[(l,c)].sum(axis=0)
                 bar_sum_global[l][c] = counts.to_numpy()#bar_sum_global_tmp
                 cntr +=1
 
@@ -1218,7 +1213,7 @@ def view(params):
     x_stop_init_adjust = int(x_stop_init/n_skips_start)
     #### NEED TO ADJUST THE START INIT AND STOP INIT SO THAT WE TAKE THE SKIPS INTO ACCOUNT
     #Here is where we make the main plot 
-    #if len(index.chr_bins.loc[(anchor_name,chrs)]) > 1:
+    #if len(index.bitsum_bins.loc[(anchor_name,chrs)]) > 1:
     sys.stderr.write("Quering genes 4\n")
     sys.stderr.flush()
     genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
@@ -1888,6 +1883,7 @@ def view(params):
             printme += local_gene_list['attr'][0] #index.query_anno(anchor_name, chrs, start_coord, end_coord)['attr']
         elif len(local_gene_list)<=25:
             printme += "Genes: "
+            print(local_gene_list)
             for i in local_gene_list['name']:
                 printme += i + ", "
         else:

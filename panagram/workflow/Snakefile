@@ -1,11 +1,10 @@
 import pandas as pd
 from panagram.index import Index
 
-configfile: "panagram.yaml"
+configfile: "config.yaml"
 
 #PREFIX = config["prefix"]
 index = Index(".", mode="w")
-
 #if PREFIX == ".":
 #    PREFIX = ""
 #elif len(PREFIX) > 0 and not PREFIX.endswith("/"):
@@ -42,14 +41,15 @@ rule anchor:
         kmc_pre=expand("kmc/bitvec{i}.kmc_pre", i=range(index.kmc_bitvec_count)),
         kmc_suf=expand("kmc/bitvec{i}.kmc_suf", i=range(index.kmc_bitvec_count)),
         fasta=get_fasta,
-        chrs="anchor/{sample}/chrs.tsv"
+        #chrs="anchor/{sample}/chrs.tsv"
     output:
-        expand("anchor/{{sample}}/bitmap.{step}.{ext}", step=index.steps, ext=["bgz","gzi"])
+        expand("anchor/{{sample}}/bitmap.{step}.{ext}", step=index.steps, ext=["gz","gzi"])
     run:
         #bitvecs = [k[:-8] for k in input.kmc_pre]
-        index.run_anchor((
-            index,get_genome_id(wildcards),wildcards.sample,input.fasta,SAMPLES.loc[wildcards.sample,"gff"],True
-        ))
+        index[wildcards.sample].run_anchor(index.bitvec_prefixes)
+        #index.run_anchor((
+        #    index,get_genome_id(wildcards),wildcards.sample,input.fasta,SAMPLES.loc[wildcards.sample,"gff"],True
+        #))
 
 
 rule kmc_bitvec:
@@ -84,14 +84,13 @@ rule kmc_sample:
         f"kmc_tools -t4 transform kmc/{{wildcards.sample}}.count " 
         f"set_counts {{params.tag}} kmc/{{wildcards.sample}}.onehot"
 
-
-rule init_genome:
-    input:
-        get_fai
-    output:
-        "anchor/{sample}/chrs.tsv"
-    run:
-        index[wildcards.sample].init_chrs()
+#rule init_genome:
+#    input:
+#        get_fai
+#    output:
+#        "anchor/{sample}/chrs.tsv"
+#    run:
+#        index[wildcards.sample].init_chrs()
 
 rule faidx:
     input:
@@ -121,6 +120,5 @@ rule mash_triangle:
         
 rule all:
     input:
-        f"chrs.tsv",
         "genome_dist.tsv",
-        expand("anchor/{sample}/bitmap.{step}.{ext}", sample=SAMPLES.index, step=index.steps, ext=["bgz","gzi"])
+        expand("anchor/{sample}/bitmap.{step}.{ext}", sample=SAMPLES.index, step=index.steps, ext=["gz","gzi"])
