@@ -32,7 +32,6 @@ def view(params):
     buff = 1000
 
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
-    print(index.chrs)
 
     anchor_name, chrs = index.chrs.index[0]
     annotation_tab_file = "gene_vars.txt"
@@ -678,7 +677,6 @@ def view(params):
             cntr += window_size
 
         z_genes = [0]*len(x)
-        print(genes)
         #if index.gene_tabix[anchor_name] is not None:
         if len(genes) > 0:
             bounds = genes["start"].to_numpy() #genes.loc[:, ["start"]].to_numpy()
@@ -1094,9 +1092,9 @@ def view(params):
         genes["name"] = genes["attr"].str.extract("Name=([^;]+)")
         genes["size"] = genes["end"] - genes["start"]
         
-        x = [i for i in range(0, len(genes['universal']))]
-        genes['universal'] = genes['universal']/genes["size"]
-        genes['unique'] = genes['unique']/genes["size"]
+        x = [i for i in range(0, len(genes))]
+        genes['universal'] = genes[index.ngenomes]/genes["size"]
+        genes['unique'] = genes[1]/genes["size"]
         df_sorted = genes.sort_values('universal')
         df_sorted['X'] = x
         fig.add_trace(go.Scattergl(x=x, y=df_sorted['unique'], text=df_sorted["chr"] + ":" + df_sorted['name'], marker=dict(color=colors[0]),
@@ -1240,8 +1238,8 @@ def view(params):
     uniq_avg = tmp[1]
     univ_avg = tmp[-1]
 
-    universals = genes["universal"]
-    uniques = genes["unique"]
+    universals = genes[index.ngenomes]
+    uniques = genes[1]
 
     sizes = genes["end"]-genes["start"] #genes["size"]
 
@@ -1709,20 +1707,12 @@ def view(params):
         Input('selected-anchor-state', 'children')
     )
     def anchor_callback(tab, anchor_name):
-        if tab != "anchor":
-            return ({},)*4 + (no_update,)*2
-        print("anchor_callback")
+        if tab == "anchor":
+            figs = (plot_whole_genome(anchor_name), make_gene_per_genome_fig(anchor_name), make_genes_per_chr_fig(anchor_name), make_avg_kmer_fig(anchor_name),)
+        else:
+            figs = ({},)*4
         triggered_id = ctx.triggered_id
-        if triggered_id != "selected-anchor-state":
-            return (no_update,)*6
-        return (
-            plot_whole_genome(anchor_name),
-            make_gene_per_genome_fig(anchor_name),
-            make_genes_per_chr_fig(anchor_name),
-            make_avg_kmer_fig(anchor_name),
-            update_chromosome_list(anchor_name), 
-            anchor_name, 
-        )
+        return figs + (update_chromosome_list(anchor_name), anchor_name)
         
     @app.callback(
         Output('chromosome','figure'),               #chromosome
@@ -1757,7 +1747,6 @@ def view(params):
         return update_all_figs( chr_num, click_me_rep, click_me_genes, chrs, anchor_name, 0, start_coord, end_coord,n_skips) 
 
     def update_all_figs( chr_num, click_me_rep, click_me_genes, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
-        print("update_all_figs")
         tic = time.perf_counter()
         try:
             sys.stderr.write("Quering genes 8\n")
@@ -1769,7 +1758,6 @@ def view(params):
             print("updating figs exception")
         bounds = all_genes.loc[:, ["start", "end"]]
         bounds["break"] = None
-        print(all_genes)
         gene_names = all_genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
         toc_tmp = time.perf_counter()
         print(f"All_genes in {toc_tmp - tic:0.4f} seconds")
@@ -1805,8 +1793,8 @@ def view(params):
         uniq_avg = tmp[1]
         univ_avg = tmp[-1]
 
-        universals = all_genes["universal"]
-        uniques = all_genes["unique"]
+        universals = all_genes[index.ngenomes]
+        uniques = all_genes[1]
         sizes = all_genes["end"]-all_genes["start"]
 
         toc_tmp_3 = time.perf_counter()
