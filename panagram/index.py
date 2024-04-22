@@ -202,7 +202,6 @@ class Index(Serializable):
             self._init_read()
         elif os.path.exists(self.index_config_file):
             self._load_config()
-        print("KIY", self.k)
 
     def _init_write(self):
         if os.path.isdir(self.input):
@@ -393,7 +392,6 @@ class Index(Serializable):
             #for name,fasta in self.samples["fasta"].dropna().items():
             for name,row in self.samples.iterrows():
                 if self.anchor_genomes is None or name in self.anchor_genomes:
-                    #print("INTER", row["gff"])
                     yield (self, row["id"], name, row["fasta"], row["gff"], True)
 
         if not self.anno_only:
@@ -403,7 +401,6 @@ class Index(Serializable):
             else:
                 with mp.Pool(processes=self.cores) as pool:
                     for name in pool.imap_unordered(self.run_anchor, iter_anchor_args(), chunksize=1):
-                        #print(f"Anchored {name}")
                         sys.stdout.flush()
 
         p = self.params
@@ -432,7 +429,7 @@ class Index(Serializable):
                 prev_genome = genome
 
             occs = self.query_bitmap(genome,chrom,0,size,1).sum(axis=1)
-            chr_counts = self.count_occs(occs)
+            chr_counts = self.bitsum_count(occs)
             self.chrs.loc[(genome,chrom), self._total_occ_idx] = chr_counts
 
 
@@ -484,9 +481,9 @@ class Index(Serializable):
     def query_occ_counts(self, genome, chrom, start, end, step=1):
         return self.genomes[genome].query_occ_counts(chrom, start, end, step)
         #occs = self.query_bitmap(genome, chrom, start, end, step).sum(axis=1)
-        #return self.count_occs(occs)
+        #return self.bitsum_count(occs)
 
-    def count_occs(self, occs):
+    def bitsum_count(self, occs):
         ret = np.zeros(self.ngenomes, "uint32")
         occs, counts = np.unique(occs, return_counts=True)
         ret[occs-1] = counts
@@ -705,6 +702,21 @@ class Genome:
     @property
     def chrs_file(self):
         return os.path.join(self.prefix, "chrs.tsv")
+    
+    @property
+    def bitsum_index(self):
+        return pd.RangeIndex(1,self.ngenomes+1)
+
+    @property
+    def gene_tabix_cols(self):
+        return TABIX_COLS + list(self.bitsum_index)
+
+    @property
+    def gene_tabix_types(self):
+        r = {"start" : int, "end" : int}
+        for i in self.bitsum_index:
+            r[i] = int
+        return r#TABIX_COLS + list(self.bitsum_index)
 
     def init_chrs(self, fasta):
         fa = pysam.FastaFile(fasta)
@@ -855,8 +867,8 @@ class Genome:
         self._write_anno_types()
 
         genes = _merge_dfs(genes)
-        genes["unique"] = 0
-        genes["universal"] = 0
+        for i in range(1,self.ngenomes+1):
+            genes[i] = 0
 
         return genes
 
@@ -880,15 +892,16 @@ class Genome:
             blocks[1:] = np.fromfile(idx_in, dtype, nblocks)
         return blocks.astype([("rstart", int), ("dstart", int)])
 
-    def count_occs(self, occs):
-        ret = np.zeros(self.ngenomes, "uint32")
-        occs, counts = np.unique(occs, return_counts=True)
-        ret[occs-1] = counts
-        return ret
+    def bitsum_count(self, occs):
+        return pd.Series(occs).value_counts()
+        #ret = pd.Series(0,index=pd.RangeIndex(1,self.ngenomes+1))
+        #occs, counts = np.unique(occs, return_counts=True)
+        #ret[occs] = counts
+        #return ret
 
     def query_occ_counts(self, name, start=None, end=None, step=1):
         occs = self.query(name,start,end,step).sum(axis=1)
-        return self.count_occs(occs)
+        return self.bitsum_count(occs)
 
     def query(self, name, start=None, end=None, step=1):
         bstep = 1
@@ -955,7 +968,7 @@ class Genome:
         except ValueError:
             rows = []
 
-        ret = pd.DataFrame(rows, columns=GENE_TABIX_COLS).astype(GENE_TABIX_TYPES)
+        ret = pd.DataFrame(rows, columns=self.gene_tabix_cols).astype(self.gene_tabix_types)
         for a in attrs:
             ret[a.lower()] = ret["attr"].str.extract(f"{a}=([^;]+)", re.IGNORECASE)
 
@@ -1019,6 +1032,7 @@ class Genome:
 
         return self._bytes_to_bits(arrs[1])
 
+
     def run_anchor(self, bitvecs):
         self.kmc_dbs = self._load_kmc(bitvecs)
 
@@ -1028,30 +1042,26 @@ class Genome:
 
         self.bitmaps = {s : bgzip.BGZipWriter(open(self.bgz_fname(s), "wb"))for s in self.steps}
         bin_occs = dict()
-        bitsum_genes = dict()
+        #bitsum_genes = dict()
 
         for i,rec in enumerate(self.iter_fasta()):
             name = rec.id
             bitmap = self._write_bitmap(name, str(rec.seq))
 
-            occs = bitmap.sum(axis=1)
-
-            bitsum_genes[name] = pd.Series(0, index=np.arange(self.ngenomes)+1)
+            bitsum = bitmap.sum(axis=1)
 
             for g in chr_genes[name]:
                 start,end = gene_df.loc[g,["start","end"]]
-                counts = self.count_occs(occs[start:end])
-                gene_df.loc[g,"unique"] = counts[0]    #np.sum(v == 1)
-                gene_df.loc[g,"universal"] = counts[-1] #np.sum(v == self.ngenomes)
-                bitsum_genes[name] += counts
+                o, counts = np.unique(bitsum[start:end], return_counts=True)
+                gene_df.loc[g,o] += counts
 
             binlen = self.params["chr_bin_kbp"]*1000
-            starts = np.arange(0,len(occs),binlen)
-            ends = np.clip(starts+binlen, 0, len(occs))
+            starts = np.arange(0,len(bitsum),binlen)
+            ends = np.clip(starts+binlen, 0, len(bitsum))
             coords = pd.MultiIndex.from_arrays([starts, ends])
             cols = np.arange(self.ngenomes)+1
             bin_occs[i] = pd.DataFrame([
-                pd.value_counts(occs[st:en]).reindex(cols) for st,en in coords
+                pd.value_counts(bitsum[st:en]).reindex(cols) for st,en in coords
             ], index=coords)
 
             sys.stdout.write(f"Anchored {name}\n")
@@ -1061,8 +1071,9 @@ class Genome:
 
         self._write_tabix(gene_df, "gene")
 
-        self.bitsum_genes = pd.concat(bitsum_genes,axis=1).T
-        self.bitsum_genes.index.name = "chr"
+        #self.bitsum_genes = pd.concat(bitsum_genes,axis=1).T
+        #self.bitsum_genes.index.name = "chr"
+        self.bitsum_genes = gene_df.groupby("chr")[cols].sum()#.sort_index()
         self.bitsum_genes.to_csv(self.chr_genes_fname, sep="\t")
 
         bin_occs = pd.concat(bin_occs,names=["chr","start","end"]).droplevel("end")

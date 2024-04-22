@@ -84,14 +84,6 @@ rule kmc_sample:
         f"kmc_tools -t4 transform kmc/{{wildcards.sample}}.count " 
         f"set_counts {{params.tag}} kmc/{{wildcards.sample}}.onehot"
 
-#rule init_genome:
-#    input:
-#        get_fai
-#    output:
-#        "anchor/{sample}/chrs.tsv"
-#    run:
-#        index[wildcards.sample].init_chrs()
-
 rule faidx:
     input:
         "{fasta}"
