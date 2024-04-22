@@ -363,7 +363,6 @@ class Index(Serializable):
                     {"genome" : [name], "id" : genome_id, "chr" : None, "size" : 0}
                 ))
 
-        self.gff_anno_types = set.union(*[g.gff_anno_types for g in self.genomes.values()])
 
         self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
         self._init_genomes()
@@ -670,6 +669,7 @@ class Genome:
         self.fasta = fasta
         self.gff = gff
         self.write_mode = write
+        self.annotated = not pd.isna(gff)
 
         self.ngenomes = len(self.samples)
         self.nbytes = int(np.ceil(self.ngenomes / 8))
@@ -769,7 +769,7 @@ class Genome:
         self.blocks = {s : self.load_bgz_blocks(self.idx_fname(s)) for s in self.steps}
         self.bitmaps = {s : bgzf.BgzfReader(self.bgz_fname(s), "rb") for s in self.steps}
 
-        self.bitsum_genes = pd.read_table(self.chr_genes_fname).set_index("chr")
+
         self.bitsum_bins = self._read_bitsum_bins()
         self.bitsum_chrs = self.bitsum_bins.groupby("chr").sum()
         self.bitsum_total = self.bitsum_bins.sum()
@@ -777,10 +777,14 @@ class Genome:
         sum2freq = lambda df: df.divide(df.sum(axis=1), axis=0)
         self.bitfreq_bins = sum2freq(self.bitsum_bins)
         self.bitfreq_chrs = sum2freq(self.bitsum_chrs)
-        self.bitfreq_genes = sum2freq(self.bitsum_genes)
 
         self.gene_tabix = self._load_tabix("gene")
         self.anno_tabix = self._load_tabix("anno")
+        self.annotated = self.gene_tabix is not None or self.anno_tabix is not None
+        
+        if self.annotated:
+            self.bitsum_genes = pd.read_table(self.chr_genes_fname).set_index("chr")
+            self.bitfreq_genes = sum2freq(self.bitsum_genes)
 
         #self.genome_occ = self.chr_occ.groupby(level="genome", sort=False).sum()
         #normalize = lambda df: df.divide(df.sum(axis=1), axis=0)
@@ -830,7 +834,7 @@ class Genome:
             with open(self._anno_types_fname) as f:
                 self.gff_anno_types = {l.strip() for l in f}
         else:
-            self.gff_anno_types = None
+            self.gff_anno_types = {}
 
     def _write_anno_types(self):
         with open(self._anno_types_fname, "w") as f:
@@ -962,7 +966,7 @@ class Genome:
 
     def query_genes(self, chrom, start, end, attrs=["name"]):
         if self.gene_tabix is None:
-            return pd.DataFrame(columns=GENE_TABIX_COLS+attrs)
+            return pd.DataFrame(columns=self.gene_tabix_cols+attrs)
         try:
             rows = self.gene_tabix.fetch(chrom, start, end)
         except ValueError:
@@ -1036,9 +1040,9 @@ class Genome:
     def run_anchor(self, bitvecs):
         self.kmc_dbs = self._load_kmc(bitvecs)
 
-        gene_df = self.init_gff()#.groupby("chr")
-        chr_genes = gene_df.groupby("chr").groups
-
+        if self.annotated:
+            gene_df = self.init_gff()#.groupby("chr")
+            chr_genes = gene_df.groupby("chr").groups
 
         self.bitmaps = {s : bgzip.BGZipWriter(open(self.bgz_fname(s), "wb"))for s in self.steps}
         bin_occs = dict()
@@ -1050,10 +1054,11 @@ class Genome:
 
             bitsum = bitmap.sum(axis=1)
 
-            for g in chr_genes[name]:
-                start,end = gene_df.loc[g,["start","end"]]
-                o, counts = np.unique(bitsum[start:end], return_counts=True)
-                gene_df.loc[g,o] += counts
+            if self.annotated:
+                for g in chr_genes[name]:
+                    start,end = gene_df.loc[g,["start","end"]]
+                    o, counts = np.unique(bitsum[start:end], return_counts=True)
+                    gene_df.loc[g,o] += counts
 
             binlen = self.params["chr_bin_kbp"]*1000
             starts = np.arange(0,len(bitsum),binlen)
@@ -1069,12 +1074,10 @@ class Genome:
 
             t = time()
 
-        self._write_tabix(gene_df, "gene")
-
-        #self.bitsum_genes = pd.concat(bitsum_genes,axis=1).T
-        #self.bitsum_genes.index.name = "chr"
-        self.bitsum_genes = gene_df.groupby("chr")[cols].sum()#.sort_index()
-        self.bitsum_genes.to_csv(self.chr_genes_fname, sep="\t")
+        if self.annotated:
+            self._write_tabix(gene_df, "gene")
+            self.bitsum_genes = gene_df.groupby("chr")[cols].sum()#.sort_index()
+            self.bitsum_genes.to_csv(self.chr_genes_fname, sep="\t")
 
         bin_occs = pd.concat(bin_occs,names=["chr","start","end"]).droplevel("end")
         bin_occs.to_csv(self.bins_fname, sep="\t")

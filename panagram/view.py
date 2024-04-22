@@ -1215,6 +1215,7 @@ def view(params):
     sys.stderr.write("Quering genes 4\n")
     sys.stderr.flush()
     genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
+    print(genes)
     sys.stderr.write("Queried genes 4\n")
     sys.stderr.flush()
     #[g.split(';')[1].split('=')[1] for g in genes['attr']]
