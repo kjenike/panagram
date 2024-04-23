@@ -1,22 +1,14 @@
 import pandas as pd
 from panagram.index import Index
+from panagram.index import EXTRA_DIR
 
 configfile: "config.yaml"
 
-#PREFIX = config["prefix"]
 index = Index(".", mode="w")
-#if PREFIX == ".":
-#    PREFIX = ""
-#elif len(PREFIX) > 0 and not PREFIX.endswith("/"):
-#    PREFIX = PREFIX+"/"
+index.load_config()
 
-
-#SAMPLES = pd.read_table(config["samples"]).set_index("name")
 SAMPLES = index.samples #pd.read_table(config["samples"]).set_index("name")
 
-#FASTAS = list(config["fasta"].values())
-#SAMPLES = list(config["fasta"].keys())
-#SAMPLE_IDS = {s : i for i,s in enumerate(SAMPLES)}
 TMPDIR = f"tmp/"
 KMC_EXTS = ["kmc_pre","kmc_suf"]
 
@@ -33,7 +25,6 @@ def get_genome_id(wildcards):
 
 def get_onehot_tag(wildcards):
     i = SAMPLES.index.get_loc(wildcards.sample) % 32
-    #print(wildcards.sample, i)
     return 1 << i
 
 rule anchor:
@@ -41,15 +32,10 @@ rule anchor:
         kmc_pre=expand("kmc/bitvec{i}.kmc_pre", i=range(index.kmc_bitvec_count)),
         kmc_suf=expand("kmc/bitvec{i}.kmc_suf", i=range(index.kmc_bitvec_count)),
         fasta=get_fasta,
-        #chrs="anchor/{sample}/chrs.tsv"
     output:
         expand("anchor/{{sample}}/bitmap.{step}.{ext}", step=index.steps, ext=["gz","gzi"])
     run:
-        #bitvecs = [k[:-8] for k in input.kmc_pre]
         index[wildcards.sample].run_anchor(index.bitvec_prefixes)
-        #index.run_anchor((
-        #    index,get_genome_id(wildcards),wildcards.sample,input.fasta,SAMPLES.loc[wildcards.sample,"gff"],True
-        #))
 
 
 rule kmc_bitvec:
@@ -58,7 +44,7 @@ rule kmc_bitvec:
     output:
         expand("kmc/bitvec{{i}}.{ext}", ext=KMC_EXTS)
     shell:
-        "kmc_tools complex kmc/opdef{wildcards.i}.txt"
+        f"{EXTRA_DIR}/kmc_tools complex kmc/opdef{{wildcards.i}}.txt"
 
 rule opdefs:
     input:
@@ -78,10 +64,10 @@ rule kmc_sample:
     shell:
         f"mkdir -p {TMPDIR}{{wildcards.sample}}; "
 
-        "kmc -k{config[k]} -t{config[kmc][threads]} -m{config[kmc][memory]} "
+        f"{EXTRA_DIR}/kmc -k{{config[k]}} -t{{config[kmc][threads]}} -m{{config[kmc][memory]}} "
         f"-ci1 -cs1000 -fm {{input}} kmc/{{wildcards.sample}}.count {TMPDIR}{{wildcards.sample}};"
 
-        f"kmc_tools -t4 transform kmc/{{wildcards.sample}}.count " 
+        f"{EXTRA_DIR}/kmc_tools -t4 transform kmc/{{wildcards.sample}}.count " 
         f"set_counts {{params.tag}} kmc/{{wildcards.sample}}.onehot"
 
 rule faidx:
@@ -98,7 +84,7 @@ rule mash_sample:
     output:
         "{sample}.msh"
     shell:
-        "/home/skovaka/code/panagram/build/lib/panagram/extra/mash "
+        "{EXTRA_DIR}/mash "
         "sketch -C {wildcards.sample} -o {wildcards.sample}.msh -r -s 10000 {input}"
 
 rule mash_triangle:
@@ -107,7 +93,7 @@ rule mash_triangle:
     output:
         "genome_dist.tsv"
     shell:
-        "/home/skovaka/code/panagram/build/lib/panagram/extra/mash "
+        "{EXTRA_DIR}/mash "
         "triangle -C -E {input} > genome_dist.tsv"
         
 rule all:
