@@ -140,10 +140,7 @@ class Index(Serializable):
 
     #panagram index command
     def run(self):
-        #self.write()
-        #self.close()
-        #return
-        self._init_write()
+        self.init_config()
         print('Wrote config.yaml and samples.tsv')
 
         if not os.path.exists(self.snakefile):
@@ -200,10 +197,8 @@ class Index(Serializable):
 
         if not self.write_mode:
             self._init_read()
-        elif os.path.exists(self.index_config_file):
-            self._load_config()
 
-    def _init_write(self):
+    def init_config(self):
         if os.path.isdir(self.input):
             self.prefix = self.input
             if not (os.path.isfile(self.index_config_file) and os.path.isfile(self.index_samples_file)):
@@ -215,24 +210,32 @@ class Index(Serializable):
 
         samples = pd.read_table(self.input)[["name","fasta","gff"]].set_index("name")
         samples["id"] = np.arange(len(samples), dtype=int)
+
+        print(self.anchor_genomes)
+        if self.anchor_genomes is None:
+            if "anchor" in samples:
+                self.anchor_genomes = list(samples.query("anchor").index)
+            else:
+                self.anchor_genomes = list(samples["fasta"].dropna().index)
+
+        samples["anchor"] = samples.index.isin(self.anchor_genomes)
+
         samples.to_csv(self.index_samples_file, sep="\t")
 
-        if self.anchor_genomes is None:
-            self.anchor_genomes = list(samples["fasta"].dropna().index)
-
+        print(self.anchor_genomes)
         self.write_config()
 
 
     def _init_read(self):
-        self._load_config()
+        self.load_config()
 
         self.ngenomes = len(self.samples)
 
         self.gene_tabix = dict()
         self.anno_tabix = dict()
 
-        for g in self.anchor_genomes:
-            self.genomes[g].init_read()# = Genome(self.params, g, "r", self.chrs)
+        #for g in self.anchor_genomes:
+        #    self.genomes[g].init_read()
 
         self.chrs = pd.concat({
             genome : self.genomes[genome].chr
@@ -254,7 +257,6 @@ class Index(Serializable):
         }, axis=1).T
         self.bitfreq_totals = self.bitsum_totals.divide(self.bitsum_totals.sum(axis=1),axis=0)
 
-        #self.genome_occ_avg = (self.genome_occ_freq["total"]*self._occ_idx).sum(axis=1).sort_values()
         n = np.array(self.bitfreq_totals.columns)
         self.bitsum_totals_avg = (self.bitfreq_totals*n).sum(axis=1).sort_values()
         self.bitsum_chrs_avg = (self.bitfreq_chrs*n).sum(axis=1).sort_values()
@@ -265,199 +267,22 @@ class Index(Serializable):
             "chr_count" : g.count()
         })
 
-    def init_dir(self, path):
-        d = os.path.join(self.prefix, path)
-        #if self.write_mode:
-        #    os.makedirs(d, exist_ok=True)
-        return d
-
     def __getitem__(self, genome):
         return self.genomes[genome]
-
-    @staticmethod
-    def run_anchor(args):
-        bitmap = Genome(*args)
-        bitmap.run_anchor(["kmc/bitvec0"])
-        bitmap.close()
-        return bitmap.name
-
-    #TODO
-    #def _load_chrs(self):
-    #    self.chrs = pd.read_csv(self.chrs_file, sep="\t").set_index(["genome","chr"])
-    #    names = self.chrs.columns.str
-
-    #    total_cols = names.startswith("total_occ_")
-    #    gene_cols = names.startswith("gene_occ_")
-    #    occ_cols = total_cols | gene_cols
-    #    self.chr_occ = self.chrs.loc[:,total_cols | gene_cols].copy()
-    #    if np.any(self.chr_occ):
-    #        cols = self.chr_occ.columns.str.split("_occ_", expand=True)
-    #        self.chr_occ.columns = cols.set_levels(cols.levels[1].astype(int), level=1)
-
-    #        self.genome_occ = self.chr_occ.groupby(level="genome", sort=False).sum()
-    #        normalize = lambda df: df.divide(df.sum(axis=1), axis=0)
-
-    #        self.genome_occ_freq = pd.concat({
-    #            "total" : normalize(self.genome_occ["total"]),
-    #            "gene" : normalize(self.genome_occ["gene"]),
-    #        }, axis=1)
-
-    #        self.chr_occ_freq = pd.concat({
-    #            "total" : normalize(self.chr_occ["total"]),
-    #            "gene" : normalize(self.chr_occ["gene"]),
-    #        }, axis=1)
-
-    #        self.genome_occ_avg = (self.genome_occ_freq["total"]*self._occ_idx).sum(axis=1).sort_values()
-    #        self.chr_occ_avg = (self.chr_occ_freq["total"]*self._occ_idx).sum(axis=1).sort_values()
-    #    self.chrs = self.chrs[self.chrs.columns[~(total_cols | gene_cols)]]
-
-    @property
-    def genome_occs():
-        return self.genome_occs.divide(self.genome_occs.sum(axis=1))
-
-    def _init_genomes(self):
-        self._occ_idx = pd.RangeIndex(1, self.ngenomes+1)
-        self._total_occ_idx = pd.MultiIndex.from_product([["total"], self._occ_idx])
-        self._gene_occ_idx = pd.MultiIndex.from_product([["gene"], self._occ_idx])
-
-    def _run_mash(self):
-        mash_files = list()
-        for i,(name,fasta) in enumerate(self.samples["fasta"].dropna().items()):
-            cmd =[f"{EXTRA_DIR}/mash", "sketch", "-C", name, "-o", f"{self.mash_dir}/{name}", "-r", "-s", "10000", fasta]
-            subprocess.check_call(cmd)
-            mash_files.append(f"{self.mash_dir}/{name}.msh")
-
-        cmd = [f"{EXTRA_DIR}/mash", "triangle", "-C", "-E"] + mash_files
-        triangle_fname = f"{self.mash_dir}/triangle.txt"
-        with open(self.genome_dist_fname, "w") as mash_out:
-            subprocess.check_call(cmd, stdout=mash_out)
 
     @property
     def genome_dist_fname(self):
         return os.path.join(self.prefix, "genome_dist.tsv")
 
-    def init_chrs(self):
-        genomes = list()
-        genome_id = 0
-        for name,fasta in self.samples["fasta"].items():#, "fastq"]]
-            #if pd.isnull(fasta) == pd.isnull(fastq):
-            #    raise ValueError(f"Must specify either FASTA or FASTQ for {name} (not both)")
-
-            genome_id += 1
-
-            is_anchor = (self.anchor_genomes is None or name in self.anchor_genomes) #pd.isnull(fastq) and
-
-            if is_anchor:
-                if not os.path.exists(fasta+".fai"):
-                    cmd = ["samtools", "faidx", fasta]
-                    subprocess.check_call(cmd)
-                fa = pysam.FastaFile(fasta)
-
-                genomes.append(pd.DataFrame(
-                    [(name, chrom, genome_id, fa.get_reference_length(chrom)-self.k+1)
-                     for chrom in fa.references],
-                    columns=["genome", "chr", "id", "size"]))
-
-            else:
-                genomes.append(pd.DataFrame(
-                    {"genome" : [name], "id" : genome_id, "chr" : None, "size" : 0}
-                ))
-
-
-        self.chrs = pd.concat(genomes).set_index(["genome", "chr"])
-        self._init_genomes()
-        #self.chrs.to_csv(f"{self.prefix}/chrs.csv")
-
-
-
-    def write(self):
-        if self.anno_only:
-            self._load_chrs()
-        else:
-            self.init_chrs()
-
-        #if self.anchor_only or self.anno_only:
-        pre = f""
-        suf = ".kmc_pre"
-        #bitvec_dbs = [f"{self.bitvec_dir}/{i}" for i in range(self.kmc_bitvec_count)]
-        bitvec_dbs = [self.kmc_prefix(f"{i}") for i in range(self.kmc_bitvec_count)]
-            #[f[:-len(suf)]
-            #    for f in glob.glob(f"{self.bitvec_dir}/*{suf}")]
-
-        #else:
-        #    bitvec_dbs = self._run_kmc()
-
-        def iter_anchor_args():
-            #for name,fasta in self.samples["fasta"].dropna().items():
-            for name,row in self.samples.iterrows():
-                if self.anchor_genomes is None or name in self.anchor_genomes:
-                    yield (self, row["id"], name, row["fasta"], row["gff"], True)
-
-        if not self.anno_only:
-            if self.cores == 1:
-                for args in iter_anchor_args():
-                    print("Anchored", self.run_anchor(args))
-            else:
-                with mp.Pool(processes=self.cores) as pool:
-                    for name in pool.imap_unordered(self.run_anchor, iter_anchor_args(), chunksize=1):
-                        sys.stdout.flush()
-
-        p = self.params
-        #self.genomes = {
-        #    name : Genome(self, i, name) for i,name in enumerate(self.anchor_genomes)
-        #}
-
-        #print("Computing chromosome summaries")
-        self.chrs[self._total_occ_idx] = 0
-        self.chrs[self._gene_occ_idx] = 0
-
-        #chr_bins_out = open(self.chr_bins_fname_old, "wb")
-        #bin_coords = list()
-        #chr_bin_occs = list()
-        rows = list()
-
-        for g in self.genomes.values():
-            g.init_read()
-
-        prev_genome = None
-        for (genome,chrom),size in self.chrs["size"].items():
-            if size == 0:
-                continue
-
-            if genome != prev_genome:
-                prev_genome = genome
-
-            occs = self.query_bitmap(genome,chrom,0,size,1).sum(axis=1)
-            chr_counts = self.bitsum_count(occs)
-            self.chrs.loc[(genome,chrom), self._total_occ_idx] = chr_counts
-
-
-        self._run_mash()
-
-        #if "gff" in self.samples.columns:
-
-        #    if self.gff_anno_types is None:
-        #        self.all_anno_types = pd.Index([])
-
-        #    for g in self.samples.index:
-        #        self.genomes[g].init_gff()
-        #        if self.gff_anno_types is None:
-        #            self.all_anno_types = self.all_anno_types.union(self.genomes[g].gff_anno_types)
-
-        #self.chrs.to_csv(f"{self.prefix}/chrs.csv")
-
-        #with open(self.index_config_file, "w") as conf_out:
-        #    yaml.dump(self.params, conf_out)
-
     def write_config(self, exclude=["prefix"]):
-
         prms = self.params
         for p in exclude:
             del prms[p]
+
         with open(self.index_config_file, "w") as conf_out:
             yaml.dump(prms, conf_out)
 
-    def _load_config(self):
+    def load_config(self):
         with open(self.index_config_file) as f:
             self._load_dict(self, yaml.load(f,yaml.Loader))
 
@@ -477,32 +302,12 @@ class Index(Serializable):
     def chr_bins_fname(self):
         return os.path.join(self.prefix, f"bins_{self.chr_bin_kbp}kbp.npy")
 
-    def query_occ_counts(self, genome, chrom, start, end, step=1):
-        return self.genomes[genome].query_occ_counts(chrom, start, end, step)
-        #occs = self.query_bitmap(genome, chrom, start, end, step).sum(axis=1)
-        #return self.bitsum_count(occs)
-
     def bitsum_count(self, occs):
         ret = np.zeros(self.ngenomes, "uint32")
         occs, counts = np.unique(occs, return_counts=True)
         ret[occs-1] = counts
         return ret
         #return pd.Series(index=idx[occs-1], data=counts).reindex(idx, fill_value=0)
-
-    def _iter_gff(self, fname):
-        for df in pd.read_csv(
-            fname,
-            sep="\t", comment="#", chunksize=10000,
-            names = ["chr","source","type","start","end","score","strand","phase","attr"],
-            usecols = TABIX_COLS): yield df[TABIX_COLS]
-
-    def _write_chrs(self):
-        out = self.chrs.copy()
-        cols_out = ["_occ_".join(map(str, c)) if isinstance(c, tuple) else c
-                    for c in out.columns]
-
-        out = out.set_axis(cols_out, axis="columns")
-        out.to_csv(self.chrs_file, sep="\t")
 
     def tabix_fname(self, genome, typ):
         #return os.path.join("anchor", genome, "{typ}.bed{TABIX_SUFFIX}")
@@ -520,58 +325,6 @@ class Index(Serializable):
 
     def query_anno(self, genome, chrom, start, end):
         return self.genomes[genome].query_anno(chrom, start, end)
-
-    @staticmethod
-    def _run_kmc_genome(args):
-        conf, db_i, i, name, fasta, count_db, onehot_db, tmp_dir, fasta_in = args
-
-        onehot_id = str(2**i)
-
-        def should_build(db):
-            if not (conf["kmc"]["use_existing"] and
-                    os.path.exists(db+".kmc_pre") and
-                    os.path.exists(db+".kmc_suf")):
-                return True
-            #print(f"Using exisitng KMC db: {db}")
-            return False
-
-        in_arg = "-fm" if fasta_in else "-fq"
-
-        if should_build(count_db):
-            cmd = [
-                f"{EXTRA_DIR}/kmc", f"-k{conf['k']}",
-                f"-t{conf['kmc']['threads']}",
-                f"-m{conf['kmc']['memory']}",
-                "-ci1", "-cs10000000", in_arg,
-                fasta, count_db, tmp_dir
-            ]
-            subprocess.check_call(cmd)
-
-        if should_build(onehot_db):
-            cmd = [
-                f"{EXTRA_DIR}/kmc_tools", "-t4", "transform",
-                count_db, "set_counts", onehot_id, onehot_db
-            ]
-            subprocess.check_call(cmd)
-
-        return db_i, name, onehot_db
-
-
-    def _iter_kmc_genome_args(self):
-        i = 0
-        db_i = 0
-        #for name,fasta in self.samples["fasta"].items():
-        for name,fasta in self.samples["fasta"].items():
-            if i >= 32:
-                i = 0
-                db_i += 1
-
-            count_db = self.kmc_prefix(name, "count")
-            onehot_db = self.kmc_prefix(name, "onehot")
-            tmp_dir = self.init_dir(f"tmp/{name}")
-            yield (self.params, db_i, i, name, fasta, count_db, onehot_db, tmp_dir, fasta)
-
-            i += 1
 
     @property
     def kmc_bitvec_count(self):
@@ -612,53 +365,6 @@ class Index(Serializable):
                     opdefs.write(f" + {name}")
                 opdefs.write("\n-ocsum\n")
 
-    def _run_kmc(self):
-        i = 0
-        samp_count = len(self.samples)
-        kmc_bitvec_count = int(np.ceil(samp_count / 32))
-
-        genome_dbs = [list() for i in range(kmc_bitvec_count)]
-        #print("PROCESS", self.kmc.processes)
-        if self.cores == 1:
-            for args in self._iter_kmc_genome_args():
-                i,name,db = self._run_kmc_genome(args)
-                genome_dbs[i].append((name,db))
-        else:
-            with mp.Pool(processes=self.cores) as pool:
-                for i,name,db in pool.imap(self._run_kmc_genome, self._iter_kmc_genome_args(), chunksize=1):
-                    genome_dbs[i].append((name,db))
-
-        bitvec_dbs = list()
-
-        for i in range(kmc_bitvec_count):
-            h = (i+1)*32
-
-            if kmc_bitvec_count == 1 or i < kmc_bitvec_count:
-                t=32
-            else:
-                t = samp_count-32
-
-            opdef_fname = self.kmc_prefix(f"opdef{i}.txt")
-            bitvec_fname = self.kmc_prefix(f"bitvec{i}")
-
-            with open(opdef_fname, "w") as opdefs:
-                opdefs.write("INPUT:\n")
-                for name, db in genome_dbs[i]:
-                    opdefs.write(f"{name} = {db}\n")
-                opdefs.write(f"OUTPUT:\n{bitvec_fname} = {genome_dbs[i][0][0]}")
-                for name,_ in genome_dbs[i][1:]:
-                    opdefs.write(f" + {name}")
-                opdefs.write("\n-ocsum\n")
-
-            opdefs.close()
-
-            subprocess.check_call([
-                f"{EXTRA_DIR}/kmc_tools", "complex", opdef_fname
-            ])
-
-            bitvec_dbs.append(bitvec_fname)
-        return bitvec_dbs
-
 class Genome:
     def __init__(self, idx, id, name, fasta=None, gff=None, write=False):
         self.samples = idx.samples
@@ -691,13 +397,11 @@ class Genome:
             sys.stderr.write(f"Warning: failed to initialze '{name}' chromosomes")
             self.chr = None
 
-        #if write_mode:
-
         if not self.write_mode:
             self.init_read()
-        #    self.init_write(kmc_dbs)
-        #else:
-        #    self.init_read()
+
+    def filenames(self):
+        ret = [self.chrs_file, ]
 
     @property
     def chrs_file(self):
@@ -705,7 +409,7 @@ class Genome:
     
     @property
     def bitsum_index(self):
-        return pd.RangeIndex(1,self.ngenomes+1)
+        return pd.RangeIndex(0,self.ngenomes+1)
 
     @property
     def gene_tabix_cols(self):
@@ -769,7 +473,6 @@ class Genome:
         self.blocks = {s : self.load_bgz_blocks(self.idx_fname(s)) for s in self.steps}
         self.bitmaps = {s : bgzf.BgzfReader(self.bgz_fname(s), "rb") for s in self.steps}
 
-
         self.bitsum_bins = self._read_bitsum_bins()
         self.bitsum_chrs = self.bitsum_bins.groupby("chr").sum()
         self.bitsum_total = self.bitsum_bins.sum()
@@ -785,9 +488,6 @@ class Genome:
         if self.annotated:
             self.bitsum_genes = pd.read_table(self.chr_genes_fname).set_index("chr")
             self.bitfreq_genes = sum2freq(self.bitsum_genes)
-
-        #self.genome_occ = self.chr_occ.groupby(level="genome", sort=False).sum()
-        #normalize = lambda df: df.divide(df.sum(axis=1), axis=0)
 
     def _load_tabix(self, type_):
         fname = self.tabix_fname(type_)
@@ -834,7 +534,7 @@ class Genome:
             with open(self._anno_types_fname) as f:
                 self.gff_anno_types = {l.strip() for l in f}
         else:
-            self.gff_anno_types = {}
+            self.gff_anno_types = set()
 
     def _write_anno_types(self):
         with open(self._anno_types_fname, "w") as f:
@@ -853,8 +553,8 @@ class Genome:
             gmask = df["type"].isin(self.params["gff_gene_types"])
             genes.append(df[gmask])
 
-            if self.params["gff_anno_types"] is not None:
-                annos.append(df[df["type"].isin(self.params["gff_anno_types"])])
+            if self.gff_anno_types is not None:
+                annos.append(df[df["type"].isin(self.gff_anno_types)])
             else:
                 annos.append(df[~gmask])
 
@@ -871,7 +571,7 @@ class Genome:
         self._write_anno_types()
 
         genes = _merge_dfs(genes)
-        for i in range(1,self.ngenomes+1):
+        for i in self.bitsum_index:
             genes[i] = 0
 
         return genes
@@ -898,14 +598,6 @@ class Genome:
 
     def bitsum_count(self, occs):
         return pd.Series(occs).value_counts()
-        #ret = pd.Series(0,index=pd.RangeIndex(1,self.ngenomes+1))
-        #occs, counts = np.unique(occs, return_counts=True)
-        #ret[occs] = counts
-        #return ret
-
-    def query_occ_counts(self, name, start=None, end=None, step=1):
-        occs = self.query(name,start,end,step).sum(axis=1)
-        return self.bitsum_count(occs)
 
     def query(self, name, start=None, end=None, step=1):
         bstep = 1
