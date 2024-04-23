@@ -33,19 +33,22 @@ def view(params):
 
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
 
-    anchor_name, chrs = index.chrs.index[0]
+    anchor_name = params.genome
+    if anchor_name is None:
+        anchor_name = index.anchor_genomes[0] #params.genome
+
+    chrs = params.chrom
+    if chrs is None:
+        chrs = index[anchor_name].chrs.index[0]
+
     annotation_tab_file = "gene_vars.txt"
-    if params.genome is not None:
-        anchor_name = params.genome
-    if params.chrom is not None:
-        chrs = params.chrom
 
     x_start_init = 0 if params.start is None else params.start
     xe = 1000000 #index.chrs.loc[(anchor_name,chrs),"size"]
     x_stop_init  = xe if params.end is None else params.end
     bins = 200#params.max_chr_bins
     opt_bed_file = params.bookmarks
-    window_size = index.chr_bin_kbp*1000
+    #window_size = index.chr_bin_kbp*1000
     n_skips_start = index.lowres_step
 
     num_samples = len(index.genomes)
@@ -98,7 +101,7 @@ def view(params):
         else:
             color_me = np.log2(df[color_by]) 
         if color_by == "chr":
-            colors = px.colors.sample_colorscale("plasma", [n/(num_chrs[anchor_name] -1) for n in range(num_chrs[anchor_name])])
+            colors = px.colors.sample_colorscale("plasma", [n/(index[anchor_name].chr_count -1) for n in range(index[anchor_name].chr_count)])
             fig = px.scatter(df,x="Average", y="Standard_dev", marginal_y='histogram', 
                 marginal_x='histogram',
                 hover_name="Name", 
@@ -411,7 +414,8 @@ def view(params):
         #y=[(i/sum(gene_comp[1:])*100) for i in gene_comp[1:]]
         #fig.add_trace(go.Bar(x=x, y=y_whole, marker_color="#7400b8", showlegend=False), row=1, col=4)
         totals = 0
-        gene_comp = index.bitfreq_chrs.loc[anchor_name, chrs]*100
+        gene_comp = index[anchor_name].bitfreq_genes.loc[chrs]*100
+        print(index.bitfreq_chrs)
         
         fig.append_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(gene_comp, y_whole)], marker_color=colors, showlegend=False), row=2, col=2)
         #fig.update_layout(xaxis_title_text="K-mers shared in X samples", yaxis_title_text='Frequency (log)')
@@ -656,31 +660,47 @@ def view(params):
 
         return fig, bar_sum_names, bar_sum_regional, colors, gene_names_tmp
 
-    def make_gene_whole_chr(x, locs):
+    def make_gene_whole_chr_old(x, locs):
         z_genes = [0]*(len(x)+2)
         g = 0
         while g < len(locs):
-            x_bin = int(int(locs[g])/window_size)
+            x_bin = int(int(locs[g])/index.max_bin_len)
             if x_bin < len(z_genes):
                 z_genes[x_bin] += 1
             g += 1
         return z_genes
 
+    def make_gene_whole_chr(name, x, locs):
+        z_genes = np.zeros(len(x)+2, int)
+        for l in locs:
+            i = x.searchsorted(l, "right")
+            z_genes[i] += 1
+        return z_genes
+
+
+
     def plot_chr_whole( start_coord, end_coord, anchor_name, this_chr, genes): 
-        z_1 = index.bitsum_bins.loc[(anchor_name,this_chr), 1]
-        z_9 = index.bitsum_bins.loc[(anchor_name,this_chr), num_samples]
-        y, x = [], []
-        cntr = 0
-        for xtmp in z_1:
-            x.append(cntr)
-            y.append(1)
-            cntr += window_size
+        df = index[anchor_name].bitsum_bins.loc[this_chr]
+
+        z_1 = df[1]
+        z_9 = df[index.ngenomes]
+        #z_1 = index.bitsum_bins.loc[(anchor_name,this_chr), 1]
+        #z_9 = index.bitsum_bins.loc[(anchor_name,this_chr), num_samples]
+        #y, x = [], []
+        #cntr = 0
+        #for xtmp in z_1:
+        #    x.append(cntr)
+        #    y.append(1)
+        #    cntr += window_size
+        print(df)
+        x = df.index
+        y = np.full(len(x),1)
 
         z_genes = [0]*len(x)
         #if index.gene_tabix[anchor_name] is not None:
         if len(genes) > 0:
             bounds = genes["start"].to_numpy() #genes.loc[:, ["start"]].to_numpy()
-            z_genes = make_gene_whole_chr(x, bounds) #[g.split(';')[1].split('=')[1] for g in genes['attr']]) 
+            z_genes = make_gene_whole_chr(anchor_name, x, bounds)
                 
         chr_fig = make_subplots(rows=3, cols=1, 
             specs=[[{"type": "heatmap",}], [{"type": "heatmap",}], [{"type": "heatmap",}]],
@@ -729,8 +749,8 @@ def view(params):
     def plot_whole_genome(anchor_name):
         spec = []
         sub_titles = []
-        h = num_chrs[anchor_name]*250
-        for chrom in index.chrs.loc[anchor_name].index: #i in range(0, num_chrs[anchor_name]):
+        h = index[anchor_name].chr_count*250
+        for chrom in range(index[anchor_name].chr_count): #i in range(0, num_chrs[anchor_name]):
             spec.append([{"type": "heatmap",}])
             spec.append([{"type": "heatmap",}])
             spec.append([{"type": "heatmap",}])
@@ -738,7 +758,7 @@ def view(params):
             sub_titles.append("")
             sub_titles.append("")
         
-        wg_fig = make_subplots(rows=(3*num_chrs[anchor_name]), cols=1, 
+        wg_fig = make_subplots(rows=(3*index[anchor_name].chr_count), cols=1, 
             specs=spec, #[[{"type": "heatmap",}], [{"type": "heatmap",}], [{"type": "heatmap"}]],
             shared_xaxes=True,
             subplot_titles=sub_titles, #("K-mer and gene density accross whole chromosome", "", ""),
@@ -1036,8 +1056,7 @@ def view(params):
         #fig = go.Figure(data=[(rows=1, cols=1)
         x = []
         y = []
-        for c in range(0, len(chrs_list[anchor_name])):
-            this_chrom = chrs_list[anchor_name][c]
+        for this_chrom in index[anchor_name].chrs.index:
             x.append(this_chrom)
             try:
                 sys.stderr.write("Quering genes 2\n")
@@ -1132,16 +1151,11 @@ def view(params):
         return fig
 
     ##### READ DATA
-    chrs_list = {}
     chr_lens = {}
-    num_chrs = {}
     cntr = 0
     pre_bed_info = {}
     #chr_nums = 12
     for l in labels:
-        num_chrs[l] = len(index.chrs.loc[l])
-        chrs_list[l] = index.chrs.loc[l].index
-        #chr_lens[l] = index.chrs.loc[l]["size"]
         pre_bed_info[l] = []
     t = time.time()
     cnts_tmp = []
@@ -1158,7 +1172,7 @@ def view(params):
                 line = f.readline()
 
 
-    for i in range(1, num_chrs[anchor_name]+1):
+    for i in range(1, index[anchor_name].chr_count+1):
         chrs=index.chrs.loc[anchor_name].index[i-1] #"chr" + str(i)
         chr_start = 0
 
@@ -1313,10 +1327,10 @@ def view(params):
                 dcc.Graph(id="avg_kmer_chr", config=config) #, figure = avg_kmer_per_chr_fig
             ],),
             html.Div(className="w3-threequarter",children=[
-                dcc.Graph(id="all_chromosomes", config=config, style={"height" : num_chrs[anchor_name]*250})
+                dcc.Graph(id="all_chromosomes", config=config, style={"height" : index[anchor_name].chr_count*250})
             ]),
             html.Div(className="w3-quarter",children=[
-                dcc.Graph(id="all_chromosomes_hists", style={"height" : num_chrs[anchor_name]*250},
+                dcc.Graph(id="all_chromosomes_hists", style={"height" : index[anchor_name].chr_count*250},
                     figure = whole_genome_hists_fig, 
                     config=config
                 )
@@ -1434,10 +1448,10 @@ def view(params):
                 ], style={"display": "inline-block", 'padding-left': '1%'}),
             html.Div(children = [
                 html.Label('Select a genome: '),
-                dcc.Dropdown(labels, anchor_name, style=dict(width='110%', height='100%', verticalAlign="middle"), id="genome_select_dropdown"),
+                dcc.Dropdown(index.anchor_genomes, anchor_name, style=dict(width='110%', height='100%', verticalAlign="middle"), id="genome_select_dropdown"),
                 #html.Br(),#style=dict(width='100%', height='110%', verticalAlign="middle", )
                 html.Label('Select a chromosome: '),
-                dcc.Dropdown(chrs_list[anchor_name], "", style=dict(width='110%', height='100%', verticalAlign="middle", ), id="chr_select_dropdown"),
+                dcc.Dropdown(index[anchor_name].chrs.index, "", style=dict(width='110%', height='100%', verticalAlign="middle", ), id="chr_select_dropdown"),
 
                 #html.Br(),
             ], style={"display": "inline-block", 'padding-left' : '10%', 'vertical-align': 'text-bottom'}),
@@ -1600,7 +1614,7 @@ def view(params):
         #Chromosome top plot, triggers CHROMOSOME
         elif triggered_id == 'chromosome':
             if not "range" in chrtab_chr_select:
-                return (no_update,)*7
+                return (no_update,)*12
             if "x2" in chrtab_chr_select['range'].keys():
                 start_coord = int(chrtab_chr_select['range']['x2'][0])
                 end_coord = int(chrtab_chr_select['range']['x2'][1])
@@ -1743,7 +1757,7 @@ def view(params):
         n_skips = 100
         click_me_genes = True
         click_me_rep = True
-        chr_num = chrs_list[anchor_name].get_loc(chrs)+1
+        chr_num = index[anchor_name].chrs.loc[chrs,"id"]+1 #chrs_list[anchor_name].get_loc(chrs)+1
         #This should be the first time the chromosome callback is called? 
         return update_all_figs( chr_num, click_me_rep, click_me_genes, chrs, anchor_name, 0, start_coord, end_coord,n_skips) 
 
@@ -1797,6 +1811,8 @@ def view(params):
         universals = all_genes[index.ngenomes]
         uniques = all_genes[1]
         sizes = all_genes["end"]-all_genes["start"]
+        print(universals)
+        print(uniques)
 
         toc_tmp_3 = time.perf_counter()
         print(f"querying in {toc_tmp_2 - toc_tmp_3:0.4f} seconds")
@@ -1808,6 +1824,9 @@ def view(params):
         chr_fig = plot_chr_whole(start_coord, end_coord, anchor_name, chrom, all_genes)
         toc_tmp_32 = time.perf_counter()
         print(f"chr fig in {toc_tmp_32 - toc_tmp_31:0.4f} seconds")
+
+        print("ASDF")
+        print(bar_sum_regional, bar_sum_global[anchor_name][chrom])
 
         fig2 = get_local_info(bitmap_counts, bar_sum_regional, bar_sum_global[anchor_name][chrom], anchor_name, chrom)  
         toc_tmp_33 = time.perf_counter()

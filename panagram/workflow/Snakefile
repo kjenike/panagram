@@ -44,8 +44,10 @@ rule kmc_bitvec:
         "kmc/opdef{i}.txt",
     output:
         expand("kmc/bitvec{{i}}.{ext}", ext=KMC_EXTS)
+    log:
+        "logs/kmc.bitvec{i}.txt"
     shell:
-        f"{EXTRA_DIR}/kmc_tools complex kmc/opdef{{wildcards.i}}.txt"
+        f"{EXTRA_DIR}/kmc_tools complex kmc/opdef{{wildcards.i}}.txt > {{log}} 2>&1"
 
 rule opdefs:
     input:
@@ -62,40 +64,52 @@ rule kmc_sample:
         expand("kmc/{{sample}}.{db}.{ext}", db=["count","onehot"], ext=KMC_EXTS)
     params:
         tag = get_onehot_tag
+    log:
+        "logs/kmc.{sample}.txt"
     shell:
         f"mkdir -p {TMPDIR}{{wildcards.sample}}; "
 
         f"{EXTRA_DIR}/kmc -k{{config[k]}} -t{{config[kmc][threads]}} -m{{config[kmc][memory]}} "
-        f"-ci1 -cs1000 -fm {{input}} kmc/{{wildcards.sample}}.count {TMPDIR}{{wildcards.sample}};"
+        f"-ci1 -cs1000 -fm {{input}} kmc/{{wildcards.sample}}.count {TMPDIR}{{wildcards.sample}} "
+        "> {log} 2>&1;"
 
         f"{EXTRA_DIR}/kmc_tools -t4 transform kmc/{{wildcards.sample}}.count " 
-        f"set_counts {{params.tag}} kmc/{{wildcards.sample}}.onehot"
+        f"set_counts {{params.tag}} kmc/{{wildcards.sample}}.onehot "
+        ">> {log} 2>&1;"
 
 rule faidx:
     input:
         "{fasta}"
     output:
         "{fasta}.fai"
+    log:
+        "logs/faidx.{fasta}.txt"
     shell:
-        "samtools faidx {input}"
+        "samtools faidx {input} > {log} 2>&1"
 
 rule mash_sample:
     input:
         get_fasta
     output:
         "{sample}.msh"
+    log:
+        "logs/mash.sketch.{sample}.txt"
     shell:
         "{EXTRA_DIR}/mash "
-        "sketch -C {wildcards.sample} -o {wildcards.sample}.msh -r -s 10000 {input}"
+        "sketch -C {wildcards.sample} -o {wildcards.sample}.msh -r -s 10000 {input} "
+        "> {log} 2>&1;"
+
 
 rule mash_triangle:
     input:
         expand("{sample}.msh", sample=SAMPLES.index)
     output:
         "genome_dist.tsv"
+    log:
+        "logs/mash.triangle.txt"
     shell:
         "{EXTRA_DIR}/mash "
-        "triangle -C -E {input} > genome_dist.tsv"
+        "triangle -C -E {input} > {output} 2> {log}"
         
 rule all:
     input:
