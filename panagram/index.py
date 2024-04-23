@@ -119,22 +119,6 @@ class Index(Serializable):
         return os.path.join(self.prefix, name)
 
     @property
-    def tmp_dir(self):
-        return self.get_subdir("tmp")
-
-    @property
-    def anchor_dir(self):
-        return self.get_subdir("anchor")
-
-    @property
-    def mash_dir(self):
-        return self.get_subdir("mash")
-
-    @property
-    def chrs_file(self):
-        return os.path.join(self.prefix, "chrs.tsv")
-
-    @property
     def snakefile(self):
         return os.path.join(self.prefix,"Snakefile")
 
@@ -178,6 +162,19 @@ class Index(Serializable):
             if len(self.prefix) == 0:
                 self.prefix = "."
 
+            if os.path.isdir(self.input):
+                self.prefix = self.input
+                if not (os.path.isfile(self.config_fname) and os.path.isfile(self.samples_fname)):
+                    raise ValueError("Index write directory not initialized")
+                self.input = self.samples_fname
+                self.load_config()
+
+            elif os.path.isfile(self.input):
+                self.init_config()
+
+            else:
+                raise ValueError("Index input must be sample TSV or initialized directory")
+
         else:
             if not os.path.isdir(self.input):
                 raise ValueError("Index input must be directory mode='r'")
@@ -186,12 +183,12 @@ class Index(Serializable):
         os.chdir(self.prefix)
         self.prefix = ""
 
-        self.samples = pd.read_table(self.index_samples_file).set_index("name")
+        self.samples = pd.read_table(self.samples_fname).set_index("name")
 
         self.genomes = dict()
         p = self.params
         for name,row in self.samples.iterrows():
-            self.genomes[name] = Genome(self, row["id"], name, row["fasta"], row["gff"], write=self.write_mode)
+            self.genomes[name] = Genome(self, row["id"], name, row["fasta"], row["gff"], row["anchor"], write=self.write_mode)
 
         self.chrs = None
 
@@ -199,14 +196,6 @@ class Index(Serializable):
             self._init_read()
 
     def init_config(self):
-        if os.path.isdir(self.input):
-            self.prefix = self.input
-            if not (os.path.isfile(self.index_config_file) and os.path.isfile(self.index_samples_file)):
-                raise ValueError("Index write directory not initialized")
-            self.input = self.index_samples_file
-
-        elif not os.path.isfile(self.input):
-            raise ValueError("Index input must be sample CSV/TSV or initialized directory")
 
         samples = pd.read_table(self.input)[["name","fasta","gff"]].set_index("name")
         samples["id"] = np.arange(len(samples), dtype=int)
@@ -220,7 +209,7 @@ class Index(Serializable):
 
         samples["anchor"] = samples.index.isin(self.anchor_genomes)
 
-        samples.to_csv(self.index_samples_file, sep="\t")
+        samples.to_csv(self.samples_fname, sep="\t")
 
         print(self.anchor_genomes)
         self.write_config()
@@ -230,12 +219,6 @@ class Index(Serializable):
         self.load_config()
 
         self.ngenomes = len(self.samples)
-
-        self.gene_tabix = dict()
-        self.anno_tabix = dict()
-
-        #for g in self.anchor_genomes:
-        #    self.genomes[g].init_read()
 
         self.chrs = pd.concat({
             genome : self.genomes[genome].chr
@@ -270,37 +253,29 @@ class Index(Serializable):
     def __getitem__(self, genome):
         return self.genomes[genome]
 
-    @property
-    def genome_dist_fname(self):
-        return os.path.join(self.prefix, "genome_dist.tsv")
-
     def write_config(self, exclude=["prefix"]):
         prms = self.params
         for p in exclude:
             del prms[p]
 
-        with open(self.index_config_file, "w") as conf_out:
+        with open(self.config_fname, "w") as conf_out:
             yaml.dump(prms, conf_out)
 
     def load_config(self):
-        with open(self.index_config_file) as f:
+        with open(self.config_fname) as f:
             self._load_dict(self, yaml.load(f,yaml.Loader))
 
     @property
-    def index_config_file(self):
+    def config_fname(self):
         return os.path.join(self.prefix, "config.yaml")
 
     @property
-    def index_samples_file(self):
+    def samples_fname(self):
         return os.path.join(self.prefix, "samples.tsv")
 
     @property
-    def chr_bins_fname_old(self):
-        return os.path.join(self.prefix, f"bins_{self.chr_bin_kbp}kbp.bin")
-
-    @property
-    def chr_bins_fname(self):
-        return os.path.join(self.prefix, f"bins_{self.chr_bin_kbp}kbp.npy")
+    def genome_dist_fname(self):
+        return os.path.join(self.prefix, "genome_dist.tsv")
 
     def bitsum_count(self, occs):
         ret = np.zeros(self.ngenomes, "uint32")
@@ -308,10 +283,6 @@ class Index(Serializable):
         ret[occs-1] = counts
         return ret
         #return pd.Series(index=idx[occs-1], data=counts).reindex(idx, fill_value=0)
-
-    def tabix_fname(self, genome, typ):
-        #return os.path.join("anchor", genome, "{typ}.bed{TABIX_SUFFIX}")
-        return os.path.join("anchor", genome, "{typ}.bed{TABIX_SUFFIX}")
 
     def close(self):
         for b in self.genomes.values():
@@ -343,7 +314,6 @@ class Index(Serializable):
         return (1, self.lowres_step)
 
     def init_opdefs(self):
-
         genome_dbs = [list()]
         i = 0
         for name,fasta in self.samples["fasta"].items():
@@ -365,8 +335,19 @@ class Index(Serializable):
                     opdefs.write(f" + {name}")
                 opdefs.write("\n-ocsum\n")
 
+    def get_anchor_filenames(self, name):
+        return self.genomes[name].anchor_filenames
+
+    @property
+    def anchor_filenames(self):
+        ret = list()
+        for g in self.genomes.values():
+            ret += g.anchor_filenames
+        return ret
+    
+
 class Genome:
-    def __init__(self, idx, id, name, fasta=None, gff=None, write=False):
+    def __init__(self, idx, id, name, fasta=None, gff=None, anchor=None, write=False):
         self.samples = idx.samples
         self.params = idx.params
         self.prefix = os.path.join(self.params["prefix"], ANCHOR_DIR, name)
@@ -375,12 +356,16 @@ class Genome:
         self.fasta = fasta
         self.gff = gff
         self.write_mode = write
+        self.anchored = anchor if (anchor is not None) else (fasta is not None)
         self.annotated = not pd.isna(gff)
 
         self.ngenomes = len(self.samples)
         self.nbytes = int(np.ceil(self.ngenomes / 8))
         self.bitmaps = None
         self.chr = None
+
+        if not self.anchored:
+            return
 
         self._init_steps()
 
@@ -389,7 +374,7 @@ class Genome:
 
         self._init_anno_types()
 
-        if os.path.exists(self.chrs_file):
+        if os.path.exists(self.chrs_fname):
             self.load_chrs()
         elif self.fasta is not None:
             self.init_chrs(self.fasta)
@@ -400,12 +385,51 @@ class Genome:
         if not self.write_mode:
             self.init_read()
 
-    def filenames(self):
-        ret = [self.chrs_file, ]
+    @property
+    def anchor_filenames(self):
+        if not self.anchored:
+            return []
+        ret = [self.chrs_fname, self.bins_fname]
+        for s in self.steps:
+            ret += [self.bitmap_gz_fname(s), self.bitmap_gzi_fname(s)]
+
+        if self.annotated:
+            ret.append(self.chr_genes_fname)
+            for t in ["gene","anno"]:
+                ret += [self.tabix_fname(t), self.tabix_idx_fname(t)]
+        return ret
 
     @property
-    def chrs_file(self):
+    def chrs_fname(self):
         return os.path.join(self.prefix, "chrs.tsv")
+
+    @property
+    def bins_fname(self):
+        kb = self.params["chr_bin_kbp"]
+        return os.path.join(self.prefix, f"bitsum.{kb}kb.tsv")
+
+    @property
+    def chr_genes_fname(self):
+        return os.path.join(self.prefix, f"bitsum.genes.tsv")
+
+    @property
+    def anno_types_fname(self):
+        return os.path.join(self.prefix, "anno_types.txt")
+
+    def bitmap_gz_fname(self, step):
+        return os.path.join(self.prefix, f"bitmap.{step}.{BGZ_SUFFIX}")
+
+    def bitmap_gzi_fname(self, step):
+        return os.path.join(self.prefix, f"bitmap.{step}.{IDX_SUFFIX}")
+
+    def bed_tmp_fname(self, typ):
+        return os.path.join(self.prefix, f"{typ}.bed")
+
+    def tabix_fname(self, typ):
+        return self.bed_tmp_fname(typ)+".gz" #os.path.join(self.prefix, f"{typ}.bed{TABIX_SUFFIX}")
+
+    def tabix_idx_fname(self, typ):
+        return self.tabix_fname(typ)+".csi"
     
     @property
     def bitsum_index(self):
@@ -433,10 +457,10 @@ class Genome:
         return chrs
 
     def write_chrs(self):
-        self.chr.to_csv(self.chrs_file, sep="\t")
+        self.chr.to_csv(self.chrs_fname, sep="\t")
 
     def load_chrs(self):
-        self.set_chrs(pd.read_table(self.chrs_file,index_col="name"))
+        self.set_chrs(pd.read_table(self.chrs_fname,index_col="name"))
 
     def set_chrs(self, chrs):
         self.chr = chrs
@@ -454,24 +478,9 @@ class Genome:
                 step = int(fname.split(".")[-2])
                 self.steps.append(step)
 
-    @property
-    def bins_fname(self):
-        kb = self.params["chr_bin_kbp"]
-        return os.path.join(self.prefix, f"bitsum.{kb}kb.tsv")
-
-    @property
-    def chr_genes_fname(self):
-        return os.path.join(self.prefix, f"bitsum.genes.tsv")
-
-    def bgz_fname(self, step):
-        return os.path.join(self.prefix, f"bitmap.{step}.{BGZ_SUFFIX}")
-
-    def idx_fname(self, step):
-        return os.path.join(self.prefix, f"bitmap.{step}.{IDX_SUFFIX}")
-
     def init_read(self):
-        self.blocks = {s : self.load_bgz_blocks(self.idx_fname(s)) for s in self.steps}
-        self.bitmaps = {s : bgzf.BgzfReader(self.bgz_fname(s), "rb") for s in self.steps}
+        self.blocks = {s : self.load_bgz_blocks(self.bitmap_gzi_fname(s)) for s in self.steps}
+        self.bitmaps = {s : bgzf.BgzfReader(self.bitmap_gz_fname(s), "rb") for s in self.steps}
 
         self.bitsum_bins = self._read_bitsum_bins()
         self.bitsum_chrs = self.bitsum_bins.groupby("chr").sum()
@@ -494,12 +503,7 @@ class Genome:
         if not os.path.exists(fname):
             return None
 
-        index_fname = fname+".csi"
-        if not os.path.exists(index_fname):
-            index_fname = fname+".tbi"
-            if not os.path.exists(index_fname):
-                raise FileNotFoundError("Index file not found: '{fname}.csi' or '{fname.tbi}' must be preset")
-
+        index_fname = self.tabix_idx_fname(type_)
         return pysam.TabixFile(fname, parser=pysam.asTuple(), index=index_fname)
 
 
@@ -521,23 +525,19 @@ class Genome:
                 usecols = TABIX_COLS):
             yield df[TABIX_COLS]
 
-    @property
-    def _anno_types_fname(self):
-        return os.path.join(self.prefix, "anno_types.txt")
-
     def _init_anno_types(self):
         if self.params["gff_anno_types"] is not None:
             self.gff_anno_types = set(self.params["gff_anno_types"])
             return
 
-        if os.path.exists(self._anno_types_fname):
-            with open(self._anno_types_fname) as f:
+        if os.path.exists(self.anno_types_fname):
+            with open(self.anno_types_fname) as f:
                 self.gff_anno_types = {l.strip() for l in f}
         else:
             self.gff_anno_types = set()
 
     def _write_anno_types(self):
-        with open(self._anno_types_fname, "w") as f:
+        with open(self.anno_types_fname, "w") as f:
             for t in self.gff_anno_types:
                 f.write(f"{t}\n")
 
@@ -576,13 +576,9 @@ class Genome:
 
         return genes
 
-    def tabix_fname(self, typ):
-        #return os.path.join("anchor", self.name, "{typ}.bed{TABIX_SUFFIX}")
-        return os.path.join(self.prefix, f"{typ}.bed{TABIX_SUFFIX}")
-
     def _write_tabix(self, df, typ):
         tbx = self.tabix_fname(typ)
-        bed = tbx[:-len(TABIX_SUFFIX)]
+        bed = self.bed_tmp_fname(typ) #tbx[:-len(TABIX_SUFFIX)]
 
         df.to_csv(bed, sep="\t", header=None, index=False)
         pysam.tabix_compress(bed, tbx, True)
@@ -730,13 +726,17 @@ class Genome:
 
 
     def run_anchor(self, bitvecs):
+        if not self.anchored:
+            sys.stderr.write(f"Skipping {self.name} anchoring\n")
+            return
+
         self.kmc_dbs = self._load_kmc(bitvecs)
 
         if self.annotated:
             gene_df = self.init_gff()#.groupby("chr")
             chr_genes = gene_df.groupby("chr").groups
 
-        self.bitmaps = {s : bgzip.BGZipWriter(open(self.bgz_fname(s), "wb"))for s in self.steps}
+        self.bitmaps = {s : bgzip.BGZipWriter(open(self.bitmap_gz_fname(s), "wb"))for s in self.steps}
         bin_occs = dict()
         #bitsum_genes = dict()
 
@@ -780,7 +780,7 @@ class Genome:
 
         for step in self.steps:
             subprocess.check_call([
-                "bgzip", "-rI", self.idx_fname(step), self.bgz_fname(step)])
+                "bgzip", "-rI", self.bitmap_gzi_fname(step), self.bitmap_gz_fname(step)])
 
 
     def close(self):

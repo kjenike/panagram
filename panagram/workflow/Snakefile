@@ -33,7 +33,8 @@ rule anchor:
         kmc_suf=expand("kmc/bitvec{i}.kmc_suf", i=range(index.kmc_bitvec_count)),
         fasta=get_fasta,
     output:
-        expand("anchor/{{sample}}/bitmap.{step}.{ext}", step=index.steps, ext=["gz","gzi"])
+        expand("anchor/{{sample}}/bitmap.{step}.{ext}", step=index.steps, ext=["gz","gzi"]),
+        "anchor/{sample}/chrs.tsv",
     run:
         index[wildcards.sample].run_anchor(index.bitvec_prefixes)
 
@@ -99,4 +100,5 @@ rule mash_triangle:
 rule all:
     input:
         "genome_dist.tsv",
-        expand("anchor/{sample}/bitmap.{step}.{ext}", sample=SAMPLES.index, step=index.steps, ext=["gz","gzi"])
+        #index.anchor_filenames
+        expand("anchor/{sample}/chrs.tsv", sample=index.anchor_genomes)
