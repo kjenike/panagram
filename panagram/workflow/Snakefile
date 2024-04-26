@@ -35,9 +35,10 @@ rule anchor:
     output:
         expand("anchor/{{sample}}/bitmap.{step}.{ext}", step=index.steps, ext=["gz","gzi"]),
         "anchor/{sample}/chrs.tsv",
+    log:
+        logfile="logs/anchor.{sample}.txt"
     run:
-        index[wildcards.sample].run_anchor(index.bitvec_prefixes)
-
+        index[wildcards.sample].run_anchor(index.bitvec_prefixes, log.logfile)
 
 rule kmc_bitvec:
     input:

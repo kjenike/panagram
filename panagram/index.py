@@ -19,12 +19,26 @@ from types import SimpleNamespace
 import shutil
 import snakemake
 import re
+import logging
 
 import dataclasses
 from simple_parsing import field
 from simple_parsing.helpers import Serializable
 from typing import Any, List, Tuple, Type, Union
 import argparse
+
+logger = logging.getLogger(__name__)
+def init_logger(logfile):
+    logging.basicConfig(
+            filename=logfile, level=logging.INFO, 
+            format='[%(asctime)s %(levelname)s] %(message)s',
+            datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    #def handler(typ, val, tb):
+    #    logger.exception(repr(val))
+
+    #sys.excepthook = handler
 
 SRC_DIR = os.path.dirname(os.path.realpath(__file__))
 EXTRA_DIR = os.path.join(SRC_DIR, "extra")
@@ -207,7 +221,6 @@ class Index(Serializable):
             raise ValueError(f"Invalid genome names: '{bad}'\nMust match r'{NAME_REGEX}'.")
 
         samples = samples[["name","fasta","gff"]].set_index("name").dropna(how="all")
-        print(samples)
         samples["id"] = np.arange(len(samples), dtype=int)
 
         if self.anchor_genomes is None:
@@ -734,40 +747,49 @@ class Genome:
         return self._bytes_to_bits(arrs[1])
 
 
-    def run_anchor(self, bitvecs):
+    def run_anchor(self, bitvecs, logfile=None):
+        logging.basicConfig(
+                filename=logfile, level=logging.INFO, 
+                format='[ %(asctime)s %(levelname)7s ] %(message)s',
+                datefmt="%Y-%m-%d %H:%M:%S"
+        )
+
         if not self.anchored:
-            sys.stderr.write(f"Skipping {self.name} anchoring\n")
+            logger.info(f"Skipping non-anchor genome '{self.name}'")
             return
 
         self.kmc_dbs = self._load_kmc(bitvecs)
+        logger.info(f"KMC Database Loaded")
 
         if self.annotated:
             gene_df = self.init_gff()#.groupby("chr")
             gene_chrs = gene_df.index.unique(0)
+            logger.info(f"Annotation pre-processed")
             #chr_genes = gene_df.groupby("chr").groups
 
         self.bitmaps = {s : bgzip.BGZipWriter(open(self.bitmap_gz_fname(s), "wb"))for s in self.steps}
         bin_occs = dict()
         #bitsum_genes = dict()
+        logger.info(f"Anchoring Started")
 
         for i,rec in enumerate(self.iter_fasta()):
-            name = rec.id
-            bitmap = self._write_bitmap(name, str(rec.seq))
+            chrom = rec.id
+            bitmap = self._write_bitmap(chrom, str(rec.seq))
 
             bitsum = bitmap.sum(axis=1)
-
-            if self.annotated and name in gene_chrs:
-                for _,start,end in gene_df.loc[[name]].index:
-                    if end <= start or start < 0 or end > len(bitsum):
-                        sys.stderr.write(f"Warning gene coordinates {name}:{start}-{end} out of bounds. Skipping\n")
-                        continue
-                    occ, counts = np.unique(bitsum[start:end], return_counts=True)
-                    gene_df.loc[(name,start,end),occ] += counts
-
             bin_occs[i] = self.bin_bitsum(bitsum) 
 
-            sys.stdout.write(f"Anchored {name}\n")
-            sys.stdout.flush()
+            logger.info(f"Anchored {chrom}")
+
+            if self.annotated and chrom in gene_chrs:
+                for _,start,end in gene_df.loc[[chrom]].index:
+                    if end <= start or start < 0 or end > len(bitsum):
+                        logger.warning(f"Skipping gene at {chrom}:{start}-{end}, coordinates out-of-bounds")
+                        continue
+                    occ, counts = np.unique(bitsum[start:end], return_counts=True)
+                    gene_df.loc[(chrom,start,end),occ] += counts
+                logger.info(f"Annotated {chrom}")
+
 
             t = time()
 
