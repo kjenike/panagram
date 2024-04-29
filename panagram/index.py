@@ -321,8 +321,8 @@ class Index(Serializable):
     def query_bitmap(self, genome, chrom, start=None, end=None, step=1):
         return self.genomes[genome].query(chrom, start, end, step)
 
-    def query_genes(self, genome, chrom, start, end, attrs=["name"]):
-        return self.genomes[genome].query_genes(chrom, start, end, attrs)
+    def query_genes(self, genome, chrom, start, end):
+        return self.genomes[genome].query_genes(chrom, start, end)
 
     def query_anno(self, genome, chrom, start, end):
         return self.genomes[genome].query_anno(chrom, start, end)
@@ -683,7 +683,7 @@ class Genome:
                 dbs.append(db)
         return dbs
 
-    def query_genes(self, chrom, start, end, attrs=["name"]):
+    def query_genes(self, chrom, start, end):#, attrs=["name","id"]):
         if self.gene_tabix is None:
             return pd.DataFrame(columns=self.gene_tabix_cols+attrs)
         try:
@@ -692,8 +692,16 @@ class Genome:
             rows = []
 
         ret = pd.DataFrame(rows, columns=self.gene_tabix_cols).astype(self.gene_tabix_types)
-        for a in attrs:
-            ret[a.lower()] = ret["attr"].str.extract(f"{a}=([^;]+)", re.IGNORECASE)
+
+        attr = lambda a: ret["attr"].str.extract(f"{a}=([^;]+)", re.IGNORECASE)
+        names = attr("Name")
+        ids = attr("ID")
+        names[names.isna()] = ids[names.isna()]
+        ret["name"] = names
+
+        #for a in attrs:
+        #    ret[a.lower()] = ret["attr"].str.extract(f"{a}=([^;]+)", re.IGNORECASE)
+        
 
         return ret
     
