@@ -207,6 +207,10 @@ class Index(Serializable):
         if not self.write_mode:
             self._init_read()
 
+    @property
+    def genome_names(self):
+        return self.samples.index
+
     def init_config(self):
 
         samples = pd.read_table(self.input)#[["name","fasta","gff"]].set_index("name")
@@ -250,6 +254,11 @@ class Index(Serializable):
             genome : self.genomes[genome].bitsum_bins #_read_bitsum_bins().droplevel("end")
             for genome in self.anchor_genomes
         }, names=["genome","chr","start"]).sort_index()
+
+        self.bitsum_chrs = pd.concat({
+            genome : self.genomes[genome].bitsum_chrs #_read_bitsum_bins().droplevel("end")
+            for genome in self.anchor_genomes
+        }, axis=0)
 
         self.bitfreq_chrs = pd.concat({
             genome : self.genomes[genome].bitfreq_chrs #_read_bitsum_bins().droplevel("end")
