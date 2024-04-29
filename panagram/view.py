@@ -1607,14 +1607,14 @@ def view(params):
 
     def update_all_figs( chr_num, click_me_rep, click_me_genes, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
         tic = time.perf_counter()
-        try:
-            sys.stderr.write("Quering genes 8\n")
-            sys.stderr.flush()
-            all_genes = index.query_genes(anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"])
-            sys.stderr.write("Queried genes 8\n")
-            sys.stderr.flush()
-        except: 
-            print("updating figs exception")
+        #try:
+        sys.stderr.write("Quering genes 8\n")
+        sys.stderr.flush()
+        all_genes = index.query_genes(anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"])
+        sys.stderr.write("Queried genes 8\n")
+        sys.stderr.flush()
+        #except: 
+        #    print("updating figs exception")
         bounds = all_genes.loc[:, ["start", "end"]]
         bounds["break"] = None
         gene_names = all_genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
