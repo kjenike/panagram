@@ -24,13 +24,6 @@ from scipy.spatial.distance import pdist, squareform
 from .index import Index 
 
 def view(params):
-    SG_window =53
-    poly_order = 3
-    SG_polynomial_order = 3
-    SG_check = [1]
-
-    buff = 1000
-
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
 
     anchor_name = params.genome
@@ -41,23 +34,17 @@ def view(params):
     if chrs is None:
         chrs = index[anchor_name].chrs.index[0]
 
+    if params.start is None:
+        params.start = 0
+    if params.end is None:
+        params.end = index[anchor_name].chrs.loc[chrs,"size"]
+
     annotation_tab_file = "gene_vars.txt"
 
-    x_start_init = 0 if params.start is None else params.start
-    xe = 1000000 #index.chrs.loc[(anchor_name,chrs),"size"]
-    x_stop_init  = xe if params.end is None else params.end
-    bins = 200#params.max_chr_bins
-    opt_bed_file = params.bookmarks
-    #window_size = index.chr_bin_kbp*1000
-    n_skips_start = index.lowres_step
+    #bins = params.max_chr_bins
 
-    num_samples = len(index.genomes)
-    kmer_len = index.k
-    rep_list = index.gff_anno_types
-    labels = list(index.genomes)
-
-    sns.set_palette('viridis', num_samples)
-    colors = mcp.gen_color(cmap="viridis_r",n=num_samples)
+    sns.set_palette('viridis', index.ngenomes)
+    colors = mcp.gen_color(cmap="viridis_r",n=index.ngenomes)
 
     def annotation_tab_info(file_name):
         all_avgs = []
@@ -241,7 +228,7 @@ def view(params):
                 draw_clade(color_code, total_kmers, kmer_num, palette, child, x_curr, line_shapes, x_coords=x_coords, y_coords=y_coords)
 
 
-    def create_tree(x_start_init, x_stop_init, raw_counts, n_skips):
+    def create_tree(raw_counts, n_skips):
         #Adapted from:
         #https://github.com/plotly/dash-phylogeny
 
@@ -255,7 +242,7 @@ def view(params):
             metric='euclidean'
         )
         tree_tmp2 = hierarchy.to_tree(matrix, False)
-        treedata = get_newick(tree_tmp2, tree_tmp2.dist, labels)
+        treedata = get_newick(tree_tmp2, tree_tmp2.dist, index.genome_names)
         
         palette = sns.color_palette("RdPu", 130).as_hex()
         total_kmers = max(kmer_num_tmp) #[-1] #kmer_num_tmp["Solqui2"]
@@ -264,9 +251,9 @@ def view(params):
         kmer_num_raw = {}
         #cntr = 0
         for k in range(0, len(kmer_num_tmp)):#kmer_num_tmp.keys():
-            kmer_num[labels[k]] = float(((kmer_num_tmp[k])/total_kmers)*100)
-            kmer_num_raw[labels[k]] = kmer_num_tmp[k]
-            color_code[labels[k]] = palette[int(((kmer_num_tmp[k])/total_kmers)*100)+10]
+            kmer_num[index.genome_names[k]] = float(((kmer_num_tmp[k])/total_kmers)*100)
+            kmer_num_raw[index.genome_names[k]] = kmer_num_tmp[k]
+            color_code[index.genome_names[k]] = palette[int(((kmer_num_tmp[k])/total_kmers)*100)+10]
             #cntr += 1
         #treedata = "(A, (B, C), (D, E))"
         handle = StringIO(treedata)
@@ -397,7 +384,7 @@ def view(params):
             vertical_spacing=0.1,
         )
         x = []
-        for i in range(1,num_samples+1):
+        for i in range(1,index.ngenomes+1):
             x.append(i)
         #x = [1,2,3,4,5,6,7,8,9]
         
@@ -429,10 +416,7 @@ def view(params):
         
         return fig
 
-    def plot_interactive(n_skips, layout, bins, bitmap_counts, name, zs_tmp, plot_rep, plot_gene, start_coord, end_coord, gene_locals, gene_names, anchor_name, chrs):
-        window_filter = SG_window
-        poly_order = SG_polynomial_order
-        shared_kmers = [1]
+    def plot_interactive(n_skips, layout, bitmap_counts, name, plot_rep, plot_gene, start_coord, end_coord, gene_locals, gene_names, anchor_name, chrs):
         tmp_lst = []
         rep_colors = mcp.gen_color(cmap="plasma",n=len(index.genomes[anchor_name].gff_anno_types))
         fig = make_subplots(        
@@ -454,7 +438,7 @@ def view(params):
         adjusted_x_stop = int(end_coord/n_skips)
 
         #Get the bins
-        bin_size = ((end_coord-start_coord)/bins)
+        bin_size = ((end_coord-start_coord)/params.max_chr_bins)
         adjusted_bin_size = (bin_size/n_skips)
         cntr = 0
         
@@ -474,9 +458,9 @@ def view(params):
         print(f"\tMains set up {t2 - t_start:0.4f} seconds")
         cntr = 0
         
-        cats_tmp = np.zeros((bins+1,num_samples+1), int)
+        cats_tmp = np.zeros((params.max_chr_bins+1,index.ngenomes+1), int)
         start = 0
-        for i in range(bins):
+        for i in range(params.max_chr_bins):
             end = min(start + adjusted_bin_size_init, len(bitmap_counts))
             vals,counts = np.unique(bitmap_counts[start:end], return_counts=True)
             cats_tmp[i+1][vals] = counts
@@ -484,18 +468,6 @@ def view(params):
 
         cats_tmp = cats_tmp.T
 
-        #cats_tmp = [([0] * (bins+1)) for _ in range(num_samples+1)]
-
-        #for i in bitmap_counts:
-        #    #i tells us which y axis to use. 
-        #    #cntr tells us what x axis to use 
-        #    if (cntr % adjusted_bin_size_init) == 0 : #Is the x position within the same bin? Or do we need to move to the next bin? 
-        #        x_tracker += 1 #X-tracker keeps track of which bin we are using (on the x-axis)
-        #    
-        #    if (i) < len(cats_tmp) and x_tracker < len(cats_tmp[i]):
-        #        cats_tmp[i][x_tracker] += 1 
-        #    cntr += 1 #n_skips
-        #print(np.array(cats_tmp))
         t3 = time.perf_counter()
         print(f"\tBuilding the bins {t3 - t2:0.4f} seconds")
         plot_rep = True
@@ -617,12 +589,6 @@ def view(params):
         t7 = time.perf_counter()
         print(f"\tConserved kmers, non-grey {t7 - t6:0.4f} seconds")
         #Now we will add the smoothing line. There are three parameters that we adjust
-        #for sk in shared_kmers:
-        #    y_tmp = cats_tmp[int(sk)][:-1]
-        #    for i in range(0, int(sk)):
-        #        y_tmp = [a + b for a, b in zip(y_tmp, cats_tmp[int(i)][:-1])] #cats_tmp[int(sk)][:-1]
-        #    fig.append_trace(go.Scatter(x=x, y=signal.savgol_filter(y_tmp,window_filter,poly_order), 
-        #        name="Savitzky-Golay - "+str(sk), marker=dict(color="grey"), mode='lines'), row=6, col=1)
         t8 = time.perf_counter()
         print(f"\tSmoothing line {t8 - t7:0.4f} seconds")
         #Now we add the reference sequence:
@@ -685,7 +651,7 @@ def view(params):
         z_1 = df[1]
         z_9 = df[index.ngenomes]
         #z_1 = index.bitsum_bins.loc[(anchor_name,this_chr), 1]
-        #z_9 = index.bitsum_bins.loc[(anchor_name,this_chr), num_samples]
+        #z_9 = index.bitsum_bins.loc[(anchor_name,this_chr), index.ngenomes]
         #y, x = [], []
         #cntr = 0
         #for xtmp in z_1:
@@ -768,7 +734,7 @@ def view(params):
         for chrom in index.chrs.loc[anchor_name].index:
             x = list(index.bitsum_bins.loc[(anchor_name, chrom)].index)
             if len(x)!=1:
-                wg_fig.append_trace(go.Heatmap(x=x, z=index.bitsum_bins.loc[(anchor_name,chrom),num_samples], 
+                wg_fig.append_trace(go.Heatmap(x=x, z=index.bitsum_bins.loc[(anchor_name,chrom),index.ngenomes], 
                     y=[1]*(len(x)), type = 'heatmap', colorscale='magma_r', showlegend=False,showscale=False), row=((cntr*3)-2), col=1)
                 wg_fig.append_trace(go.Heatmap(x=x, z=index.bitsum_bins.loc[(anchor_name,chrom), 1], 
                     y=[1]*(len(x)), type = 'heatmap', colorscale='magma', showscale=False), row=((cntr*3)-1), col=1)
@@ -850,8 +816,8 @@ def view(params):
     def read_pangenome_comp():
 
         fig = make_subplots(rows=1, cols=1)
-        for i,g in enumerate(labels):
-            fig.add_trace(go.Bar(y=labels, x=index.bitfreq_totals[i+1], name=i+1, #orientation='h',
+        for i,g in enumerate(index.genome_names):
+            fig.add_trace(go.Bar(y=index.genome_names, x=index.bitfreq_totals[i+1], name=i+1, #orientation='h',
                 legendgrouptitle_text="# Samples",
                 marker=dict(color=colors[i]), 
                 marker_line=dict(color=colors[i]), orientation='h',
@@ -985,7 +951,7 @@ def view(params):
     def read_genome_size_files():
         seqs = []
         sizes = []
-        for l in labels:
+        for l in index.genome_names:
             seqs.append([l, len(index.chrs.loc[l].index)])
             sizes.append([l, index.chrs.loc[l]["size"].sum()])
 
@@ -1150,59 +1116,18 @@ def view(params):
         )
         return fig
 
-    ##### READ DATA
-    chr_lens = {}
-    cntr = 0
-    pre_bed_info = {}
-    #chr_nums = 12
-    for l in labels:
-        pre_bed_info[l] = []
-    t = time.time()
-    cnts_tmp = []
-    x = []
-    all_chrs = {} #This is where we keep the raw, str, counts 
-    
-    if opt_bed_file != None: 
-        #The optional bed file was provided 
-        with open(opt_bed_file, "r") as f:
-            line = f.readline()
-            while line:
-                tmp = line.strip().split("\t")
-                pre_bed_info[tmp[0]].append(tmp[1] + ":" + tmp[2] + "-" + tmp[3])
-                line = f.readline()
+    bar_sum_global = {}                                                     
+    for l in index.genome_names:                                                        
+        bar_sum_global[l] = {}                                              
+        cntr = 0                                                            
+        if l in index.anchor_genomes:                                       
+            for c in index.chrs.loc[l].index:                               
+                counts = index.bitsum_bins.loc[(l,c)].sum(axis=0)           
+                bar_sum_global[l][c] = counts.to_numpy()#bar_sum_global_tmp 
+                cntr +=1                                                    
+    print(bar_sum_global)
+    print(index.bitsum_chrs)
 
-
-    for i in range(1, index[anchor_name].chr_count+1):
-        chrs=index.chrs.loc[anchor_name].index[i-1] #"chr" + str(i)
-        chr_start = 0
-
-        chr_end = index.chrs.loc[anchor_name, chrs]["size"]#chr_lens[anchor_name][i-1] #308452471
-        all_chrs[chrs] = index.query_bitmap(anchor_name, chrs, chr_start, chr_end, n_skips_start)
-    chrs = index.chrs.loc[anchor_name].index[0] #"chr1"
-
-    #Parsing the counts will return the number of genomes present at each kmer position, based on the counts
-    #names_simp = all_chrs[chrs].sum(axis=1)#tmp.sum(axis=1)
-    bar_sum_global = {}
-
-    for l in labels:
-        bar_sum_global[l] = {}
-        cntr = 0
-        if l in index.anchor_genomes:
-            for c in index.chrs.loc[l].index:
-                counts = index.bitsum_bins.loc[(l,c)].sum(axis=0)
-                bar_sum_global[l][c] = counts.to_numpy()#bar_sum_global_tmp
-                cntr +=1
-
-    tmp = 0
-    
-    #Read in the repeats file (this has the annotated repeats from Shujun)     
-    zs_tmp = []
-    gene_names = {}
-    gene_locals = {}
-    exon_locals = {}
-    exon_names = {}
-    all_rep_types = {}
-    gene_content = {}
 
     #This will have the figure componants that we need 
     layout = go.Layout(
@@ -1214,39 +1139,24 @@ def view(params):
         )
     )
     ##Set the smoothing variables. These will be changable later on. 
-    window_filter = 53
-    SG_window =53
-    poly_order = 3
-    SG_polynomial_order = 3
-    SG_check = [1]
 
-    shared_kmers = [1]
-    x_start_init_adjust = int(x_start_init/n_skips_start)
-    x_stop_init_adjust = int(x_stop_init/n_skips_start)
     #### NEED TO ADJUST THE START INIT AND STOP INIT SO THAT WE TAKE THE SKIPS INTO ACCOUNT
     #Here is where we make the main plot 
     #if len(index.bitsum_bins.loc[(anchor_name,chrs)]) > 1:
     sys.stderr.write("Quering genes 4\n")
     sys.stderr.flush()
     genes = index.query_genes(anchor_name, chrs, 0, index.chrs.loc[anchor_name, chrs]["size"])
-    print(genes)
     sys.stderr.write("Queried genes 4\n")
     sys.stderr.flush()
     #[g.split(';')[1].split('=')[1] for g in genes['attr']]
-    bounds = genes.loc[:, ["start", "end"]]
-    bounds["break"] = None #pd.NA
+    #bounds = genes.loc[:, ["start", "end"]]
+    #bounds["break"] = None #pd.NA
     #gene_locals[l][chrom] = bounds.to_numpy().flatten()
-    gene_names = [g.split(';')[0].split("=")[1] for g in genes['attr']]
+    #gene_names = [g.split(';')[0].split("=")[1] for g in genes['attr']]
 
-    #main_fig, bar_sum_names, bar_sum_regional, colors, gene_names_tmp = plot_interactive(n_skips_start,
-    #    layout, bins, names_simp[x_start_init_adjust:x_stop_init_adjust], chrs, zs_tmp, True, True, 
-    #    x_start_init, x_stop_init, bounds.to_numpy().flatten(), gene_names, anchor_name, chrs
-    #)
     sys.stderr.write("Quering genes 5\n")
     sys.stderr.flush()
-    local_genes = len(index.query_genes(anchor_name, chrs, x_start_init, x_stop_init))
-    sys.stderr.write("Queried genes 5\n")
-    sys.stderr.flush()
+    #local_genes = len(index.query_genes(anchor_name, chrs, x_start_init, x_stop_init))
 
     sort_by = ["Unique","Universal"]
     tmp = [(i/sum(bar_sum_global[anchor_name][chrs])*100) for i in bar_sum_global[anchor_name][chrs]]
@@ -1258,13 +1168,12 @@ def view(params):
 
     sizes = genes["end"]-genes["start"] #genes["size"]
 
-    x, z_1, z_9, y = {}, {}, {}, {}
-
     #Now we need to make the pangenome plot
     #This is going to be a bar chart 
     whole_genome_hists_fig      = read_genome_comp(anchor_name)
-    all_genomes_dend_fig        = make_all_genome_dend()
-    pangenome_comp_fig          = read_pangenome_comp()
+    all_genomes_dend_fig        = make_all_genome_dend() 
+    pangenome_comp_fig          = read_pangenome_comp()  
+
 
     chrs = index.chrs.loc[anchor_name].index[0] #"chr1"
 
@@ -1276,7 +1185,7 @@ def view(params):
     #All tabs 
     PANGENOME_TAB = [
             #html.Div(id="PanInfo1", children=[
-            #    html.I("Panagram of " + str(num_samples) + " genomes"),
+            #    html.I("Panagram of " + str(index.ngenomes) + " genomes"),
             #    html.Br(),
                 #html.Label('Select a genome: '),
                 #dcc.Dropdown(labels, anchor_name, style=dict(width='40%', height='110%', verticalAlign="middle"), id="genome_select_dropdown"),
@@ -1437,13 +1346,13 @@ def view(params):
         html.Div(children=[
             html.Div(children = [
             #html.Br(),
-                html.I("Panagram of " + str(num_samples) + " genomes"),
+                html.I("Panagram of " + str(index.ngenomes) + " genomes"),
                 html.Br(),
-                html.I("K-mer length: " + str(kmer_len),style={"display": "inline-block",}),
+                html.I("K-mer length: " + str(index.k),style={"display": "inline-block",}),
                 html.Br(),
-                html.I("Number of bins: " + str(bins), style={'display': 'inline-block'}),
-                html.Br(),
-                html.I("Step size: " + str(n_skips_start), style={"display": "inline-block",}, id='step_size_out'),
+                #html.I("Number of bins: " + str(bins), style={'display': 'inline-block'}),
+                #html.Br(),
+                html.I("Step size: " + str(index.lowres_step), style={"display": "inline-block",}, id='step_size_out'),
                 #html.Br()
                 ], style={"display": "inline-block", 'padding-left': '1%'}),
             html.Div(children = [
@@ -1457,12 +1366,12 @@ def view(params):
             ], style={"display": "inline-block", 'padding-left' : '10%', 'vertical-align': 'text-bottom'}),
             html.Div(children = [
                 html.I(anchor_name + "." + chrs + ":", id="chr_name"),
-                dcc.Input(id="Chrs_Info", placeholder=str(x_start_init) + "-" + str(x_stop_init)+ "          ", debounce=True),
+                dcc.Input(id="Chrs_Info", debounce=True), #, placeholder=str(x_start_init) + "-" + str(x_stop_init)+ "          "
                 html.Br(),
-                html.I("Genes in this region: " + str(local_genes), id='regional_genes'),
+                html.I(id='regional_genes'), #"Genes in this region: " + str(local_genes), 
                 html.Br(),
                 html.Label('Pre-selected regions: '),
-                dcc.Dropdown(pre_bed_info[anchor_name], chrs + ":" + str(x_start_init) + "-" + str(x_stop_init) , style=dict(width='100%', height='110%', verticalAlign="middle", ), id="pre_regions_dropdown"),
+                dcc.Dropdown(style=dict(width='100%', height='110%', verticalAlign="middle", ), id="pre_regions_dropdown"), #pre_bed_info[anchor_name], chrs + ":" + str(x_start_init) + "-" + str(x_stop_init) , 
                 
             ], style={"display": "inline-block", 'padding-left' : '10%', 'vertical-align': 'text-bottom'}),
 
@@ -1482,14 +1391,14 @@ def view(params):
 
         html.Div(chrs, style={"display" : "none"}, id="selected-chrom-state"),
         html.Div(anchor_name, style={"display" : "none"}, id="selected-anchor-state"),
-        html.Div(x_start_init,id='start-coord-state',style={"display" : "none"} ),
-        html.Div(x_stop_init,id='end-coord-state',style={"display" : "none"} ),
-        html.Div(x_stop_init,id='chr-genes-state',style={"display" : "none"} ),
+        html.Div(params.start, id='start-coord-state',style={"display" : "none"} ),  
+        html.Div(params.end, id='end-coord-state',style={"display" : "none"} ),    
+        html.Div(id='chr-genes-state',style={"display" : "none"} ),    
         #html.Div([],id='gene-names-state',style={"display" : "none"} ),
     ])
 
     def get_buffer(tmp_start, tmp_stop, n_skips):
-        min_dist = n_skips*bins*8
+        min_dist = n_skips*params.max_chr_bins*8
         act_dist = tmp_stop-tmp_start
         if act_dist >= min_dist:
             return 0 #The distance between start and stop are good enough 
@@ -1776,7 +1685,7 @@ def view(params):
         gene_names = all_genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
         toc_tmp = time.perf_counter()
         print(f"All_genes in {toc_tmp - tic:0.4f} seconds")
-        if get_buffer(start_coord, end_coord, n_skips_start) == 1:
+        if get_buffer(start_coord, end_coord, index.lowres_step) == 1:
             n_skips = 1
 
         bitmap = index.query_bitmap(anchor_name, chrom, start_coord, end_coord, n_skips)#.sum(axis=1)
@@ -1786,8 +1695,8 @@ def view(params):
         print(f"query bitmap {toc_tmp_1 - toc_tmp:0.4f} seconds")
 
         fig1, bar_sum_names, bar_sum_regional, colors, gene_names_tmp = plot_interactive(
-            n_skips, layout, bins, bitmap_counts, 
-            chrom, zs_tmp, click_me_rep, click_me_genes,  
+            n_skips, layout, bitmap_counts, 
+            chrom, click_me_rep, click_me_genes,  
             int(start_coord), int(end_coord), 
             bounds.to_numpy().flatten(), 
             gene_names, anchor_name, chrom
@@ -1832,7 +1741,7 @@ def view(params):
         toc_tmp_33 = time.perf_counter()
         print(f"fig 4 plot in {toc_tmp_33 - toc_tmp_32:0.4f} seconds")
 
-        fig3 = create_tree(start_coord, end_coord, bitmap, n_skips)
+        fig3 = create_tree(bitmap, n_skips)
 
         toc_tmp_4 = time.perf_counter()
         print(f"tree plot in {toc_tmp_4 - toc_tmp_33:0.4f} seconds")
