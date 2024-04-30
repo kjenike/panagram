@@ -389,6 +389,7 @@ class Genome:
         self.anchored = anchor if (anchor is not None) else (fasta is not None)
         self.annotated = not pd.isna(gff)
 
+        self.genome_names = idx.genome_names
         self.ngenomes = len(self.samples)
         self.nbytes = int(np.ceil(self.ngenomes / 8))
         self.bitmaps = None
@@ -632,6 +633,8 @@ class Genome:
             if step % s == 0:
                 bstep = max(bstep, s)
 
+        print(bstep)
+
         if start is None:
             start = 0
 
@@ -639,14 +642,25 @@ class Genome:
             end = self.seq_len(name)
 
         pac = self._query_bytes(name, start, end, step, bstep)
-        return self._bytes_to_bits(pac)
+        bits = self._bytes_to_bits(pac)
+        print(len(pac))
+
+        idx = np.arange(start, end+1, step, dtype=int)#[:len(bits)-1]
+        print(self.params['k'])
+        print(len(idx),len(bits))
+        print(idx)
+        print(len(idx),len(bits))
+        print(bits.shape)
+        df = pd.DataFrame.from_records(bits, index=idx, columns=self.genome_names)
+        print(df)
+        return df#bits
 
     def _bytes_to_bits(self, pac):
         return np.unpackbits(pac, bitorder="little", axis=1)[:,:self.ngenomes]
 
     def _query_bytes(self, name, start, end, step, bstep):
         byte_start = self.nbytes * (self.offsets.loc[name,bstep] + (start//bstep))
-        length  = int((end - start) // bstep)
+        length  = int((end - start) // bstep) + 1#bstep
 
         step = step // bstep
 
@@ -657,9 +671,9 @@ class Genome:
         self.bitmaps[bstep].seek(bgzf.make_virtual_offset(blk_start, blk_offs))
         buf = self.bitmaps[bstep].read(length * self.nbytes)
 
-        pac = np.frombuffer(buf, "uint8").reshape((len(buf)//self.nbytes, self.nbytes))
+        print(length, self.nbytes, len(buf))
 
-        #pac = pac[:,::-1]
+        pac = np.frombuffer(buf, "uint8").reshape((len(buf)//self.nbytes, self.nbytes))
 
         if step > 1:
             return pac[::step]
