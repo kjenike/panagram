@@ -452,11 +452,11 @@ def view(params):
                 draw_clade(color_code, total_kmers, kmer_num, palette, child, x_curr, line_shapes, x_coords=x_coords, y_coords=y_coords)
 
 
-    def create_tree(raw_counts, n_skips):
+    def create_tree(bitmap):
         #Adapted from:
         #https://github.com/plotly/dash-phylogeny
 
-        tree_tmp1 = raw_counts 
+        tree_tmp1 = bitmap 
         #We need to sum up the number of times that kmers occur in each column (aka, each sample)
         kmer_num_tmp = tree_tmp1.sum(axis=0)
         
@@ -598,7 +598,7 @@ def view(params):
                 r=10))
         return fig
 
-    def get_local_info(x_all, bar_sum_regional, anchor_name, chrs):
+    def get_local_info(bar_sum_regional, anchor_name, chrs):
         fig = make_subplots(
             rows=2, cols=2,
             specs=[[{"type": "bar", "colspan": 2}, None],
@@ -641,7 +641,7 @@ def view(params):
         
         return fig
 
-    def plot_interactive(n_skips, layout, bitmap_counts, name, plot_rep, plot_gene, start_coord, end_coord, gene_locals, gene_names, anchor_name, chrs):
+    def plot_interactive(n_skips, bitmap_counts, plot_rep, plot_gene, start_coord, end_coord, gene_locals, gene_names, anchor_name, chrs):
         tmp_lst = []
         rep_colors = mcp.gen_color(cmap="plasma",n=len(index.genomes[anchor_name].gff_anno_types))
         fig = make_subplots(        
@@ -698,15 +698,11 @@ def view(params):
         plot_rep = True
         #Add a line plot that will cover the different repetative elements. 
         if plot_rep == True:
-            #rep_colors = mcp.gen_color(cmap="plasma",n=len(rep_list ))
             cntr = 0
             anno_locals_all = []
             all_y_reps = []
             all_rep_colors = []
             df = index.query_anno(anchor_name, chrs, start_coord, end_coord)
-            #anno_locals_tmp = []
-            #rep_y = []
-            #anno_colors = []
 
             for i in index.genomes[anchor_name].gff_anno_types: #rep_types.keys():               
                 if i == "exon":
@@ -718,21 +714,11 @@ def view(params):
                     fig.append_trace(go.Scattergl(x=exon_tmp, y=exon_y, 
                         line=dict(color="#a0da39", width=5), name=i, hoverinfo='none'), row=2, col=1)
                 else:
-
-                    #if i in anno_bounds.index:
-                    #    for _,(start,end) in anno_bounds.loc[[i]].iterrows():
-                    #        anno_mat[cntr, start:end] = cntr #hex2color(rep_colors[cntr])
                     bounds = df[df["type"]==i].loc[:, ["start", "end"]]
                     bounds["break"] = None #pd.NA
 
-                    #print(anno_locals_tmp)
                     anno_locals_tmp = bounds.to_numpy().flatten()
-                    #print(anno_locals_tmp_tmp)
-                    #anno_locals_tmp = anno_locals_tmp + anno_locals_tmp_tmp
-                    #anno_locals_tmp = np.concatenate((anno_locals_tmp, anno_locals_tmp_tmp))
-                    #print(anno_locals_tmp)
-                    #rep_y += [cntr,cntr,None]*(int(len(anno_locals_tmp_tmp)/3))
-                    #anno_colors.append([rep_colors[cntr]]*len(anno_locals_tmp_tmp))
+
                     if len(anno_locals_tmp) > 0:
                         rep_y = [cntr,cntr,None]*(int(len(anno_locals_tmp)/3))
                         
@@ -744,17 +730,7 @@ def view(params):
                             row=4, col=1)
                     cntr += 1
             fig.update_yaxes(visible=False, row=4, col=1)
-            #fig.update_xaxes(showticklabels=False, row=4, col=1)
-            #fig.append_trace(go.Scattergl(x=anno_locals_tmp, y=rep_y, marker_color=anno_colors,
-            #    #line=dict(color=rep_colors[cntr]), 
-            #    legendgroup="group2", 
-            #    legendgrouptitle_text="Annotations", hoverinfo='name',),
-            #    row=4, col=1
-            #)
-        #fig.append_trace(
-        #    go.Heatmap(x=mat_bounds[:-1], z=anno_mat, colorscale="plasma"),
-        #    row=4, col=1
-        #)
+
         t4 = time.perf_counter()
         print(f"\tRepeats {t4 - t3:0.4f} seconds")
         #print("just checking")
@@ -1184,29 +1160,6 @@ def view(params):
 
         return fig
 
-    def plot_anno_conserve(anchor_name):
-        file_name="gene_var.txt"
-        all_avgs = []
-        all_stds = []
-        all_names = []
-        all_lens = []
-
-        d_anno = {"Standard_dev":all_stds, #np.log10(all_stds),#all_stds,
-            "Average":all_avgs,
-            "Name":all_names,
-            "Length":all_lens,
-            #"Sweep":is_sweep
-        }
-        df_anno = pd.DataFrame(d_anno)
-        fig = px.scatter(df_anno,x="Average", y="Standard_dev", marginal_y='histogram', 
-            marginal_x='histogram',
-            hover_name="Name", 
-            #color="Sweep",
-            opacity=0.5,
-            color=np.log10(df_anno["Length"])
-        )
-        return fig
-
     def get_buffer(tmp_start, tmp_stop, n_skips):
         min_dist = n_skips*params.max_chr_bins*8
         act_dist = tmp_stop-tmp_start
@@ -1228,7 +1181,6 @@ def view(params):
         sys.stderr.flush()
 
         return anchor, chrom, start, end
-
 
 
     @app.callback(
@@ -1490,15 +1442,18 @@ def view(params):
         if get_buffer(start_coord, end_coord, index.lowres_step) == 1:
             n_skips = 1
 
-        bitmap = index.query_bitmap(anchor_name, chrom, start_coord, end_coord, n_skips)#.sum(axis=1)
+        bitmap = index.query_bitmap(anchor_name, chrom, start_coord, end_coord, n_skips)
+        #bitmap = np.array(bitmap)
         bitmap_counts = bitmap.sum(axis=1)
+        print("COUNTS")
+        print(bitmap_counts)
 
         toc_tmp_1 = time.perf_counter()
         print(f"query bitmap {toc_tmp_1 - toc_tmp:0.4f} seconds")
 
         fig1, bar_sum_names, bar_sum_regional, colors, gene_names_tmp = plot_interactive(
-            n_skips, layout, bitmap_counts, 
-            chrom, click_me_rep, click_me_genes,  
+            n_skips, bitmap_counts, 
+            click_me_rep, click_me_genes,  
             int(start_coord), int(end_coord), 
             bounds.to_numpy().flatten(), 
             gene_names, anchor_name, chrom
@@ -1543,11 +1498,11 @@ def view(params):
         print("ASDF")
         print(bar_sum_regional, index.bitsum_chrs.loc[anchor_name,chrom])
 
-        fig2 = get_local_info(bitmap_counts, bar_sum_regional, anchor_name, chrom)  
+        fig2 = get_local_info(bar_sum_regional, anchor_name, chrom)  
         toc_tmp_33 = time.perf_counter()
         print(f"fig 4 plot in {toc_tmp_33 - toc_tmp_32:0.4f} seconds")
 
-        fig3 = create_tree(bitmap, n_skips)
+        fig3 = create_tree(bitmap)
 
         toc_tmp_4 = time.perf_counter()
         print(f"tree plot in {toc_tmp_4 - toc_tmp_33:0.4f} seconds")
