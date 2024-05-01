@@ -670,7 +670,7 @@ def view(params):
         cntr = 0
         x_tracker = 0
         #Here we are filling in the bins for the main figure.    
-        bin_size_int = int(bin_size) + 1
+        bin_size_int = n_skips*(int(bin_size) // n_skips)+1
 
         adjusted_bin_size_init = int(adjusted_bin_size) + 1
 
@@ -692,6 +692,18 @@ def view(params):
             start = end
 
         cats_tmp = cats_tmp.T
+
+        bin_counts = pd.DataFrame({
+            "count" : np.array(bitmap_counts),
+            "bin" : bitmap_counts.index // bin_size_int
+        }).value_counts().unstack(level=1).reindex(index.bitsum_index).fillna(0)
+
+        print(x)
+        x = bin_counts.columns * bin_size_int
+        print(x)
+
+        print(bin_counts)
+        print(cats_tmp)
 
         t3 = time.perf_counter()
         print(f"\tBuilding the bins {t3 - t2:0.4f} seconds")
@@ -756,14 +768,16 @@ def view(params):
 
             fig.update_yaxes(visible=False, range=[-1,4], row=2, col=1)
             fig.update_xaxes(showticklabels=False, row=2, col=1)
+
         t5 = time.perf_counter()
         print(f"\tGene plotting {t5 - t4:0.4f} seconds")
         #This is the conserved kmer plotting section
         bar_sum_regional = []
-        bar_sum_names = []
-        bar_sum_regional.append(sum(cats_tmp[0]))
-        bar_sum_names.append(str(0))
-        fig.append_trace(go.Bar(x=x, y=cats_tmp[0], name=str(0),
+        #bar_sum_regional.append(sum(cats_tmp[0]))
+        #bar_sum_regional.append(sum(cats_tmp[0]))
+        #fig.append_trace(go.Bar(x=x, y=cats_tmp[0], name=str(0),
+        bar_sum_regional.append(sum(bin_counts.loc[0]))
+        fig.append_trace(go.Bar(x=x, y=bin_counts.loc[0], name=str(0),
                 legendgroup="group1", 
                 legendgrouptitle_text="Conserved K-mers",
                 marker=dict(color='grey'), 
@@ -773,10 +787,12 @@ def view(params):
         t6 = time.perf_counter()
         print(f"\tConserved k-mers (grey) {t6 - t5:0.4f} seconds")
         
-        for i in range(1, len(cats_tmp)):
-            bar_sum_regional.append(sum(cats_tmp[i]))
-            bar_sum_names.append(str(i))
-            fig.append_trace(go.Bar(x=x, y=cats_tmp[i], name=str(i),
+        #for i in range(1, len(cats_tmp)):
+        #    bar_sum_regional.append(sum(cats_tmp[i]))
+        #    fig.append_trace(go.Bar(x=x, y=cats_tmp[i], name=str(i),
+        for i in bin_counts.index[1:]:
+            bar_sum_regional.append(sum(bin_counts.loc[i]))
+            fig.append_trace(go.Bar(x=x, y=bin_counts.loc[i], name=str(i),
                 legendgroup="group1", 
                 legendgrouptitle_text="Conserved K-mers",
                 marker=dict(color=colors[i-1]), 
@@ -824,7 +840,7 @@ def view(params):
         print(f"\tTruly finishing touches {t10 - t9:0.4f} seconds")
         
 
-        return fig, bar_sum_names, bar_sum_regional, colors, gene_names_tmp
+        return fig, bar_sum_regional, colors, gene_names_tmp
 
     def make_gene_whole_chr_old(x, locs):
         z_genes = [0]*(len(x)+2)
@@ -1230,6 +1246,12 @@ def view(params):
         click_me_genes = True
         click_me_rep = True
         print("Triggered_id: "+ str(triggered_id))
+
+        anchor_init = anchor
+        chrom_init = chrom
+        end_init = end_coord
+        start_init = start_coord
+        end_init = end_coord
         
         tmp_name, tmp_x, tmp_y, tmp_color, tmp_attr = no_update, no_update, no_update, no_update, no_update #json.dumps(clickData, indent=2)
 
@@ -1316,6 +1338,14 @@ def view(params):
             start_coord = this_gene_info['start'].iloc[0]
             end_coord = this_gene_info['end'].iloc[0]
             tmp_attr = "Attributes: " + str(annotation_tab_df.loc[annotation_tab_df['Name'] == str(anno_clickdata['points'][0]['hovertext']), 'attr'].iloc[0])
+
+        if start_coord < 0 or start_coord > end_coord or end_coord > index.chrs.loc[(anchor,chrom),"size"]:
+            sys.stderr.write("Error: start coord greater than end coord. Resetting\n")
+            anchor = anchor_init
+            chrom = chrom_init
+            start_coord = start_init
+            end_coord = end_init
+
             
         return (
             anchor, chrom, start_coord, end_coord, #chr_genes,
@@ -1451,7 +1481,7 @@ def view(params):
         toc_tmp_1 = time.perf_counter()
         print(f"query bitmap {toc_tmp_1 - toc_tmp:0.4f} seconds")
 
-        fig1, bar_sum_names, bar_sum_regional, colors, gene_names_tmp = plot_interactive(
+        fig1, bar_sum_regional, colors, gene_names_tmp = plot_interactive(
             n_skips, bitmap_counts, 
             click_me_rep, click_me_genes,  
             int(start_coord), int(end_coord), 
@@ -1494,9 +1524,6 @@ def view(params):
         chr_fig = plot_chr_whole(start_coord, end_coord, anchor_name, chrom, all_genes)
         toc_tmp_32 = time.perf_counter()
         print(f"chr fig in {toc_tmp_32 - toc_tmp_31:0.4f} seconds")
-
-        print("ASDF")
-        print(bar_sum_regional, index.bitsum_chrs.loc[anchor_name,chrom])
 
         fig2 = get_local_info(bar_sum_regional, anchor_name, chrom)  
         toc_tmp_33 = time.perf_counter()

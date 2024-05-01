@@ -123,6 +123,10 @@ class Index(Serializable):
     @property
     def params(self):
         return dataclasses.asdict(self)
+    
+    @property
+    def bitsum_index(self):
+        return pd.RangeIndex(0,self.ngenomes+1)
 
     def kmc_prefix(self, *names):
         return os.path.join(self.get_subdir("kmc"), ".".join(names))
