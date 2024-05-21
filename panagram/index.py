@@ -569,13 +569,13 @@ class Genome:
                 names = ["chr","source","type","start","end","score","strand","phase","attr"],
                 usecols = TABIX_COLS):
 
-            df["name"] = pd.NA
-            for aattr in df,self.prms.gff_attrs:
-                isna = df.index[df["name"].isna()]
-                if len(isna) > 0:
-                    df.loc[isna,"name"] = gffattr(df.loc[isna], attr)
-                else:
-                    break
+            #df["name"] = pd.NA
+            #for attr in df,self.gff_attrs:
+            #    isna = df.index[df["name"].isna()]
+            #    if len(isna) > 0:
+            #        df.loc[isna,"name"] = gffattr(df.loc[isna], attr)
+            #    else:
+            #        break
 
             yield df[TABIX_COLS]
 
@@ -811,7 +811,6 @@ class Genome:
         else:
             chr_genes = pd.Series([0])
         self.chrs["gene_count"] = chr_genes.reindex(self.chrs.index,fill_value=0)
-        print(self.chrs)
 
         self.bitmaps = {s : bgzip.BGZipWriter(open(self.bitmap_gz_fname(s), "wb"))for s in self.steps}
         bin_occs = dict()

@@ -846,8 +846,7 @@ def view(params):
 
     def plot_chr_whole( start_coord, end_coord, anchor_name, this_chr, genes): 
         df = index[anchor_name].bitsum_bins.loc[this_chr]
-        print(df)
-        div = df.sum(axis=0)
+        div = df.sum(axis=1)
 
         z_1 = df[1]/div
         z_9 = df[index.ngenomes]/div
