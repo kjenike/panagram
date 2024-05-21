@@ -50,6 +50,7 @@ IDX_SUFFIX = "gzi"
 ANCHOR_DIR = "anchor"
 
 TABIX_COLS = ["chr","start","end","type","attr"]
+#TABIX_COLS = ["chr","start","end","type","name"]
 TABIX_TYPES = {"start" : int, "end" : int}
 GENE_TABIX_COLS = TABIX_COLS + ["unique","universal"]
 GENE_TABIX_TYPES = {"start" : int, "end" : int, "unique" : int, "universal" : int}
@@ -92,8 +93,9 @@ class Index(Serializable):
 
     max_view_chrs: int = 50
 
-    gff_gene_types: List[str] = field(default_factory=lambda: ["gene"])
-    gff_anno_types: List[str] = field(default=None)
+    gff_gene_types: List[str] = field(default_factory=lambda: ["gene"], help="GFF features to store locations and conservation scores")
+    gff_anno_types: List[str] = field(default=None, help="GFF features of which to store locations, but not conservation scores")
+    gff_attrs: List[str] = field(default_factory=lambda: ["ID","Name"], help="GFF attributes to store in annotation indexes")
 
     #Subset of genome IDs to generate anchor genomes for. Will use all genomes as anchors if not specified
     anchor_genomes: List[str] = field(default=None)
@@ -325,7 +327,7 @@ class Index(Serializable):
     def query_bitmap(self, genome, chrom, start=None, end=None, step=1):
         return self.genomes[genome].query(chrom, start, end, step)
 
-    def query_genes(self, genome, chrom, start, end):
+    def query_genes(self, genome, chrom=None, start=None, end=None):
         return self.genomes[genome].query_genes(chrom, start, end)
 
     def query_anno(self, genome, chrom, start, end):
@@ -502,6 +504,8 @@ class Genome:
 
     def set_chrs(self, chrs):
         self.chrs = chrs
+        if not "gene_count" in self.chrs.columns:
+            self.chrs["gene_count"] = 0
         self.sizes = chrs["size"]
 
         step_sizes = pd.DataFrame({step : np.ceil(self.sizes / step) for step in self.steps}, dtype=int)
@@ -535,6 +539,8 @@ class Genome:
         if self.annotated:
             self.bitsum_genes = pd.read_table(self.chr_genes_fname).set_index("chr")
             self.bitfreq_genes = sum2freq(self.bitsum_genes)
+        else:
+            self.bitfreq_genes = self.bitsum_genes = pd.DataFrame(0, index=self.chrs.index, columns=self.gene_tabix_cols)
 
     def _load_tabix(self, type_):
         fname = self.tabix_fname(type_)
@@ -556,11 +562,21 @@ class Genome:
         return self.sizes.loc[seq_name]
 
     def _iter_gff(self):
+        gffattr = lambda df,name: df["attr"].str.extract(f"{name}=([^;]+)", re.IGNORECASE)
         for df in pd.read_csv(
                 self.gff,
                 sep="\t", comment="#", chunksize=10000,
                 names = ["chr","source","type","start","end","score","strand","phase","attr"],
                 usecols = TABIX_COLS):
+
+            df["name"] = pd.NA
+            for aattr in df,self.prms.gff_attrs:
+                isna = df.index[df["name"].isna()]
+                if len(isna) > 0:
+                    df.loc[isna,"name"] = gffattr(df.loc[isna], attr)
+                else:
+                    break
+
             yield df[TABIX_COLS]
 
     def _init_anno_types(self):
@@ -632,12 +648,11 @@ class Genome:
         return pd.Series(occs).value_counts()
 
     def query(self, name, start=None, end=None, step=1):
+        t = time()
         bstep = 1
         for s in self.steps:
             if step % s == 0:
                 bstep = max(bstep, s)
-
-        print(bstep)
 
         if start is None:
             start = 0
@@ -647,17 +662,9 @@ class Genome:
 
         pac = self._query_bytes(name, start, end, step, bstep)
         bits = self._bytes_to_bits(pac)
-        print(len(pac))
-
         idx = np.arange(start, end+1, step, dtype=int)#[:len(bits)-1]
-        print(self.params['k'])
-        print(len(idx),len(bits))
-        print(idx)
-        print(len(idx),len(bits))
-        print(bits.shape)
-        df = pd.DataFrame.from_records(bits, index=idx, columns=self.genome_names)
-        print(df)
-        return df#bits
+        df = pd.DataFrame(bits, index=idx, columns=self.genome_names)
+        return df
 
     def _bytes_to_bits(self, pac):
         return np.unpackbits(pac, bitorder="little", axis=1)[:,:self.ngenomes]
@@ -674,8 +681,6 @@ class Genome:
 
         self.bitmaps[bstep].seek(bgzf.make_virtual_offset(blk_start, blk_offs))
         buf = self.bitmaps[bstep].read(length * self.nbytes)
-
-        print(length, self.nbytes, len(buf))
 
         pac = np.frombuffer(buf, "uint8").reshape((len(buf)//self.nbytes, self.nbytes))
 
@@ -701,25 +706,28 @@ class Genome:
                 dbs.append(db)
         return dbs
 
-    def query_genes(self, chrom, start, end):#, attrs=["name","id"]):
+    def query_genes(self, chrom=None, start=None, end=None):#, attrs=["name","id"]):
+        t = time()
         if self.gene_tabix is None:
-            return pd.DataFrame(columns=self.gene_tabix_cols+attrs)
-        try:
-            rows = self.gene_tabix.fetch(chrom, start, end)
-        except ValueError:
+            #return pd.DataFrame(columns=list(self.gene_tabix_cols) + ["attr"])
             rows = []
+        else:
+            try:
+                rows = self.gene_tabix.fetch(chrom, start, end, multiple_iterators=True)
+            except ValueError:
+                rows = []
 
+        rows = list(rows)
         ret = pd.DataFrame(rows, columns=self.gene_tabix_cols).astype(self.gene_tabix_types)
 
-        attr = lambda a: ret["attr"].str.extract(f"{a}=([^;]+)", re.IGNORECASE)
-        names = attr("Name")
-        ids = attr("ID")
-        names[names.isna()] = ids[names.isna()]
-        ret["name"] = names
-
-        #for a in attrs:
-        #    ret[a.lower()] = ret["attr"].str.extract(f"{a}=([^;]+)", re.IGNORECASE)
-        
+        if "attr" in ret.columns:
+            attr = lambda a: ret["attr"].str.extract(f"{a}=([^;]+)", re.IGNORECASE)
+            names = attr("Name")
+            ids = attr("ID")
+            names[names.isna()] = ids[names.isna()]
+            ret["name"] = names
+        else:
+            ret["name"] = ""
 
         return ret
     
@@ -798,13 +806,15 @@ class Genome:
 
         if self.annotated:
             gene_df = self.init_gff()#.groupby("chr")
-            gene_chrs = gene_df.index.unique(0)
+            chr_genes = gene_df.index.get_level_values(0).value_counts()
             logger.info(f"Annotation pre-processed")
-            #chr_genes = gene_df.groupby("chr").groups
+        else:
+            chr_genes = pd.Series([0])
+        self.chrs["gene_count"] = chr_genes.reindex(self.chrs.index,fill_value=0)
+        print(self.chrs)
 
         self.bitmaps = {s : bgzip.BGZipWriter(open(self.bitmap_gz_fname(s), "wb"))for s in self.steps}
         bin_occs = dict()
-        #bitsum_genes = dict()
         logger.info(f"Anchoring Started")
 
         for i,rec in enumerate(self.iter_fasta()):
@@ -816,7 +826,7 @@ class Genome:
 
             logger.info(f"Anchored {chrom}")
 
-            if self.annotated and chrom in gene_chrs:
+            if self.annotated and chrom in chr_genes:
                 for _,start,end in gene_df.loc[[chrom]].index:
                     if end <= start or start < 0 or end > len(bitsum):
                         logger.warning(f"Skipping gene at {chrom}:{start}-{end}, coordinates out-of-bounds")
@@ -824,7 +834,6 @@ class Genome:
                     occ, counts = np.unique(bitsum[start:end], return_counts=True)
                     gene_df.loc[(chrom,start,end),occ] += counts
                 logger.info(f"Annotated {chrom}")
-
 
             t = time()
 

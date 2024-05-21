@@ -39,7 +39,6 @@ def make_all_genome_dend(index):
     with open(index.genome_dist_fname) as f:
         for line in f:
             f, t, d, p, x = line.rstrip().split("\t")
-            print(f,t)
             i = index.genomes[f].id
             j = index.genomes[t].id
             dist_mat[i][j] = d
