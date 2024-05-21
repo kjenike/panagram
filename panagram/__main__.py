@@ -92,15 +92,32 @@ class Bitdump:
         idx.close()
 
 @dataclasses.dataclass
+class Annotate:
+    """(Re-)annotate an existing anchored genome using a GFF file """
+
+    index_dir: str = field(positional=True, metavar="index_dir")
+    """Panagram index directory"""
+
+    genome: str = field(positional=True, metavar="genome_name")
+
+    gff_file: str = field(positional=True, metavar="gff_file")
+    
+    def run(self):
+        idx = Index(self.index_dir)
+        idx[self.genome].run_annotate(self.gff_file)
+        idx.close()
+
+@dataclasses.dataclass
 class Main:
     """Alignment-free pan-genome viewer
 
 Subcommands:
     index    Anchor KMC bitvectors to reference FASTA files
     view     Display panagram viewer in a browser window
+    annotate Create or replace GFF annotation for anchored genome
     bitdump  Query pan-kmer bitmap via the commandline"""
 
-    cmd: Union[View, Index, Bitdump]
+    cmd: Union[View, Index, Bitdump, Annotate]
     cprof: str = field(default=None, help=argparse.SUPPRESS)
 
     def run(self):

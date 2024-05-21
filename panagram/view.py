@@ -665,9 +665,9 @@ def view(params):
         adjusted_bin_size = (bin_size/n_skips)
         
         #Here we are filling in the bins for the main figure.    
-        bin_size_int = n_skips*(int(bin_size) // n_skips)+1
+        bin_size_int = n_skips*(int(bin_size) // n_skips)#+1
 
-        adjusted_bin_size_init = int(adjusted_bin_size) + 1
+        adjusted_bin_size_init = int(adjusted_bin_size) #+ 1
 
         #t2 = time.perf_counter()
         #print(f"\tFigure init {t2 - t_start:0.4f} seconds")
@@ -1142,7 +1142,7 @@ def view(params):
         genes = index.query_genes(anchor_name)
         tib = time.perf_counter()
         sys.stderr.write(f"Queried genes 3 ({tib-tic})\n")
-        genes["name"] = genes["attr"].str.extract("Name=([^;]+)")
+        #genes["name"] = genes["attr"].str.extract("Name=([^;]+)")
         genes["size"] = genes["end"] - genes["start"]
         
         x = [i for i in range(0, len(genes))]
@@ -1569,8 +1569,8 @@ def view(params):
             printme = ""
         elif len(local_gene_list)==1:
             printme += "Genes: "
-            printme += local_gene_list['name'].iloc[0] + ": "
-            printme += local_gene_list['attr'].iloc[0] #index.query_anno(anchor_name, chrs, start_coord, end_coord)['attr']
+            printme += local_gene_list['name'].iloc[0] #+ ": "
+            #printme += local_gene_list['attr'].iloc[0] #index.query_anno(anchor_name, chrs, start_coord, end_coord)['attr']
         elif len(local_gene_list)<=25:
             printme += "Genes: "
             print(local_gene_list)

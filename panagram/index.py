@@ -49,10 +49,10 @@ BGZ_SUFFIX = "gz"
 IDX_SUFFIX = "gzi"
 ANCHOR_DIR = "anchor"
 
-TABIX_COLS = ["chr","start","end","type","attr"]
-#TABIX_COLS = ["chr","start","end","type","name"]
+GFF_COLS = ["chr","start","end","type","attr"]
+TABIX_COLS = ["chr","start","end","type","name"]
 TABIX_TYPES = {"start" : int, "end" : int}
-GENE_TABIX_COLS = TABIX_COLS + ["unique","universal"]
+GENE_COLS = ["chr","start","end","name"]#,"unique","universal"]
 GENE_TABIX_TYPES = {"start" : int, "end" : int, "unique" : int, "universal" : int}
 TABIX_SUFFIX = ".gz"
 
@@ -95,7 +95,7 @@ class Index(Serializable):
 
     gff_gene_types: List[str] = field(default_factory=lambda: ["gene"], help="GFF features to store locations and conservation scores")
     gff_anno_types: List[str] = field(default=None, help="GFF features of which to store locations, but not conservation scores")
-    gff_attrs: List[str] = field(default_factory=lambda: ["ID","Name"], help="GFF attributes to store in annotation indexes")
+    gff_name: List[str] = field(default_factory=lambda: ["Name","ID"], help="GFF attributes to store in annotation indexes")
 
     #Subset of genome IDs to generate anchor genomes for. Will use all genomes as anchors if not specified
     anchor_genomes: List[str] = field(default=None)
@@ -473,12 +473,13 @@ class Genome:
 
     @property
     def gene_tabix_cols(self):
-        return TABIX_COLS + list(self.bitsum_index)
+        return GENE_COLS + [1,self.ngenomes]#list(self.bitsum_index)
+        #return TABIX_COLS + list(self.bitsum_index)
 
     @property
     def gene_tabix_types(self):
         r = {"start" : int, "end" : int}
-        for i in self.bitsum_index:
+        for i in [1,self.ngenomes]:#self.bitsum_index:
             r[i] = int
         return r#TABIX_COLS + list(self.bitsum_index)
     
@@ -562,20 +563,21 @@ class Genome:
         return self.sizes.loc[seq_name]
 
     def _iter_gff(self):
-        gffattr = lambda df,name: df["attr"].str.extract(f"{name}=([^;]+)", re.IGNORECASE)
+        gffattr = lambda df,name: df["attr"].str.extract(f"{name}=([^;]+)", re.IGNORECASE)[0]
         for df in pd.read_csv(
                 self.gff,
                 sep="\t", comment="#", chunksize=10000,
                 names = ["chr","source","type","start","end","score","strand","phase","attr"],
-                usecols = TABIX_COLS):
+                usecols = GFF_COLS):
 
-            #df["name"] = pd.NA
-            #for attr in df,self.gff_attrs:
-            #    isna = df.index[df["name"].isna()]
-            #    if len(isna) > 0:
-            #        df.loc[isna,"name"] = gffattr(df.loc[isna], attr)
-            #    else:
-            #        break
+            df["name"] = pd.NA
+            for attr in self.params["gff_name"]:
+                isna = df.index[df["name"].isna()]
+                if len(isna) > 0:
+                    names = gffattr(df.loc[isna], attr)
+                    df.loc[isna,"name"] = names
+                else:
+                    break
 
             yield df[TABIX_COLS]
 
@@ -595,8 +597,10 @@ class Genome:
             for t in self.gff_anno_types:
                 f.write(f"{t}\n")
 
-    def init_gff(self):
-        if pd.isna(self.gff): return
+    def init_gff(self, filename=None):
+        if filename is None:
+            filename = self.gff
+        if pd.isna(filename): return
 
         genes = list()
         annos = list()
@@ -660,9 +664,9 @@ class Genome:
         if end is None:
             end = self.seq_len(name)
 
-        pac = self._query_bytes(name, start, end, step, bstep)
+        pac = self._query_bytes(name, start, end-1, step, bstep)
         bits = self._bytes_to_bits(pac)
-        idx = np.arange(start, end+1, step, dtype=int)#[:len(bits)-1]
+        idx = np.arange(start, end, step, dtype=int)#[:len(bits)-1]
         df = pd.DataFrame(bits, index=idx, columns=self.genome_names)
         return df
 
@@ -720,14 +724,14 @@ class Genome:
         rows = list(rows)
         ret = pd.DataFrame(rows, columns=self.gene_tabix_cols).astype(self.gene_tabix_types)
 
-        if "attr" in ret.columns:
-            attr = lambda a: ret["attr"].str.extract(f"{a}=([^;]+)", re.IGNORECASE)
-            names = attr("Name")
-            ids = attr("ID")
-            names[names.isna()] = ids[names.isna()]
-            ret["name"] = names
-        else:
-            ret["name"] = ""
+        #if "attr" in ret.columns:
+        #    attr = lambda a: ret["attr"].str.extract(f"{a}=([^;]+)", re.IGNORECASE)
+        #    names = attr("Name")
+        #    ids = attr("ID")
+        #    names[names.isna()] = ids[names.isna()]
+        #    ret["name"] = names
+        #else:
+        #    ret["name"] = ""
 
         return ret
     
@@ -788,6 +792,38 @@ class Genome:
         self.seq_lens[self.id][name] = size
 
         return self._bytes_to_bits(arrs[1])
+
+    def run_annotate(self, gff_file=None, logfile=None):
+        logging.basicConfig(
+                filename=logfile, level=logging.INFO, 
+                format='[ %(asctime)s %(levelname)7s ] %(message)s',
+                datefmt="%Y-%m-%d %H:%M:%S"
+        )
+
+        gene_df = self.init_gff(gff_file)
+
+        #for chrom,df in gene_df.groupby(level="chr"):
+        for chrom in gene_df.index.unique("chr"):
+            df = gene_df.loc[chrom]
+            st = df.index.get_level_values("start").min()
+            en = min(self.sizes[chrom],df.index.get_level_values("end").max())
+
+            bitsum = self.query(chrom, st, en).sum(axis=1)
+
+            for start,end in df.index:
+                if end <= start or start < 0 or end-st > len(bitsum):
+                    logger.warning(f"Skipping gene at {chrom}:{start}-{end}, coordinates out-of-bounds")
+                    continue
+                occ, counts = np.unique(bitsum[start-st:end-st], return_counts=True)
+                gene_df.loc[(chrom,start,end),occ] += counts
+
+            self.bitsum_genes = gene_df.groupby("chr",sort=False)[self.bitsum_index].sum()#.sort_index()
+            self.bitsum_genes.to_csv(self.chr_genes_fname, sep="\t")
+
+            gene_tabix = gene_df.reset_index()[self.gene_tabix_cols]
+            print(gene_tabix)
+            self._write_tabix(gene_tabix, "gene")
+
 
 
     def run_anchor(self, bitvecs, logfile=None):
