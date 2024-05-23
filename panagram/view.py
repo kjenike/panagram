@@ -639,190 +639,154 @@ def view(params):
         
         return fig
 
-    def plot_interactive(n_skips, bitmap_counts, plot_rep, plot_gene, start_coord, end_coord, gene_locals, gene_names, anchor_name, chrs):
-        #t_start = time.perf_counter()
+    def plot_interactive(anchor_name, chrom, start_coord, end_coord, step, pancounts, paircounts, genes):
+        t1 = time.perf_counter()
+
+        genes["break"] = None
+        gene_bounds = genes.loc[:, ["start", "end", "break"]].to_numpy().flatten()
+        gene_names = genes["name"]
+        #bounds.to_numpy().flatten(), 
 
         tmp_lst = []
         rep_colors = mcp.gen_color(cmap="plasma",n=len(index.genomes[anchor_name].gff_anno_types))
         fig = make_subplots(        
-            rows=13, cols=1,
+            rows=4, cols=1,
             shared_xaxes=True,
-            specs=[
-                [{"type": "scatter"}], 
-                [{"type": "scatter", 'rowspan':2}], [None ], 
-                [{"type": "scatter", 'rowspan':2}], [None ],
-                [{"type": "bar", 'rowspan':8}] ] + [[None]]*7,
-            subplot_titles=("Ref. Sequence Position","Gene Annotation", "Annotation",  "Conserved K-mers" )
+            vertical_spacing=0.01,
+            row_heights=[1,2,4,4],
+            #subplot_titles=("Ref. Sequence Position","", "",  "Conserved K-mers","" )
         )
+        #start_coord = bitmap_counts
 
         #We are adjusting the start and stop positions to account for the skipping. 
         #The adjusted value should be the index, whereas the start_coord and end_coord are the real coordinates 
-        adjusted_x_start = int(start_coord/n_skips)
-        adjusted_x_stop = int(end_coord/n_skips)
 
-        #Get the bins
-        bin_size = ((end_coord-start_coord)/params.max_chr_bins)
-        adjusted_bin_size = (bin_size/n_skips)
-        
-        #Here we are filling in the bins for the main figure.    
-        bin_size_int = n_skips*(int(bin_size) // n_skips)#+1
+        #start_coord = pancnts.index[0]
+        #end_coord = pancnts.index[-1] + pancnts.index.step
 
-        adjusted_bin_size_init = int(adjusted_bin_size) #+ 1
+        bin_size = int((end_coord - start_coord) / params.max_chr_bins) + 1
+        adjusted_bin_size = int(bin_size / step)
 
-        #t2 = time.perf_counter()
-        #print(f"\tFigure init {t2 - t_start:0.4f} seconds")
+        #bin_counts = index.pancount_to_bins(pancnts, bin_size)
+        #print(start_coord, end_coord, bin_size)
+        #print(bin_counts)
+        print(pancounts)
 
-        #df = bitmap_counts.reset_index()
-        #df["index"] = df["index"] // bin_size_int # = bitmap_counts.reset_index()
-        #bin_counts = df.value_counts()
+        print(paircounts)
 
-        bin_counts = pd.DataFrame({
-            "count" : np.array(bitmap_counts),
-            "bin" : bitmap_counts.index // bin_size_int
-        }).value_counts(sort=False)
+        x = pancounts.columns * bin_size
 
-        #t1 = time.perf_counter()
-        #print(f"\tCounted bins {t1 - t2:0.4f} seconds")
-        
-        bin_counts = bin_counts.unstack(level=1,fill_value=0).reindex(index.bitsum_index, fill_value=0)
+        t3 = time.perf_counter()
+        print(f"\tPivot bins {t3 - t1:0.4f} seconds")
 
-        x = bin_counts.columns * bin_size_int
+        fig.append_trace(go.Scattergl(
+            x=gene_bounds, 
+            y=np.full(len(gene_bounds),1), 
+            text=np.repeat(gene_names, 3), 
+            line=dict(color="#3b528b", width=10), 
+            hovertemplate='<br>x:%{x}<br>m:%{text}', legendgroup="group2", 
+            name="Gene"), row=2, col=1)
+        fig.update_layout(clickmode='event+select')
 
-        #t3 = time.perf_counter()
-        #print(f"\tPivot bins {t3 - t1:0.4f} seconds")
+        cntr = 0
+        anno_locals_all = []
+        all_y_reps = []
+        all_rep_colors = []
+        df = index.query_anno(anchor_name, chrom, start_coord, end_coord)
+        df["break"] = None
+        bounds = df[["start","end","break"]]
 
-        plot_rep = True
-        #Add a line plot that will cover the different repetative elements. 
-        if plot_rep == True:
-            cntr = 0
-            anno_locals_all = []
-            all_y_reps = []
-            all_rep_colors = []
-            df = index.query_anno(anchor_name, chrs, start_coord, end_coord)
+        for i in index.genomes[anchor_name].gff_anno_types: #rep_types.keys():               
+            xs = bounds[df["type"]==i].to_numpy().flatten()
+            if i == "exon":
+                ys = [0,0,None]*(int(len(xs)/3))
+                #bounds = df[df["type"]==i].loc[:, ["start", "end"]]
+                #bounds["break"] = None #pd.NA
+                #exon_tmp = bounds.to_numpy().flatten()
 
-            for i in index.genomes[anchor_name].gff_anno_types: #rep_types.keys():               
-                if i == "exon":
-                    bounds = df[df["type"]==i].loc[:, ["start", "end"]]
-                    bounds["break"] = None #pd.NA
-                    exon_tmp = bounds.to_numpy().flatten()
+                #exon_tmp = bounds[df["type"]==i].to_numpy().flatten()
+                #exon_y = [0.5,0.5,None]*(int(len(exon_tmp)/3))
+                fig.append_trace(go.Scattergl(x=xs, y=ys, 
+                    line=dict(color="#a0da39", width=5), name=i, hoverinfo='none'), row=2, col=1)
+            else:
+                #bounds = df[df["type"]==i].loc[:, ["start", "end"]]
+                #bounds["break"] = None #pd.NA
+                #anno_locals_tmp = bounds.to_numpy().flatten()
 
-                    exon_y = [0.5,0.5,None]*(int(len(exon_tmp)/3))
-                    fig.append_trace(go.Scattergl(x=exon_tmp, y=exon_y, 
-                        line=dict(color="#a0da39", width=5), name=i, hoverinfo='none'), row=2, col=1)
-                else:
-                    bounds = df[df["type"]==i].loc[:, ["start", "end"]]
-                    bounds["break"] = None #pd.NA
+                anno_locals_tmp = bounds[df["type"]==i].to_numpy().flatten()
 
-                    anno_locals_tmp = bounds.to_numpy().flatten()
+                if len(xs) > 0:
+                    ys = [-cntr-1,-cntr-1,None]*(int(len(xs)/3))
+                    
+                    fig.append_trace(go.Scattergl(x=xs, y=ys, #mode='markers+lines',
+                        line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2", 
+                        legendgrouptitle_text="Annotations", hoverinfo='name'
+                        #hovertemplate=i
+                        ), #layout_yaxis_range=[0,(len(rep_list))],
+                        row=2, col=1)
+                cntr += 1
 
-                    if len(anno_locals_tmp) > 0:
-                        rep_y = [cntr,cntr,None]*(int(len(anno_locals_tmp)/3))
-                        
-                        fig.append_trace(go.Scattergl(x=anno_locals_tmp, y=rep_y, #mode='markers+lines',
-                            line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2", 
-                            legendgrouptitle_text="Annotations", hoverinfo='name'
-                            #hovertemplate=i
-                            ), #layout_yaxis_range=[0,(len(rep_list))],
-                            row=4, col=1)
-                    cntr += 1
-            fig.update_yaxes(visible=False, row=4, col=1)
+        fig.update_yaxes(title="Annotation",showticklabels=False, range=[-cntr-1,2], row=2, col=1)
 
-        #t4 = time.perf_counter()
-        #print(f"\tRepeats {t4 - t3:0.4f} seconds")
 
-        if plot_gene == True:
-            gene_locals_tmp = []
-            gene_names_tmp = []
-            intron_locals_tmp = []
-            i = 0
-            while i < len(gene_names):
-                gene_names_tmp.extend([gene_names[i], gene_names[i], None])
-                i += 1
-            
-            #gene_names_tmp = [val for val in gene_names for _ in (0, 1)]
-            gene_y = [2]*len(gene_names_tmp)
-
-            fig.append_trace(go.Scattergl(x=gene_locals, y=gene_y, 
-                line=dict(color="#3b528b", width=10), 
-                text=gene_names_tmp, hovertemplate='<br>x:%{x}<br>m:%{text}', legendgroup="group2", 
-                name="Gene"), row=2, col=1)
-            fig.update_layout(clickmode='event+select')
-            #Now add the exons: 
-            i = 0
-
-            fig.update_yaxes(visible=False, range=[-1,4], row=2, col=1)
-            fig.update_xaxes(showticklabels=False, row=2, col=1)
-
-        #t5 = time.perf_counter()
-        #print(f"\tGene plotting {t5 - t4:0.4f} seconds")
+        t5 = time.perf_counter()
+        print(f"\tGene plotting {t5 - t3:0.4f} seconds")
 
         #This is the conserved kmer plotting section
-        fig.append_trace(go.Bar(x=x, y=bin_counts.loc[0], name=str(0),
+        fig.append_trace(go.Bar(x=x, y=pancounts.loc[0], name=str(0),
                 legendgroup="group1", 
                 legendgrouptitle_text="Conserved K-mers",
                 marker=dict(color='grey'), 
                 marker_line=dict(color='grey')
                 ), 
-                row=6, col=1 )
+                row=3, col=1 )
 
-        #t6 = time.perf_counter()
-        #print(f"\tConserved k-mers (grey) {t6 - t5:0.4f} seconds")
+        t6 = time.perf_counter()
+        print(f"\tConserved k-mers (grey) {t6 - t5:0.4f} seconds")
         
-        for i in bin_counts.index[1:]:
-            fig.append_trace(go.Bar(x=x, y=bin_counts.loc[i], name=str(i),
+        for i in pancounts.index[1:]:
+            fig.append_trace(go.Bar(x=x, y=pancounts.loc[i], name=str(i),
                 legendgroup="group1", 
                 legendgrouptitle_text="Conserved K-mers",
                 marker=dict(color=colors[i-1]), 
                 marker_line=dict(color=colors[i-1])
                 ), 
-                row=6, col=1 )
+                row=3, col=1 )
 
         fig.update_layout(barmode='stack', bargap=0.0)
-        fig.update_xaxes(showticklabels=False, row=6, col=1)
+        fig.update_xaxes(showticklabels=False, row=3, col=1)
 
-        #t7 = time.perf_counter()
-        #print(f"\tConserved kmers, non-grey {t7 - t6:0.4f} seconds")
+        print(paircounts)
+        fig.add_trace(go.Heatmap(z=paircounts, x=paircounts.columns, y=paircounts.index,
+            ), 
+            row=4, col=1 )
 
-        #Now we will add the smoothing line. There are three parameters that we adjust
-
-        #t8 = time.perf_counter()
-        #print(f"\tSmoothing line {t8 - t7:0.4f} seconds")
+        t7 = time.perf_counter()
+        print(f"\tConserved kmers, non-grey {t7 - t6:0.4f} seconds")
 
         #Now we add the reference sequence:
-        y_ref = [1, 1]
-        x_ref = [start_coord, end_coord]
-        tickvals = []
-        ticktxt = []
-        cntr = start_coord
-        #yvals = []
-        interval = int((end_coord-start_coord)/10)
-        while cntr <= end_coord:
-            tickvals.append(cntr)
-            ticktxt.append(str(cntr))
-            #yvals.append(1)
-            cntr += interval
-        yvals = [1]*len(tickvals)
-        
-
-        fig.append_trace(go.Scattergl(x=tickvals, y=yvals, text=ticktxt, 
+        ticks = np.linspace(start_coord, end_coord+1, 10).round().astype(int)
+        yvals = np.ones(len(ticks))
+        fig.append_trace(go.Scattergl(x=ticks, y=yvals, text=ticks.astype(str), 
             textposition='top center', showlegend=False, 
             mode='lines+markers+text', line=dict(color="grey"), 
             marker = dict(size=5, symbol='line-ns')), row=1, col=1)
 
-        #t9 = time.perf_counter()
-        #print(f"\tFinishing touches {t9 - t8:0.4f} seconds")
+        t9 = time.perf_counter()
+        print(f"\tFinishing touches {t9 - t7:0.4f} seconds")
 
         fig.update_yaxes(visible=False, range=[0.9,4], row=1, col=1)
         fig.update_xaxes(visible=False, title_text="Sequence position", row=1, col=1)
-        fig.update_xaxes(title_text="Sequence position", row=6, col=1)
-        fig.update_yaxes(title_text="# of k-mers", range=[0,adjusted_bin_size_init]  , row=6, col=1)
+        fig.update_xaxes(title_text="Sequence position", row=4, col=1)
+        #fig.update_yaxes(title_text="# of k-mers", range=[0,bin_size]  , row=3, col=1)
+        fig.update_yaxes(title_text="# of k-mers", range=[0,adjusted_bin_size]  , row=3, col=1)
 
         #TODO don't use template, manually set background to white
         fig.update_layout(xaxis_range=[start_coord,end_coord], font=dict(size=16))
         
-        #t10 = time.perf_counter()
-        #print(f"\tTruly finishing touches {t10 - t9:0.4f} seconds")
-        #sys.stdout.flush()
+        t10 = time.perf_counter()
+        print(f"\tTruly finishing touches {t10 - t9:0.4f} seconds")
+        sys.stdout.flush()
         
         return fig
 
@@ -1222,10 +1186,6 @@ def view(params):
         triggered_id = ctx.triggered_id
 
         n_skips = 100
-        click_me_genes = True
-        click_me_rep = True
-        print("Triggered_id: "+ str(triggered_id))
-
         anchor_init = anchor
         chrom_init = chrom
         start_init = start_coord
@@ -1285,7 +1245,6 @@ def view(params):
                 #sys.stderr.flush()
                 #
                 #this_gene = genes.loc[this_gene_name]
-
                 #start_coord = int(this_gene['start'])
                 #end_coord = int(this_gene['end'])
                 #print(start_coord,end_coord)
@@ -1307,9 +1266,10 @@ def view(params):
 
         #Chromosome main plot, triggers CHROMOSOME
         elif triggered_id == 'primary':
-            if chrtab_primary_relayout != None and 'xaxis4.range[0]' in chrtab_primary_relayout.keys():
-                start_coord = int(chrtab_primary_relayout['xaxis4.range[0]'])
-                end_coord = int(chrtab_primary_relayout['xaxis4.range[1]'])
+            print(chrtab_primary_relayout)
+            if chrtab_primary_relayout != None and 'xaxis.range[0]' in chrtab_primary_relayout.keys():
+                start_coord = int(chrtab_primary_relayout['xaxis.range[0]'])
+                end_coord = int(chrtab_primary_relayout['xaxis.range[1]'])
         
         #Annotation tab triggered when gene is selected in annotation plot 
         elif triggered_id == 'annotation_conservation':
@@ -1446,13 +1406,11 @@ def view(params):
         triggered_id = ctx.triggered_id
 
         n_skips = 100
-        click_me_genes = True
-        click_me_rep = True
         chr_num = index[anchor_name].chrs.loc[chrs,"id"]+1 #chrs_list[anchor_name].get_loc(chrs)+1
         #This should be the first time the chromosome callback is called? 
-        return update_all_figs(chr_num, click_me_rep, click_me_genes, chrs, anchor_name, 0, start_coord, end_coord,n_skips) 
+        return update_all_figs(chr_num, chrs, anchor_name, 0, start_coord, end_coord,n_skips) 
 
-    def update_all_figs( chr_num, click_me_rep, click_me_genes, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
+    def update_all_figs( chr_num, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
         tic = time.perf_counter()
 
         sys.stderr.write("Quering genes 8\n")
@@ -1466,27 +1424,30 @@ def view(params):
         sys.stderr.write("Queried genes 8\n")
         sys.stderr.flush()
 
-        bounds = all_genes.loc[:, ["start", "end"]]
-        bounds["break"] = None
+        #bounds = all_genes.loc[:, ["start", "end"]]
+        #bounds["break"] = None
+        #bounds.to_numpy().flatten(), 
 
         gene_names = all_genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
+
         toc_tmp = time.perf_counter()
         print(f"All_genes in {toc_tmp - tic:0.4f} seconds")
         if get_buffer(start_coord, end_coord, index.lowres_step) == 1:
             n_skips = 1
 
         bitmap = index.query_bitmap(anchor_name, chrom, start_coord, end_coord, n_skips)
-        bitmap_counts = bitmap.sum(axis=1)
+        bitmap_counts = index.bitmap_to_pancount(bitmap) #pd.Series(bitmap.to_numpy().sum(axis=1),index=bitmap.index)
+    
+        bin_size = ((end_coord - start_coord) // params.max_chr_bins) + 1
+        pan, pair = index.bitmap_to_bins(bitmap, bin_size)
 
         toc_tmp_1 = time.perf_counter()
         print(f"query bitmap {toc_tmp_1 - toc_tmp:0.4f} seconds")
 
         fig1 = plot_interactive(
-            n_skips, bitmap_counts, 
-            click_me_rep, click_me_genes,  
-            int(start_coord), int(end_coord), 
-            bounds.to_numpy().flatten(), 
-            gene_names, anchor_name, chrom
+            anchor_name, chrom, start_coord, end_coord, n_skips,
+            pan,pair, 
+            all_genes.query("local"),
         )
         toc_tmp_2 = time.perf_counter()
         print(f"main fig in {toc_tmp_2 - toc_tmp_1:0.4f} seconds")

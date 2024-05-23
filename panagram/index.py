@@ -381,9 +381,39 @@ class Index(Serializable):
             ret += g.anchor_filenames
         return ret
     
+    def bitmap_to_bins(self, bitmap, binlen):
+        df = bitmap.set_index(bitmap.index // binlen)#.groupby(level=1)
+
+        pancounts = df.sum(axis=1).reset_index().value_counts()
+        pancount_bins = pancounts.unstack(level=1,fill_value=0).T
+        pancount_bins = pancount_bins.reindex(self.bitsum_index, fill_value=0)
+
+        paircount_bins = df.groupby(level=0).sum()
+        paircount_bins = paircount_bins.set_index(paircount_bins.index*binlen).T
+
+        paircount_bins = paircount_bins.div(paircount_bins.max(axis=1),axis=0)
+
+        paircount_bins
+
+        return pancount_bins,paircount_bins
+    
+    def bitmap_to_pancount(self, bitmap):
+        return pd.Series(bitmap.to_numpy().sum(axis=1),index=bitmap.index)
+    
+    def bitmap_to_paircount(self, bitmap):
+        return pd.Series(bitmap.to_numpy().sum(axis=1),index=bitmap.index)
+    
+    def pancount_to_bins(self, pancnts, binlen):
+        bin_counts = pd.DataFrame({
+            "count" : pancnts.to_numpy(),
+            "bin" : pancnts.index // binlen
+        }).value_counts(sort=False)
+        return bin_counts.unstack(level=1,fill_value=0).reindex(self.bitsum_index, fill_value=0)
+    
 
 class Genome:
     def __init__(self, idx, id, name, fasta=None, gff=None, anchor=None, write=False):
+        self.index = idx
         self.samples = idx.samples
         self.params = idx.params
         self.prefix = os.path.join(self.params["prefix"], ANCHOR_DIR, name)
@@ -586,11 +616,11 @@ class Genome:
             self.gff_anno_types = set(self.params["gff_anno_types"])
             return
 
-        if os.path.exists(self.anno_types_fname):
+        if os.path.exists(self.anno_types_fname) and not self.write_mode:
             with open(self.anno_types_fname) as f:
                 self.gff_anno_types = {l.strip() for l in f}
         else:
-            self.gff_anno_types = set()
+            self.gff_anno_types = None
 
     def _write_anno_types(self):
         with open(self.anno_types_fname, "w") as f:
@@ -602,6 +632,11 @@ class Genome:
             filename = self.gff
         if pd.isna(filename): return
 
+        if self.params["gff_anno_types"] is not None:
+            gff_anno_types = set(self.params["gff_anno_types"])
+        else:
+            gff_anno_types = None
+
         genes = list()
         annos = list()
 
@@ -609,8 +644,8 @@ class Genome:
             gmask = df["type"].isin(self.params["gff_gene_types"])
             genes.append(df[gmask])
 
-            if self.gff_anno_types is not None:
-                annos.append(df[df["type"].isin(self.gff_anno_types)])
+            if gff_anno_types is not None:
+                annos.append(df[df["type"].isin(gff_anno_types)])
             else:
                 annos.append(df[~gmask])
 
@@ -620,10 +655,10 @@ class Genome:
         annos = _merge_dfs(annos)
         self._write_tabix(annos, "anno")
 
-        if self.gff_anno_types is None:
+        if gff_anno_types is None:
             self.gff_anno_types = set(annos["type"].unique())
         else:
-            self.gff_anno_types = self.gff_anno_types.intersection(annos["type"])
+            self.gff_anno_types = gff_anno_types.intersection(annos["type"])
         self._write_anno_types()
 
         genes = _merge_dfs(genes)
@@ -666,7 +701,8 @@ class Genome:
 
         pac = self._query_bytes(name, start, end-1, step, bstep)
         bits = self._bytes_to_bits(pac)
-        idx = np.arange(start, end, step, dtype=int)#[:len(bits)-1]
+        #idx = np.arange(start, end, step, dtype=int)#[:len(bits)-1]
+        idx = pd.RangeIndex(start, end, step)
         df = pd.DataFrame(bits, index=idx, columns=self.genome_names)
         return df
 
@@ -821,7 +857,6 @@ class Genome:
             self.bitsum_genes.to_csv(self.chr_genes_fname, sep="\t")
 
             gene_tabix = gene_df.reset_index()[self.gene_tabix_cols]
-            print(gene_tabix)
             self._write_tabix(gene_tabix, "gene")
 
 
@@ -873,7 +908,8 @@ class Genome:
             t = time()
 
         if self.annotated:
-            self._write_tabix(gene_df.reset_index(), "gene")
+            gene_tabix = gene_df.reset_index()[self.gene_tabix_cols]
+            self._write_tabix(gene_tabix, "gene")
             self.bitsum_genes = gene_df.groupby("chr",sort=False)[self.bitsum_index].sum()#.sort_index()
             self.bitsum_genes.to_csv(self.chr_genes_fname, sep="\t")
 
