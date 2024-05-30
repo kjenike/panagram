@@ -390,12 +390,9 @@ class Index(Serializable):
 
         paircount_bins = df.groupby(level=0).sum()
         paircount_bins = paircount_bins.set_index(paircount_bins.index*binlen).T
-
         paircount_bins = paircount_bins.div(paircount_bins.max(axis=1),axis=0)
 
-        paircount_bins
-
-        return pancount_bins,paircount_bins
+        return pancount_bins, paircount_bins
     
     def bitmap_to_pancount(self, bitmap):
         return pd.Series(bitmap.to_numpy().sum(axis=1),index=bitmap.index)

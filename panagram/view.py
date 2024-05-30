@@ -667,13 +667,6 @@ def view(params):
         bin_size = int((end_coord - start_coord) / params.max_chr_bins) + 1
         adjusted_bin_size = int(bin_size / step)
 
-        #bin_counts = index.pancount_to_bins(pancnts, bin_size)
-        #print(start_coord, end_coord, bin_size)
-        #print(bin_counts)
-        print(pancounts)
-
-        print(paircounts)
-
         x = pancounts.columns * bin_size
 
         t3 = time.perf_counter()
@@ -756,9 +749,7 @@ def view(params):
         fig.update_layout(barmode='stack', bargap=0.0)
         fig.update_xaxes(showticklabels=False, row=3, col=1)
 
-        print(paircounts)
-        fig.add_trace(go.Heatmap(z=paircounts, x=paircounts.columns, y=paircounts.index,
-            ), 
+        fig.add_trace(go.Heatmap(z=paircounts, x=paircounts.columns, y=paircounts.index, coloraxis="coloraxis"), 
             row=4, col=1 )
 
         t7 = time.perf_counter()
@@ -782,7 +773,8 @@ def view(params):
         fig.update_yaxes(title_text="# of k-mers", range=[0,adjusted_bin_size]  , row=3, col=1)
 
         #TODO don't use template, manually set background to white
-        fig.update_layout(xaxis_range=[start_coord,end_coord], font=dict(size=16))
+        cax = {"colorscale":"plasma_r","colorbar":{"title":"Pair Cons.","y":0,"len":0.35,"yanchor":"bottom"}}
+        fig.update_layout(xaxis_range=[start_coord,end_coord], font=dict(size=16),coloraxis=cax)
         
         t10 = time.perf_counter()
         print(f"\tTruly finishing touches {t10 - t9:0.4f} seconds")
@@ -1411,7 +1403,7 @@ def view(params):
         return update_all_figs(chr_num, chrs, anchor_name, 0, start_coord, end_coord,n_skips) 
 
     def update_all_figs( chr_num, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
-        tic = time.perf_counter()
+        t_start = time.perf_counter()
 
         sys.stderr.write("Quering genes 8\n")
         end = index.chrs.loc[anchor_name, chrom]["size"]
@@ -1430,19 +1422,24 @@ def view(params):
 
         gene_names = all_genes["name"] #[g.split(';')[0].split("=")[1] for g in genes['attr']]
 
-        toc_tmp = time.perf_counter()
-        print(f"All_genes in {toc_tmp - tic:0.4f} seconds")
+        t1 = time.perf_counter()
+        print(f"All_genes in {t1-t_start:0.4f} seconds")
+        t0 = t1
         if get_buffer(start_coord, end_coord, index.lowres_step) == 1:
             n_skips = 1
 
         bitmap = index.query_bitmap(anchor_name, chrom, start_coord, end_coord, n_skips)
-        bitmap_counts = index.bitmap_to_pancount(bitmap) #pd.Series(bitmap.to_numpy().sum(axis=1),index=bitmap.index)
+
+        t1 = time.perf_counter()
+        print(f"query bitmap {t1 - t0:0.4f} seconds")
+        t0 = t1
     
         bin_size = ((end_coord - start_coord) // params.max_chr_bins) + 1
         pan, pair = index.bitmap_to_bins(bitmap, bin_size)
 
-        toc_tmp_1 = time.perf_counter()
-        print(f"query bitmap {toc_tmp_1 - toc_tmp:0.4f} seconds")
+        t1 = time.perf_counter()
+        print(f"transform bitmap {t1 - t0:0.4f} seconds")
+        toc_tmp_1 = t1
 
         fig1 = plot_interactive(
             anchor_name, chrom, start_coord, end_coord, n_skips,
@@ -1469,7 +1466,7 @@ def view(params):
         toc_tmp_32 = time.perf_counter()
         print(f"chr fig in {toc_tmp_32 - toc_tmp_31:0.4f} seconds")
 
-        bar_sum_regional = bitmap_counts.value_counts().reindex(index.bitsum_index, fill_value=0)
+        bar_sum_regional = pan.sum(axis=1) #bitmap_counts.value_counts().reindex(index.bitsum_index, fill_value=0)
         fig2 = get_local_info(bar_sum_regional, anchor_name, chrom)  
         toc_tmp_33 = time.perf_counter()
         print(f"fig 2 plot in {toc_tmp_33 - toc_tmp_32:0.4f} seconds")
@@ -1510,7 +1507,7 @@ def view(params):
         print(f"plots sorted in {toc_tmp_11 - toc_tmp_10:0.4f} seconds")
 
         toc = time.perf_counter()
-        print(f"Update all in {toc - tic:0.4f} seconds")
+        print(f"Update all in {toc - t_start:0.4f} seconds")
         return (
             chr_fig, 
             fig1, fig2, fig3, fig4,  
