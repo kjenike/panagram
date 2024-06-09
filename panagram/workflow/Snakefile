@@ -67,10 +67,11 @@ rule kmc_sample:
         tag = get_onehot_tag
     log:
         "logs/kmc.{sample}.txt"
+    threads : config["kmc"]["threads"]
     shell:
         f"mkdir -p {TMPDIR}{{wildcards.sample}}; "
 
-        f"{EXTRA_DIR}/kmc -k{{config[k]}} -t{{config[kmc][threads]}} -m{{config[kmc][memory]}} "
+        f"{EXTRA_DIR}/kmc -k{{config[k]}} -t{{threads}} -m{{config[kmc][memory]}} "
         f"-ci1 -cs1000 -fm {{input}} kmc/{{wildcards.sample}}.count {TMPDIR}{{wildcards.sample}} "
         "> {log} 2>&1;"
 

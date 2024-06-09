@@ -101,10 +101,11 @@ class Annotate:
     genome: str = field(positional=True, metavar="genome_name")
 
     gff_file: str = field(positional=True, metavar="gff_file")
+    nogene: bool = field(action="store_true")
     
     def run(self):
         idx = Index(self.index_dir)
-        idx[self.genome].run_annotate(self.gff_file)
+        idx[self.genome].run_annotate(self.gff_file,nogene=self.nogene)
         idx.close()
 
 @dataclasses.dataclass

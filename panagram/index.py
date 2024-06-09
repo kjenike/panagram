@@ -95,7 +95,7 @@ class Index(Serializable):
 
     gff_gene_types: List[str] = field(default_factory=lambda: ["gene"], help="GFF features to store locations and conservation scores")
     gff_anno_types: List[str] = field(default=None, help="GFF features of which to store locations, but not conservation scores")
-    gff_name: List[str] = field(default_factory=lambda: ["Name","ID"], help="GFF attributes to store in annotation indexes")
+    gff_name: str = field(default="Name", help="GFF attributes to store in annotation indexes")
 
     #Subset of genome IDs to generate anchor genomes for. Will use all genomes as anchors if not specified
     anchor_genomes: List[str] = field(default=None)
@@ -390,7 +390,7 @@ class Index(Serializable):
 
         paircount_bins = df.groupby(level=0).sum()
         paircount_bins = paircount_bins.set_index(paircount_bins.index*binlen).T
-        paircount_bins = paircount_bins.div(paircount_bins.max(axis=1),axis=0)
+        paircount_bins = paircount_bins.div(paircount_bins.max(axis=0),axis=1)
 
         return pancount_bins, paircount_bins
     
@@ -588,36 +588,53 @@ class Genome:
 
     def seq_len(self, seq_name):
         return self.sizes.loc[seq_name]
+    
+    def _gffattr(self,df,name):
+        return df["attr"].str.extract(f"{name}=([^;]+)", re.IGNORECASE)[0]
 
     def _iter_gff(self):
-        gffattr = lambda df,name: df["attr"].str.extract(f"{name}=([^;]+)", re.IGNORECASE)[0]
         for df in pd.read_csv(
                 self.gff,
                 sep="\t", comment="#", chunksize=10000,
                 names = ["chr","source","type","start","end","score","strand","phase","attr"],
                 usecols = GFF_COLS):
+            
+            df["id"] = self._gffattr(df, "ID")
 
-            df["name"] = pd.NA
-            for attr in self.params["gff_name"]:
-                isna = df.index[df["name"].isna()]
-                if len(isna) > 0:
-                    names = gffattr(df.loc[isna], attr)
-                    df.loc[isna,"name"] = names
-                else:
-                    break
+            #df["id"] = gffattr(df, "ID")
+            #df["name"] = pd.NA
+            #for attr in self.params["gff_name"]:
+            #    isna = df.index[df["name"].isna()]
+            #    if len(isna) > 0:
+            #        names = self._gffattr(df.loc[isna], attr)
+            #        df.loc[isna,"name"] = names
+            #    else:
+            #        break
 
-            yield df[TABIX_COLS]
+            yield df#[TABIX_COLS]
 
     def _init_anno_types(self):
         if self.params["gff_anno_types"] is not None:
-            self.gff_anno_types = set(self.params["gff_anno_types"])
-            return
+            anno_types = [self.params["gff_anno_types"]]
 
         if os.path.exists(self.anno_types_fname) and not self.write_mode:
             with open(self.anno_types_fname) as f:
-                self.gff_anno_types = {l.strip() for l in f}
+                anno_types = [l.strip() for l in f]
         else:
             self.gff_anno_types = None
+            self.anno_type_ids = None
+            return
+        
+        if "exon" in anno_types:
+            if anno_types[0] != "exon":
+                anno_types = ["exon"] + [a for a in anno_types if a != "exon"]
+            id0 = 0
+        else:
+            id0 = 1
+
+        self.gff_anno_types = set(anno_types)
+        self.anno_type_ids = pd.Series({a : id0+i for i,a in enumerate(anno_types)})
+        
 
     def _write_anno_types(self):
         with open(self.anno_types_fname, "w") as f:
@@ -649,7 +666,26 @@ class Genome:
         def _merge_dfs(dfs):
             return pd.concat(dfs).sort_values(["chr","start"]).reset_index(drop=True)
 
-        annos = _merge_dfs(annos)
+        annos = _merge_dfs(annos)#.set_index("type").sort_index()
+        genes = _merge_dfs(genes)
+        genes["name"] = self._gffattr(genes, self.params["gff_name"]).fillna(genes["id"])
+
+        parents = self._gffattr(annos, "Parent")#.set_index(annos["id"]).dropna()
+        anno_ids = annos.reset_index().dropna().set_index("id")["index"]
+        gene_names = genes[["id","name"]].dropna().set_index("id")["name"]
+
+        p = parents.isin(anno_ids.index)
+
+        n = 0
+        while p.any():
+            parents[p] = parents.loc[anno_ids.loc[parents[p]]].to_numpy()
+            p = parents.isin(anno_ids.index)
+            n += 1
+
+        annos["name"] = gene_names.loc[parents].to_numpy()
+
+        annos = annos[annos["type"] != "transcript"][TABIX_COLS].drop_duplicates()
+
         self._write_tabix(annos, "anno")
 
         if gff_anno_types is None:
@@ -658,10 +694,8 @@ class Genome:
             self.gff_anno_types = gff_anno_types.intersection(annos["type"])
         self._write_anno_types()
 
-        genes = _merge_dfs(genes)
         for i in self.bitsum_index:
             genes[i] = 0
-
         return genes.set_index(["chr","start","end"]).sort_index()
 
     def _write_tabix(self, df, typ):
@@ -769,13 +803,36 @@ class Genome:
         return ret
     
     def query_anno(self, chrom, start, end):
+        t0 = time()
         if self.anno_tabix is None:
             return pd.DataFrame(columns=TABIX_COLS)
         try:
             rows = self.anno_tabix.fetch(chrom, start, end)
         except ValueError:
             rows = []
-        return pd.DataFrame(rows, columns=TABIX_COLS).astype(TABIX_TYPES)
+        #t1 = time()
+        #print("fetch",t1-t0)
+        #t0 = t1
+
+        rows = list(rows)
+        #t1 = time()
+        #print("list", t1-t0)
+        #t0 = t1
+
+        df =  pd.DataFrame(rows, columns=TABIX_COLS)#.drop_duplicates()
+
+        #t1 = time()
+        #print("df", t1-t0)
+        #t0 = t1
+
+        df = df.astype(TABIX_TYPES)
+        df["type_id"] = self.anno_type_ids[df["type"]].to_numpy()
+
+        #t1 = time()
+        #print("type", t1-t0)
+        #t0 = t1
+
+        return df
 
     def iter_fasta(self):
         if self.fasta.endswith(".gz") or self.fasta.endswith(".bgz"):
@@ -826,7 +883,7 @@ class Genome:
 
         return self._bytes_to_bits(arrs[1])
 
-    def run_annotate(self, gff_file=None, logfile=None):
+    def run_annotate(self, gff_file=None, logfile=None, nogene=False):
         logging.basicConfig(
                 filename=logfile, level=logging.INFO, 
                 format='[ %(asctime)s %(levelname)7s ] %(message)s',
@@ -835,8 +892,13 @@ class Genome:
 
         gene_df = self.init_gff(gff_file)
 
+        if nogene: return
+
         #for chrom,df in gene_df.groupby(level="chr"):
         for chrom in gene_df.index.unique("chr"):
+            if not chrom in self.sizes.index:
+                logger.warning(f"Skipping gene at {chrom}:{start}-{end}, chromosome not found")
+                continue
             df = gene_df.loc[chrom]
             st = df.index.get_level_values("start").min()
             en = min(self.sizes[chrom],df.index.get_level_values("end").max())

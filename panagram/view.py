@@ -640,7 +640,7 @@ def view(params):
         return fig
 
     def plot_interactive(anchor_name, chrom, start_coord, end_coord, step, pancounts, paircounts, genes):
-        t1 = time.perf_counter()
+        t0 = time.perf_counter()
 
         genes["break"] = None
         gene_bounds = genes.loc[:, ["start", "end", "break"]].to_numpy().flatten()
@@ -648,7 +648,6 @@ def view(params):
         #bounds.to_numpy().flatten(), 
 
         tmp_lst = []
-        rep_colors = mcp.gen_color(cmap="plasma",n=len(index.genomes[anchor_name].gff_anno_types))
         fig = make_subplots(        
             rows=4, cols=1,
             shared_xaxes=True,
@@ -669,61 +668,104 @@ def view(params):
 
         x = pancounts.columns * bin_size
 
-        t3 = time.perf_counter()
-        print(f"\tPivot bins {t3 - t1:0.4f} seconds")
+        t1 = time.perf_counter()
+        print(f"\tPivot bins {t1 - t0:0.4f} seconds")
+        t0 = t1
+
+        cntr = 0
+        anno = index.query_anno(anchor_name, chrom, start_coord, end_coord)
+
+        t1 = time.perf_counter()
+        print(f"\tAnno Query {t1 - t0:0.4f} seconds")
+        t0 = t1
+        
+        anno_types = index.genomes[anchor_name].gff_anno_types
+        hasexon = "exon" in anno_types
+
+        c = np.arange(len(anno_types) + (not hasexon))
+        ann_colors = np.array(px.colors.qualitative.Dark24)
+        ann_colors = ann_colors[c % len(ann_colors)]
+
+        linewidth = 5 if hasexon else 15
+        print("WIDHT", linewidth)
 
         fig.append_trace(go.Scattergl(
             x=gene_bounds, 
-            y=np.full(len(gene_bounds),1), 
+            y=np.full(len(gene_bounds),0), 
+            line=dict(color=ann_colors[0], width=linewidth), 
+            showlegend=False,
             text=np.repeat(gene_names, 3), 
-            line=dict(color="#3b528b", width=10), 
             hovertemplate='<br>x:%{x}<br>m:%{text}', legendgroup="group2", 
-            name="Gene"), row=2, col=1)
+            name="gene"), row=2, col=1)
         fig.update_layout(clickmode='event+select')
 
-        cntr = 0
-        anno_locals_all = []
-        all_y_reps = []
-        all_rep_colors = []
-        df = index.query_anno(anchor_name, chrom, start_coord, end_coord)
-        df["break"] = None
-        bounds = df[["start","end","break"]]
+        t1 = time.perf_counter()
+        print(f"\tGene Plot {t1 - t0:0.4f} seconds")
+        t0 = t1
 
-        for i in index.genomes[anchor_name].gff_anno_types: #rep_types.keys():               
-            xs = bounds[df["type"]==i].to_numpy().flatten()
-            if i == "exon":
-                ys = [0,0,None]*(int(len(xs)/3))
-                #bounds = df[df["type"]==i].loc[:, ["start", "end"]]
-                #bounds["break"] = None #pd.NA
-                #exon_tmp = bounds.to_numpy().flatten()
+        #ann_colors = mcp.gen_color(cmap="turbo",n=len(index.genomes[anchor_name].gff_anno_types)-1)
+        #ann_colors = np.array(["#3b528b"]+ann_colors)
 
-                #exon_tmp = bounds[df["type"]==i].to_numpy().flatten()
-                #exon_y = [0.5,0.5,None]*(int(len(exon_tmp)/3))
-                fig.append_trace(go.Scattergl(x=xs, y=ys, 
-                    line=dict(color="#a0da39", width=5), name=i, hoverinfo='none'), row=2, col=1)
+        anno_names = ["gene"]
+
+        anno["break"] = np.nan
+        for t, df in anno.groupby("type_id"):
+            xs = df[["start","end","break"]].to_numpy().flatten()
+            ys = np.full(len(xs),-t)
+            name = df["type"].iloc[0]
+
+            if name == "exon":
+                linewidth = 15
             else:
-                #bounds = df[df["type"]==i].loc[:, ["start", "end"]]
-                #bounds["break"] = None #pd.NA
-                #anno_locals_tmp = bounds.to_numpy().flatten()
+                anno_names.append(name)
+                linewidth = 10
 
-                anno_locals_tmp = bounds[df["type"]==i].to_numpy().flatten()
+            fig.append_trace(go.Scattergl(x=xs, y=ys, 
+                line=dict(width=linewidth,color=ann_colors[t]), 
+                name=name, 
+                #hoverinfo='name',
+                hovertemplate='<br>x:%{x}<br>m:%{text}', 
+                text=np.repeat(df["name"],3),
+                showlegend=False,
+                marker={"symbol":"line-ns","line_color":ann_colors[t],"line_width":1,"size":6},
+                mode="lines+markers"
+            ), row=2, col=1)
 
-                if len(xs) > 0:
-                    ys = [-cntr-1,-cntr-1,None]*(int(len(xs)/3))
-                    
-                    fig.append_trace(go.Scattergl(x=xs, y=ys, #mode='markers+lines',
-                        line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2", 
-                        legendgrouptitle_text="Annotations", hoverinfo='name'
-                        #hovertemplate=i
-                        ), #layout_yaxis_range=[0,(len(rep_list))],
-                        row=2, col=1)
-                cntr += 1
+        fig.update_yaxes(
+            tickvals=np.arange(-len(ann_colors),0)+1,ticktext=anno_names[::-1],
+            range=[-len(ann_colors)+0.5,0.5], #title="Annotation",
+            row=2, col=1
+        )
 
-        fig.update_yaxes(title="Annotation",showticklabels=False, range=[-cntr-1,2], row=2, col=1)
+        #ys = -df[["type_id","type_id","break"]].to_numpy().flatten()
+        #names = np.tile(df["type"],3)
+        #c = np.tile(ann_colors[df["type_id"]],3)
 
+        #bounds = df.set_index("type")[["start","end","break"]].sort_index()
+        #df["y"] = index.anno_type_ids[df["type"]]
+        #for i in index.genomes[anchor_name].gff_anno_types: #rep_types.keys():               
+        #    xs = bounds.loc[i].to_numpy().flatten()
+        #    if i == "exon":
+        #        ys = np.tile([0,0,None], len(xs)//3)
+        #        fig.append_trace(go.Scattergl(x=xs, y=ys, 
+        #            line=dict(color="#a0da39", width=5), 
+        #            name=i, hoverinfo='none'), 
+        #        row=2, col=1)
+        #    else:
+        #        if len(xs) > 0:
+        #            print(i, cntr, -cntr-1)
+        #            ys = np.tile([-cntr-1,-cntr-1,None], len(xs)//3)
+        #            fig.append_trace(go.Scattergl(x=xs, y=ys, #mode='markers+lines',
+        #                line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2", 
+        #                legendgrouptitle_text="Annotations", hoverinfo='name'
+        #            ), #layout_yaxis_range=[0,(len(rep_list))],
+        #            row=2, col=1)
+        #        cntr += 1
 
-        t5 = time.perf_counter()
-        print(f"\tGene plotting {t5 - t3:0.4f} seconds")
+        t1 = time.perf_counter()
+        print(f"\tAnno Plot {t1 - t0:0.4f} seconds")
+        t0 = t1
+
 
         #This is the conserved kmer plotting section
         fig.append_trace(go.Bar(x=x, y=pancounts.loc[0], name=str(0),
@@ -734,8 +776,9 @@ def view(params):
                 ), 
                 row=3, col=1 )
 
-        t6 = time.perf_counter()
-        print(f"\tConserved k-mers (grey) {t6 - t5:0.4f} seconds")
+        t1 = time.perf_counter()
+        print(f"\tConserved k-mers (grey) {t1 - t0:0.4f} seconds")
+        t0 = t1
         
         for i in pancounts.index[1:]:
             fig.append_trace(go.Bar(x=x, y=pancounts.loc[i], name=str(i),
@@ -752,8 +795,9 @@ def view(params):
         fig.add_trace(go.Heatmap(z=paircounts, x=paircounts.columns, y=paircounts.index, coloraxis="coloraxis"), 
             row=4, col=1 )
 
-        t7 = time.perf_counter()
-        print(f"\tConserved kmers, non-grey {t7 - t6:0.4f} seconds")
+        t1 = time.perf_counter()
+        print(f"\tConserved kmers, non-grey {t1 - t0:0.4f} seconds")
+        t0 = t1
 
         #Now we add the reference sequence:
         ticks = np.linspace(start_coord, end_coord+1, 10).round().astype(int)
@@ -763,8 +807,9 @@ def view(params):
             mode='lines+markers+text', line=dict(color="grey"), 
             marker = dict(size=5, symbol='line-ns')), row=1, col=1)
 
-        t9 = time.perf_counter()
-        print(f"\tFinishing touches {t9 - t7:0.4f} seconds")
+        t1 = time.perf_counter()
+        print(f"\tFinishing touches {t1 - t0:0.4f} seconds")
+        t0 = t1
 
         fig.update_yaxes(visible=False, range=[0.9,4], row=1, col=1)
         fig.update_xaxes(visible=False, title_text="Sequence position", row=1, col=1)
@@ -776,8 +821,8 @@ def view(params):
         cax = {"colorscale":"plasma_r","colorbar":{"title":"Pair Cons.","y":0,"len":0.35,"yanchor":"bottom"}}
         fig.update_layout(xaxis_range=[start_coord,end_coord], font=dict(size=16),coloraxis=cax)
         
-        t10 = time.perf_counter()
-        print(f"\tTruly finishing touches {t10 - t9:0.4f} seconds")
+        t1 = time.perf_counter()
+        print(f"\tTruly finishing touches {t1 - t0:0.4f} seconds")
         sys.stdout.flush()
         
         return fig
@@ -1528,7 +1573,6 @@ def view(params):
         elif len(local_gene_list)==1:
             printme += "Genes: "
             printme += local_gene_list['name'].iloc[0] #+ ": "
-            #printme += local_gene_list['attr'].iloc[0] #index.query_anno(anchor_name, chrs, start_coord, end_coord)['attr']
         elif len(local_gene_list)<=25:
             printme += "Genes: "
             print(local_gene_list)
