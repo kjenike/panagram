@@ -683,10 +683,10 @@ def view(params):
         hasexon = "exon" in anno_types
 
         c = np.arange(len(anno_types) + (not hasexon))
-        ann_colors = np.array(px.colors.qualitative.Dark24)
+        ann_colors = np.array(px.colors.qualitative.Prism)
         ann_colors = ann_colors[c % len(ann_colors)]
 
-        linewidth = 5 if hasexon else 15
+        linewidth = 1 if hasexon else 15
         print("WIDHT", linewidth)
 
         fig.append_trace(go.Scattergl(
@@ -711,14 +711,14 @@ def view(params):
         anno["break"] = np.nan
         for t, df in anno.groupby("type_id"):
             xs = df[["start","end","break"]].to_numpy().flatten()
-            ys = np.full(len(xs),-t)
+            ys = np.full(len(xs),-t*2)
             name = df["type"].iloc[0]
 
             if name == "exon":
                 linewidth = 15
             else:
                 anno_names.append(name)
-                linewidth = 10
+                linewidth = 1
 
             fig.append_trace(go.Scattergl(x=xs, y=ys, 
                 line=dict(width=linewidth,color=ann_colors[t]), 
@@ -727,13 +727,21 @@ def view(params):
                 hovertemplate='<br>x:%{x}<br>m:%{text}', 
                 text=np.repeat(df["name"],3),
                 showlegend=False,
-                marker={"symbol":"line-ns","line_color":ann_colors[t],"line_width":1,"size":6},
+                opacity=0.7,
+                marker={"symbol":"line-ns","line_color":ann_colors[t],"line_width":1,"size":2},
                 mode="lines+markers"
             ), row=2, col=1)
 
+        ys = np.arange(-len(ann_colors),0)+1
+        names = anno_names[::-1]
+        if len(ys) > 10:
+            n = len(ys)//10
+            ys = ys[::n]
+            names = names[::n]
+
         fig.update_yaxes(
-            tickvals=np.arange(-len(ann_colors),0)+1,ticktext=anno_names[::-1],
-            range=[-len(ann_colors)+0.5,0.5], #title="Annotation",
+            tickvals=ys,ticktext=names,
+            range=[-len(ann_colors)-0.5,1.5], #title="Annotation",
             row=2, col=1
         )
 
