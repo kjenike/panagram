@@ -27,6 +27,11 @@ def get_onehot_tag(wildcards):
     i = SAMPLES.index.get_loc(wildcards.sample) % 32
     return 1 << i
 
+def get_anchor_mb(wc,input):
+    kmc_bytes = sum([f.size for f in input.kmc_pre+input.kmc_suf])
+    fa_bytes = input.fasta.size
+    return 1000+(1.5*kmc_bytes + fa_bytes*len(input.kmc_pre))/(10**6)
+
 rule anchor:
     input:
         kmc_pre=expand("kmc/bitvec{i}.kmc_pre", i=range(index.kmc_bitvec_count)),
@@ -36,29 +41,51 @@ rule anchor:
         expand("anchor/{{sample}}/bitmap.{step}.{ext}", step=index.steps, ext=["gz","gzi"]),
         "anchor/{sample}/chrs.tsv",
     log:
-        logfile="logs/anchor.{sample}.txt"
+        log="logs/anchor.{sample}.log.txt"
+    benchmark:
+        "logs/anchor.{sample}.benchmark.txt"
+    resources:               
+        mem_mb=get_anchor_mb,
     run:
-        index[wildcards.sample].run_anchor(index.bitvec_prefixes, log.logfile)
+        index[wildcards.sample].run_anchor(index.bitvec_prefixes, log.log)
+
+def get_bitvec_mb(wc,input):
+    dbsize = max([d.size for d in input.dbs])
+    return 1000 + dbsize/(10**6)
 
 rule kmc_bitvec:
     input:
-        "kmc/opdef{i}.txt",
+        opdef="kmc/opdef{i}.txt",
+        dbs=expand("kmc/{sample}.onehot.{ext}", sample=list(SAMPLES.index), ext=KMC_EXTS)
     output:
         expand("kmc/bitvec{{i}}.{ext}", ext=KMC_EXTS)
     log:
-        "logs/kmc.bitvec{i}.txt"
+        "logs/kmc.bitvec{i}.log.txt"
+    benchmark:
+        "logs/kmc.bitvec{i}.benchmark.txt"
+    resources:
+        mem_mb=get_bitvec_mb,
+    threads: 2
     shell:
-        f"{EXTRA_DIR}/kmc_tools complex kmc/opdef{{wildcards.i}}.txt > {{log}} 2>&1"
+        f"{EXTRA_DIR}/kmc_tools complex {{input.opdef}} > {{log}} 2>&1"
+        #kmc/opdef{{wildcards.i}}.txt
 
 rule opdefs:
     input:
         expand("kmc/{sample}.onehot.{ext}", sample=list(SAMPLES.index), ext=KMC_EXTS)
     output:
         expand("kmc/opdef{i}.txt", i=range(index.kmc_bitvec_count))
+    benchmark:
+        "logs/kmc.opdef.benchmark.txt"
     run:
         index.init_opdefs()
 
-rule kmc_sample:
+def get_kmc_mb(wc,input):
+    dbsize = sum([d.size for d in input.dbs])
+    config["kmc"]["memory"]*1000
+    return 1000 + dbsize/(10**6)
+
+rule kmc_count:
     input:
         get_fasta #"{fasta}"
     output:
@@ -67,7 +94,11 @@ rule kmc_sample:
         tag = get_onehot_tag
     log:
         "logs/kmc.{sample}.txt"
+    benchmark:
+        "logs/kmc.{sample}.benchmark.txt"
     threads : config["kmc"]["threads"]
+    resources:
+        mem_mb=500+config["kmc"]["memory"]*1000,
     shell:
         f"mkdir -p {TMPDIR}{{wildcards.sample}}; "
 
@@ -75,7 +106,7 @@ rule kmc_sample:
         f"-ci1 -cs1000 -fm {{input}} kmc/{{wildcards.sample}}.count {TMPDIR}{{wildcards.sample}} "
         "> {log} 2>&1;"
 
-        f"{EXTRA_DIR}/kmc_tools -t4 transform kmc/{{wildcards.sample}}.count " 
+        f"{EXTRA_DIR}/kmc_tools -t{{threads}} transform kmc/{{wildcards.sample}}.count " 
         f"set_counts {{params.tag}} kmc/{{wildcards.sample}}.onehot "
         ">> {log} 2>&1;"
 
@@ -85,7 +116,9 @@ rule faidx:
     output:
         "{fasta}.fai"
     log:
-        "logs/faidx.{fasta}.txt"
+        "logs/faidx.{fasta}.log.txt"
+    benchmark:
+        "logs/faidx.{fasta}.benchmark.txt"
     shell:
         "samtools faidx {input} > {log} 2>&1"
 
@@ -93,22 +126,25 @@ rule mash_sample:
     input:
         get_fasta
     output:
-        "{sample}.msh"
+        "tmp/{sample}.msh"
     log:
-        "logs/mash.sketch.{sample}.txt"
+        "logs/mash.sketch.{sample}.log.txt"
+    benchmark:
+        "logs/mash.sketch.{sample}.benchmark.txt"
     shell:
         "{EXTRA_DIR}/mash "
-        "sketch -C {wildcards.sample} -o {wildcards.sample}.msh -r -s 10000 {input} "
+        "sketch -C {wildcards.sample} -o tmp/{wildcards.sample}.msh -r -s 10000 {input} "
         "> {log} 2>&1;"
-
 
 rule mash_triangle:
     input:
-        expand("{sample}.msh", sample=SAMPLES.index)
+        expand("tmp/{sample}.msh", sample=SAMPLES.index)
     output:
         "genome_dist.tsv"
     log:
-        "logs/mash.triangle.txt"
+        "logs/mash.triangle.log.txt"
+    benchmark:
+        "logs/mash.triangle.benchmark.txt"
     shell:
         "{EXTRA_DIR}/mash "
         "triangle -C -E {input} > {output} 2> {log}"
@@ -116,5 +152,4 @@ rule mash_triangle:
 rule all:
     input:
         "genome_dist.tsv",
-        #index.anchor_filenames
         expand("anchor/{sample}/chrs.tsv", sample=index.anchor_genomes)
