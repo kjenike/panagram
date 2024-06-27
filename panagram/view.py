@@ -466,6 +466,7 @@ def view(params):
         )
         tree_tmp2 = hierarchy.to_tree(matrix, False)
         treedata = get_newick(tree_tmp2, tree_tmp2.dist, index.genome_names)
+        print(treedata)
         
         palette = sns.color_palette("RdPu", 130).as_hex()
         total_kmers = max(kmer_num_tmp) #[-1] #kmer_num_tmp["Solqui2"]
@@ -595,7 +596,7 @@ def view(params):
                 b=10,
                 l=10,
                 r=10))
-        return fig
+        return fig,label_legend
 
     def get_local_info(bar_sum_regional, anchor_name, chrs):
         fig = make_subplots(
@@ -652,7 +653,7 @@ def view(params):
             rows=4, cols=1,
             shared_xaxes=True,
             vertical_spacing=0.01,
-            row_heights=[1,2,4,4],
+            row_heights=[1,4,8,8],
             #subplot_titles=("Ref. Sequence Position","", "",  "Conserved K-mers","" )
         )
         #start_coord = bitmap_counts
@@ -673,7 +674,6 @@ def view(params):
         t0 = t1
 
         cntr = 0
-        anno = index.query_anno(anchor_name, chrom, start_coord, end_coord)
 
         t1 = time.perf_counter()
         print(f"\tAnno Query {t1 - t0:0.4f} seconds")
@@ -708,8 +708,12 @@ def view(params):
 
         anno_names = ["gene"]
 
+        anno = index.query_anno(anchor_name, chrom, start_coord, end_coord)#.set_index("type_id").sort_index()
         anno["break"] = np.nan
+        grp = anno.groupby("type_id")
         for t, df in anno.groupby("type_id"):
+        #for i,t in enumerate(anno_types):
+        #    df = anno.loc[t]
             xs = df[["start","end","break"]].to_numpy().flatten()
             ys = np.full(len(xs),-t*2)
             name = df["type"].iloc[0]
@@ -732,15 +736,29 @@ def view(params):
                 mode="lines+markers"
             ), row=2, col=1)
 
-        ys = np.arange(-len(ann_colors),0)+1
-        names = anno_names[::-1]
-        if len(ys) > 10:
-            n = len(ys)//10
-            ys = ys[::n]
-            names = names[::n]
+        #ys = np.arange(-len(ann_colors),0)+1
+        #names = anno_types[::-1]+["gene"] #anno_names[::-1]
+        #if len(ys) > 10:
+        #    n = len(ys)//10
+        #    ys = ys[::n]
+        #    names = names[::n]
+        #print(ys)
+        #print(names)
+
+        ticks = index.genomes[anchor_name].anno_type_ids.reset_index()
+        ticks.columns = ["name","idx"]
+        ticks.loc[0,"name"] = "gene"
+        ticks["y"] = -ticks["idx"]
+        print(ticks)
+        #ticks.index[0] = "gene"
+
+        if len(ticks) > 5:
+            n = len(ticks)//5
+            ticks = ticks.iloc[::n]
+        print(ticks)
 
         fig.update_yaxes(
-            tickvals=ys,ticktext=names,
+            ticktext=ticks["name"],tickvals=ticks["y"],
             range=[-len(ann_colors)-0.5,1.5], #title="Annotation",
             row=2, col=1
         )
@@ -777,30 +795,48 @@ def view(params):
 
         #This is the conserved kmer plotting section
         fig.append_trace(go.Bar(x=x, y=pancounts.loc[0], name=str(0),
-                legendgroup="group1", 
-                legendgrouptitle_text="Conserved K-mers",
+                #legendgroup="group1", 
+                #legendgrouptitle_text="Conserved K-mers",
+                showlegend=False,
                 marker=dict(color='grey'), 
                 marker_line=dict(color='grey')
-                ), 
-                row=3, col=1 )
+            ), row=3, col=1 )
 
         t1 = time.perf_counter()
         print(f"\tConserved k-mers (grey) {t1 - t0:0.4f} seconds")
         t0 = t1
+
+        fig.add_trace(go.Scattergl(
+            x=[1,2],y=[1,2],
+            marker=dict(
+                color=[1, index.ngenomes],
+                coloraxis="coloraxis",
+                colorscale="viridis",
+                colorbar_title="Pan-Count"
+            ), showlegend=False,opacity=0
+        ),row=3,col=1)
         
         for i in pancounts.index[1:]:
             fig.append_trace(go.Bar(x=x, y=pancounts.loc[i], name=str(i),
                 legendgroup="group1", 
                 legendgrouptitle_text="Conserved K-mers",
-                marker=dict(color=colors[i-1]), 
-                marker_line=dict(color=colors[i-1])
-                ), 
-                row=3, col=1 )
+                marker=dict(
+                    color=colors[i-1],
+                    line_color=colors[i-1],
+                    #colorscale="viridis",
+                    #coloraxis="coloraxis",colorbar_title="Pan-Count",
+                ),
+                #marker_line=dict(color=colors[i-1]),
+                showlegend=False,
+            ), row=3, col=1 )
 
         fig.update_layout(barmode='stack', bargap=0.0)
         fig.update_xaxes(showticklabels=False, row=3, col=1)
 
-        fig.add_trace(go.Heatmap(z=paircounts, x=paircounts.columns, y=paircounts.index, coloraxis="coloraxis"), 
+        fig.add_trace(go.Heatmap(
+            z=paircounts, x=paircounts.columns, y=paircounts.index, 
+            coloraxis="coloraxis2"
+        ), 
             row=4, col=1 )
 
         t1 = time.perf_counter()
@@ -826,8 +862,23 @@ def view(params):
         fig.update_yaxes(title_text="# of k-mers", range=[0,adjusted_bin_size]  , row=3, col=1)
 
         #TODO don't use template, manually set background to white
-        cax = {"colorscale":"plasma_r","colorbar":{"title":"Pair Cons.","y":0,"len":0.35,"yanchor":"bottom"}}
-        fig.update_layout(xaxis_range=[start_coord,end_coord], font=dict(size=16),coloraxis=cax)
+        pan_cax = {
+            "colorscale" : "viridis",
+            "colorbar" : {"title":"Pangenome Conservation","y":0.72,"len":0.35,"yanchor":"top","title_side":"right"}
+        }
+
+        pair_cax = {
+            "colorscale":"plasma_r",
+            "colorbar": {
+                "title":"Pairwise Conservation","y":0,"len":0.35,"yanchor":"bottom","title_side":"right"}
+        }
+
+        fig.update_layout(
+            xaxis_range=[start_coord,end_coord], 
+            font=dict(size=16),
+            coloraxis=pan_cax,
+            coloraxis2=pair_cax,
+        )
         
         t1 = time.perf_counter()
         print(f"\tTruly finishing touches {t1 - t0:0.4f} seconds")
@@ -1486,9 +1537,20 @@ def view(params):
         t1 = time.perf_counter()
         print(f"query bitmap {t1 - t0:0.4f} seconds")
         t0 = t1
+
+        b = bitmap.sample(n=min(len(bitmap),50000))
+        fig3,genome_order = create_tree(b)
+
+        t1 = time.perf_counter()
+        print(f"tree plot in {t1 - t0:0.4f} seconds")
+        t0 = t1
     
         bin_size = ((end_coord - start_coord) // params.max_chr_bins) + 1
         pan, pair = index.bitmap_to_bins(bitmap, bin_size)
+
+        if params.order is not None:
+            genome_order = params.order
+        pair = pair.loc[genome_order]
 
         t1 = time.perf_counter()
         print(f"transform bitmap {t1 - t0:0.4f} seconds")
@@ -1523,17 +1585,11 @@ def view(params):
         fig2 = get_local_info(bar_sum_regional, anchor_name, chrom)  
         toc_tmp_33 = time.perf_counter()
         print(f"fig 2 plot in {toc_tmp_33 - toc_tmp_32:0.4f} seconds")
-
-        b = bitmap.sample(n=min(len(bitmap),50000))
-        fig3 = create_tree(b)
-
-        toc_tmp_4 = time.perf_counter()
-        print(f"tree plot in {toc_tmp_4 - toc_tmp_33:0.4f} seconds")
         
         #if redo_wg == 1:
         big_plot = no_update#plot_whole_genome(anchor_name)
         toc_tmp_5 = time.perf_counter()
-        print(f"plots big in {toc_tmp_5 - toc_tmp_4:0.4f} seconds")
+        print(f"plots big in {toc_tmp_5 - toc_tmp_33:0.4f} seconds")
         
         pg_sizes_fig = make_genome_size_plot(anchor_name)
         toc_tmp_6 = time.perf_counter()
