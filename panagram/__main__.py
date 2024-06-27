@@ -37,6 +37,8 @@ class View:
     #Initial end coordinate (optional)
     end: int = field(positional=True, nargs="?", metavar="end")
 
+    order: list = field(default=None)
+
     #Run server in production mode (important for a public-facing server)
     ndebug: bool = field(action="store_true")
 
