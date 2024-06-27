@@ -589,8 +589,11 @@ class Genome:
     def seq_len(self, seq_name):
         return self.sizes.loc[seq_name]
     
-    def _gffattr(self,df,name):
-        return df["attr"].str.extract(f"{name}=([^;]+)", re.IGNORECASE)[0]
+    def _gffattr(self,df,name,fill=None):
+        attr = df["attr"].str.extract(f"{name}=([^;]+)", re.IGNORECASE)[0]
+        if fill is not None:
+            return attr.fillna(df[fill])
+        return attr
 
     def _iter_gff(self):
         for df in pd.read_csv(
@@ -668,11 +671,11 @@ class Genome:
 
         annos = _merge_dfs(annos)#.set_index("type").sort_index()
         genes = _merge_dfs(genes)
-        genes["name"] = self._gffattr(genes, self.params["gff_name"]).fillna(genes["id"])
+        genes["name"] = self._gffattr(genes, self.params["gff_name"], "id")
 
         parents = self._gffattr(annos, "Parent")#.set_index(annos["id"]).dropna()
         anno_ids = annos.reset_index().dropna().set_index("id")["index"]
-        gene_names = genes[["id","name"]].dropna().set_index("id")["name"]
+        gene_names = genes[["id","name"]].set_index("id")["name"]
 
         p = parents.isin(anno_ids.index)
 
@@ -682,7 +685,14 @@ class Genome:
             p = parents.isin(anno_ids.index)
             n += 1
 
-        annos["name"] = gene_names.loc[parents].to_numpy()
+        roots = pd.isna(parents)
+        childs = ~roots
+        print(gene_names)
+        print(gene_names.isna().mean())
+        print(parents[childs])
+        print(gene_names.loc[parents[childs]].isna().mean())
+        annos.loc[childs,"name"] = gene_names.loc[parents[childs]].to_numpy()
+        annos.loc[roots,"name"] = self._gffattr(annos[roots], self.params["gff_name"], "id")
 
         annos = annos[annos["type"] != "transcript"][TABIX_COLS].drop_duplicates()
 
