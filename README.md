@@ -176,6 +176,19 @@ salmonella = "gffs/salmonella_GCF_016117835.1_ASM1611783v1_genomic.gff"
 shigella = "gffs/shigella_GCF_000006925.2_ASM692v2_genomic.gff"
 ```
 
+# Using Snakemake (dev branch)
+The dev branch, while actively being developed, currently utilizes Snakemake. This is straightforward to use, you just need a tsv file with a list of samples and corresponding fasta files. 
+
+Example tsv file: 
+```
+name	fasta	gff	id	anchor
+ecoli	FASTAS/ecoli_GCF_001612495.1_ASM161249v1_genomic.fna	ANNO/ecoli_GCF_001612495.1_ASM161249v1_genomic.gff	0	True
+ecoli_k12	FASTAS/ecoli_k12_GCF_000005845.2_ASM584v2_genomic.fna	ANNO/ecoli_k12_GCF_000005845.2_ASM584v2_genomic.gff	1	True
+klebsiella	FASTAS/klebsiella_GCF_000240185.1_ASM24018v2_genomic.fna	ANNO/klebsiella_GCF_000240185.1_ASM24018v2_genomic.gff	True
+salmonella	FASTAS/salmonella_GCF_016117835.1_ASM1611783v1_genomic.fna	ANNO/salmonella_GCF_016117835.1_ASM1611783v1_genomic.gfTrue
+shigella	FASTAS/shigella_GCF_000006925.2_ASM692v2_genomic.fna	ANNO/shigella_GCF_000006925.2_ASM692v2_genomic.gff  4  True
+```
+
 # Known issues
 - Right now, there is a bug (issue #7) when indexing very large genomes with very large chromosomes. We are activley working to fix this. 
 - Indexing sometimes fails when working with more than 32 genomes 
