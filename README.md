@@ -100,6 +100,7 @@ To run, first index the genomes:
 cd example_data
 panagram index conf.toml
 ```
+It is super important that any gff files are in the correct format. GFF format is supported. We strongly suggest that if you run into any problems you first check the format annotation format. This can be done with command line tools like gff3validator or online here: https://genometools.org/cgi-bin/gff3validator.cgi 
 
 Then you can panagram to visualize (from the example_data directory):
 ```
