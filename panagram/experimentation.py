@@ -34,10 +34,12 @@ from panagram.index import Index
 # arrs[step] = np.concatenate(arr, axis=1)
 # arrs[step] = np.concatenate(np.array([4,5,6,7]), axis=1)
 
+
 def better_dir(item):
     # don't print hidden functions
     methods = dir(item)
     return [method for method in methods if not method.startswith("_")]
+
 
 # Reading in an index - you can do this after running snakemake
 index_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram/example_data"
@@ -68,7 +70,7 @@ print(ecoli_genome.bitmaps)
 # Get part of the bitmap from the genome
 # Query a chromosome at a certain position to get a piece of the bitmap
 # TODO: Not sure what step does yet? Sum of kmer occurrence across a window of size step?
-ecoli_bitmap = ecoli_genome.query('NZ_CP015023.1', 0, 5506781, step=1)
+ecoli_bitmap = ecoli_genome.query("NZ_CP015023.1", 0, 5506781, step=1)
 
 
 # You can also query using the index itself
@@ -76,9 +78,11 @@ ecoli_bitmap = ecoli_genome.query('NZ_CP015023.1', 0, 5506781, step=1)
 
 # what if you wanted to look at intergressions
 # set a threshold for what counts as an intergression
-threshold = 0.75 # 75% co-occurrence across the pangenome
+threshold = 0.75  # 75% co-occurrence across the pangenome
 ecoli_bitmap["frac_co_occurrence"] = ecoli_bitmap.sum(axis=1)
-ecoli_bitmap["frac_co_occurrence"] = ecoli_bitmap["frac_co_occurrence"] / len(index.genomes)
+ecoli_bitmap["frac_co_occurrence"] = ecoli_bitmap["frac_co_occurrence"] / len(
+    index.genomes
+)
 print(ecoli_bitmap)
 
 # the index on the left (+ starting point index) gives you the indices of intergressions
@@ -90,6 +94,5 @@ print(ecoli_bitmap[ecoli_bitmap["frac_co_occurrence"] >= threshold])
 # TODO: how long are intergressions typically?
 # use a sliding window and take average co-occurance perhaps within a k-sized window
 
-diff_threshold = 10000 # consider different intergression if more than n away?
+diff_threshold = 10000  # consider different intergression if more than n away?
 # index_diff = df['index'].diff().fillna(0)
-

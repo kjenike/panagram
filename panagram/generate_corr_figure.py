@@ -1,5 +1,6 @@
 import sys
 import os
+
 # import os.path
 # from os import path
 from pathlib import Path
@@ -35,19 +36,20 @@ def visualize(pair, output_file, inverse=False):
     # take a look at what pair looks like after manipulation
     # pair[pair >= 1] = 10
     if inverse:
-        fig = px.imshow(pair,
-                        color_continuous_scale=px.colors.sequential.Plasma[::-1],
-                        x=pair.columns,
-                        y=pair.index)
+        fig = px.imshow(
+            pair,
+            color_continuous_scale=px.colors.sequential.Plasma[::-1],
+            x=pair.columns,
+            y=pair.index,
+        )
     else:
-        fig = px.imshow(pair,
-                        x=pair.columns,
-                        y=pair.index)
+        fig = px.imshow(pair, x=pair.columns, y=pair.index)
     fig.write_image(output_file)
     return
 
+
 index_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato"
-anchor = "SL5" #"SL5"
+anchor = "SL5"  # "SL5"
 # chr_name = "BGV006775_MAS2.0ch11"
 output_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato/introgression_analysis_v1/"
 
@@ -60,7 +62,7 @@ chrs = genome.sizes.keys()
 # # print(index.genomes)
 bitmap_step = 100
 max_chr_bins = 350
-k=31
+k = 31
 
 for chr_name in chrs:
     # get an entire chr's bitmap
@@ -75,4 +77,6 @@ for chr_name in chrs:
 
     pan, pair = index.bitmap_to_bins(chr_bitmap, bin_size)
 
-    visualize(pair, output_dir / f"{anchor}_{chr_name}_original_heatmap.png", inverse=True)
+    visualize(
+        pair, output_dir / f"{anchor}_{chr_name}_original_heatmap.png", inverse=True
+    )
