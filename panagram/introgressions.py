@@ -260,8 +260,4 @@ for anchor in ["SL5"]:
 #         print("Now running introgression analysis for", anchor, chr_name)
 #         run_introgression_finder(index, anchor, chr_name, bitmap_step, max_chr_bins, k, output_dir)
 
-# TODO: column for each position with a python set of genomes contributing to the introgression score
-# column for each position with a python set of genomes that may share the same introgression (similarity above threshold)
-# only merge adjacent areas where the set difference is <=2
-# TODO: Look at underlying sequence in found introgressions; compare/cluster? align with annotations?
-# we're using dissimilarity to find them though, so by definition, won't these mostly look unique?
+# NOTE: Could look at underlying sequence in found introgressions; compare/cluster? align with annotations? This would be computationally expensive.
