@@ -77,6 +77,4 @@ for chr_name in chrs:
 
     pan, pair = index.bitmap_to_bins(chr_bitmap, bin_size)
 
-    visualize(
-        pair, output_dir / f"{anchor}_{chr_name}_original_heatmap.png", inverse=True
-    )
+    visualize(pair, output_dir / f"{anchor}_{chr_name}_original_heatmap.png", inverse=True)

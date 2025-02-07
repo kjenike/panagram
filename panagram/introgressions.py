@@ -1,5 +1,4 @@
 from pathlib import Path
-import math
 import numpy as np
 import pandas as pd
 from panagram.index import Index
@@ -18,12 +17,27 @@ def visualize(pair, output_file, inverse=False):
     if inverse:
         fig = px.imshow(
             pair,
-            color_continuous_scale=px.colors.sequential.Plasma[::-1],
+            color_continuous_scale=px.colors.sequential.Greens[
+                ::-1
+            ],  # px.colors.sequential.Plasma[::-1],
             x=pair.columns,
             y=pair.index,
+            aspect="auto",
+            zmin=0,
+            zmax=1,
         )
     else:
-        fig = px.imshow(pair, x=pair.columns, y=pair.index)
+        fig = px.imshow(
+            pair,
+            x=pair.columns,
+            y=pair.index,
+            aspect="auto",
+        )
+    fig.update_layout(
+        xaxis=dict(
+            dtick=2000000,
+        ),
+    )
     fig.write_image(output_file)
     return
 
@@ -73,11 +87,11 @@ def run_introgression_finder(
 
     print("# Positions in a bin", bin_size)
     print("# Kmers in a bin", num_kmers_in_bin)
+    bin_size = 1000000
 
     pan, pair = index.bitmap_to_bins(chr_bitmap, bin_size)
-    visualize(
-        pair, output_dir / f"{anchor}_{chr_name}_original_heatmap.png", inverse=True
-    )
+    visualize(pair, output_dir / f"{anchor}_{chr_name}_original_heatmap.png", inverse=True)
+    # print(pair)
 
     # # sanity check
     # print(len(pair.columns))
@@ -98,9 +112,9 @@ def run_introgression_finder(
     outliers = values[values < lower_bound]
 
     if len(outliers) > 0:
-        dissimilarity_threshold = outliers.max()
+        dissimilarity_threshold = q1
     else:
-        dissimilarity_threshold = 0.6
+        dissimilarity_threshold = q1
     print("Chosen dissimilarity threshold", dissimilarity_threshold)
 
     # Histogram of correlations
@@ -142,8 +156,7 @@ def run_introgression_finder(
         .combine(
             transposed_pair["genomes"],
             lambda next_row, current_row: (
-                len(current_row & (next_row or set()))
-                / len(current_row | (next_row or set()))
+                len(current_row & (next_row or set())) / len(current_row | (next_row or set()))
                 if current_row | (next_row or set())
                 else 0
             ),
@@ -164,29 +177,23 @@ def run_introgression_finder(
         transposed_pair["introgression_score"].values
         / max(transposed_pair["introgression_score"].values)
     )
-    visualize(
-        pair, output_dir / f"{anchor}_{chr_name}_hybrid_heatmap.png", inverse=True
-    )
+    visualize(pair, output_dir / f"{anchor}_{chr_name}_hybrid_heatmap.png", inverse=True)
 
-    # Step 4 - report, sorted by size and then by score
+    # Step 4 - report introgressions
     # transposed_pair['introgression_starts'] = (transposed_pair['introgression_score'] != 0) & (transposed_pair['introgression_score'].shift(1, fill_value=0) == 0)
+    # label intro start if a. not enough genome overlap btwn adjacent intros or b. this is a new intro after a stretch of none
+    # ...this is some of the logic of all time...we may need to change it later
     transposed_pair["introgression_starts"] = (
-        (transposed_pair["genomes_overlap"] > 0)
-        & (transposed_pair["genomes_overlap"] < 0.9)
-    ) | (
-        (transposed_pair["genomes_overlap"] == 0)
-        & (transposed_pair["introgression_score"] == 1)
-    )
+        (transposed_pair["genomes_overlap"] > 0) & (transposed_pair["genomes_overlap"] < 0.9)
+    ) | ((transposed_pair["genomes_overlap"] == 0) & (transposed_pair["introgression_score"] >= 1))
 
     # Create a group identifier for each set of non-zeros
-    transposed_pair["introgression_group"] = transposed_pair[
-        "introgression_starts"
-    ].cumsum()
+    transposed_pair["introgression_group"] = transposed_pair["introgression_starts"].cumsum()
 
     # sum of all introgression scores
-    introgression_groupby = transposed_pair[
-        transposed_pair["introgression_score"] != 0
-    ].groupby("introgression_group")
+    introgression_groupby = transposed_pair[transposed_pair["introgression_score"] != 0].groupby(
+        "introgression_group"
+    )
     total_introgression_scores = introgression_groupby["introgression_score"].mean()
     # end index for finding introgression length in bps
     last_indices = introgression_groupby.tail(1).index.values
@@ -194,12 +201,15 @@ def run_introgression_finder(
     introgression_genomes = (
         introgression_groupby["genomes"].agg(lambda sets: set.union(*sets)).values
     )
+    # print(transposed_pair)
+    # transposed_pair.to_csv("/home/nbrown62/data_mschatz1/nbrown62/tools/test_files/transposed_pair_bad.csv")
 
-    introgressions = transposed_pair[
-        transposed_pair.introgression_starts == True
-    ].copy()
+    introgressions = transposed_pair[transposed_pair.introgression_starts == True].copy()
 
     # print(transposed_pair[transposed_pair['introgression_score'] != 0][transposed_pair.columns[10:20]])
+    # print(introgressions)
+    # print(total_introgression_scores)
+
     introgressions["introgression_score"] = total_introgression_scores.values
     introgressions["introgression_end"] = last_indices
     introgressions["introgression_end"] = (
@@ -214,7 +224,7 @@ def run_introgression_finder(
         introgressions["introgression_end"] - introgressions["introgression_start"]
     )
     introgressions["introgression_genomes"] = introgression_genomes
-    print(introgressions.sort_values(by=["introgression_start"], ascending=True))
+    # print(introgressions.sort_values(by=["introgression_start"], ascending=True))
     introgressions.sort_values(by=["introgression_start"], ascending=True).to_csv(
         output_dir / f"{anchor}_{chr_name}_introgressions.csv", index=False
     )
@@ -223,24 +233,44 @@ def run_introgression_finder(
 
 
 # USER PARAMS
-index_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato"
+index_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4"
 # anchor = "BGV006775_MAS2" #"SL5"
 # chr_name = "BGV006775_MAS2.0ch11"
 bitmap_step = 100
 max_chr_bins = 350
 size_threshold = 3000000  # NOTE: unused, minimum size in bps of the introgression
 k = 31  # TODO: k should be defined somewhere else; don't need from the user
-output_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato/introgression_analysis_v1/"
+output_dir = (
+    "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v1/"
+)
 
 index = Index(index_dir)
-set_difference_threshold = 2  # NOTE: could also make this proportionate to pangenome size int(len(index.genomes) / 10)
+# NOTE: could also make this proportionate to pangenome size int(len(index.genomes) / 10)
+set_difference_threshold = 2 # currently unused in favor of setting max diff to 10%
 
 # For testing with tomato pangenome
-for anchor in ["SL5"]:
+# for anchor in ["BGV006775"]:
+#     genome = index.genomes[anchor]
+#     print(genome.sizes.keys())
+#     for chr_name in ["chr3"]:
+#         print(anchor, chr_name)
+#         run_introgression_finder(
+#             index,
+#             anchor,
+#             chr_name,
+#             bitmap_step,
+#             max_chr_bins,
+#             k,
+#             set_difference_threshold,
+#             output_dir,
+#         )
+#         break
+#     break
+
+for anchor in index.genomes.keys():
     genome = index.genomes[anchor]
-    print(genome.sizes.keys())
-    for chr_name in [11]:
-        print(anchor, chr_name)
+    for chr_name in genome.sizes.keys():
+        print("Now running introgression analysis for", anchor, chr_name)
         run_introgression_finder(
             index,
             anchor,
@@ -251,13 +281,6 @@ for anchor in ["SL5"]:
             set_difference_threshold,
             output_dir,
         )
-        break
-    break
 
-# for anchor in index.genomes.keys():
-#     genome = index.genomes[anchor]
-#     for chr_name in genome.sizes.keys():
-#         print("Now running introgression analysis for", anchor, chr_name)
-#         run_introgression_finder(index, anchor, chr_name, bitmap_step, max_chr_bins, k, output_dir)
-
-# NOTE: Could look at underlying sequence in found introgressions; compare/cluster? align with annotations? This would be computationally expensive.
+# NOTE: Could look at underlying sequence in found introgressions; compare/cluster?
+# align with annotations? This would be computationally expensive.

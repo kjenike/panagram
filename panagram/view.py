@@ -162,9 +162,7 @@ def view(params):
         html.Div(
             className="w3-third",
             children=[
-                dcc.Graph(
-                    id="avg_kmer_chr", config=config
-                )  # , figure = avg_kmer_per_chr_fig
+                dcc.Graph(id="avg_kmer_chr", config=config)  # , figure = avg_kmer_per_chr_fig
             ],
         ),
         html.Div(
@@ -413,9 +411,7 @@ def view(params):
                             dcc.Dropdown(
                                 index.anchor_genomes,
                                 anchor_name,
-                                style=dict(
-                                    width="110%", height="100%", verticalAlign="middle"
-                                ),
+                                style=dict(width="110%", height="100%", verticalAlign="middle"),
                                 id="genome_select_dropdown",
                             ),
                             # html.Br(),#style=dict(width='100%', height='110%', verticalAlign="middle", )
@@ -516,9 +512,7 @@ def view(params):
             # ], style={'backgroundColor': 'transparent'}), #style={"maxHeight": "300vh",}),
             html.Div(id="tab-content"),
             html.Div(chrs, style={"display": "none"}, id="selected-chrom-state"),
-            html.Div(
-                anchor_name, style={"display": "none"}, id="selected-anchor-state"
-            ),
+            html.Div(anchor_name, style={"display": "none"}, id="selected-anchor-state"),
             html.Div(params.start, id="start-coord-state", style={"display": "none"}),
             html.Div(params.end, id="end-coord-state", style={"display": "none"}),
             html.Div(id="chr-genes-state", style={"display": "none"}),
@@ -619,9 +613,7 @@ def view(params):
             else:
                 newick = ");"
             newick = get_newick(node.get_left(), node.dist, leaf_names, newick=newick)
-            newick = get_newick(
-                node.get_right(), node.dist, leaf_names, newick=",%s" % (newick)
-            )
+            newick = get_newick(node.get_right(), node.dist, leaf_names, newick=",%s" % (newick))
             newick = "(%s" % (newick)
             return newick
 
@@ -647,8 +639,7 @@ def view(params):
         maxheight = tree.count_terminals()  # Counts the number of tree leafs.
         # Rows are defined by the tips/leafs
         ycoords = dict(
-            (leaf, maxheight - i * dist)
-            for i, leaf in enumerate(reversed(tree.get_terminals()))
+            (leaf, maxheight - i * dist) for i, leaf in enumerate(reversed(tree.get_terminals()))
         )
 
         def calc_row(clade):
@@ -784,9 +775,7 @@ def view(params):
         kmer_num_raw = {}
         # cntr = 0
         for k in range(0, len(kmer_num_tmp)):  # kmer_num_tmp.keys():
-            kmer_num[index.genome_names[k]] = float(
-                ((kmer_num_tmp[k]) / total_kmers) * 100
-            )
+            kmer_num[index.genome_names[k]] = float(((kmer_num_tmp[k]) / total_kmers) * 100)
             kmer_num_raw[index.genome_names[k]] = kmer_num_tmp[k]
             color_code[index.genome_names[k]] = palette[
                 int(((kmer_num_tmp[k]) / total_kmers) * 100) + 10
@@ -883,9 +872,7 @@ def view(params):
 
         annotations = []
         for i in range(0, len(label_legend)):
-            annotations.append(
-                make_anns(an_x[i], an_y[i], label_legend[i], kmer_num, i)
-            )
+            annotations.append(make_anns(an_x[i], an_y[i], label_legend[i], kmer_num, i))
         max_x = max(an_x)
         layout = dict(  # title=graph_title,
             paper_bgcolor="rgba(0,0,0,0)",
@@ -960,9 +947,7 @@ def view(params):
         # .sum(axis=1)
 
         # fig.add_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(y, y_whole)], marker_color=colors, showlegend=False), row=2, col=1)
-        fig.append_trace(
-            go.Bar(x=x, y=y, marker_color=colors, showlegend=False), row=2, col=1
-        )
+        fig.append_trace(go.Bar(x=x, y=y, marker_color=colors, showlegend=False), row=2, col=1)
         fig.append_trace(
             go.Bar(x=x, y=y_whole, marker_color=colors, showlegend=False), row=1, col=1
         )
@@ -1086,7 +1071,7 @@ def view(params):
         else:
             grp = anno.groupby("type_id")
 
-        for t, df in grp: #anno.groupby("type_id"):
+        for t, df in grp:  # anno.groupby("type_id"):
             # for i,t in enumerate(anno_types):
             #    df = anno.loc[t]
             xs = df[["start", "end", "break"]].to_numpy().flatten()
@@ -1282,9 +1267,7 @@ def view(params):
         fig.update_xaxes(visible=False, title_text="Sequence position", row=1, col=1)
         fig.update_xaxes(title_text="Sequence position", row=4, col=1)
         # fig.update_yaxes(title_text="# of k-mers", range=[0,bin_size]  , row=3, col=1)
-        fig.update_yaxes(
-            title_text="# of k-mers", range=[0, adjusted_bin_size], row=3, col=1
-        )
+        fig.update_yaxes(title_text="# of k-mers", range=[0, adjusted_bin_size], row=3, col=1)
 
         # TODO don't use template, manually set background to white
         pan_cax = {
@@ -1423,9 +1406,7 @@ def view(params):
         )
 
         chr_fig.append_trace(
-            go.Heatmap(
-                x=x, z=z_1, y=y, type="heatmap", colorscale="magma", showscale=False
-            ),
+            go.Heatmap(x=x, z=z_1, y=y, type="heatmap", colorscale="magma", showscale=False),
             row=2,
             col=1,
         )
@@ -1522,9 +1503,7 @@ def view(params):
         spec = []
         sub_titles = []
         h = index[anchor_name].chr_count * 250
-        for chrom in range(
-            index[anchor_name].chr_count
-        ):  # i in range(0, num_chrs[anchor_name]):
+        for chrom in range(index[anchor_name].chr_count):  # i in range(0, num_chrs[anchor_name]):
             spec.append(
                 [
                     {
@@ -1752,9 +1731,7 @@ def view(params):
     def plot_avgs(anchor_name):
         # fig = make_subplots(rows=1, cols=1)
         fig = go.Figure(
-            data=[
-                go.Scattergl(x=index.bitsum_totals_avg.index, y=index.bitsum_totals_avg)
-            ]
+            data=[go.Scattergl(x=index.bitsum_totals_avg.index, y=index.bitsum_totals_avg)]
         )
         fig.add_vline(x=anchor_name, line_dash="dash", line_color="darkblue")
         fig.update_yaxes(
@@ -2091,8 +2068,7 @@ def view(params):
         # Annotation tab triggered when gene is selected in annotation plot
         elif triggered_id == "annotation_conservation":
             this_gene_info = annotation_tab_df.loc[
-                annotation_tab_df["Name"]
-                == str(anno_clickdata["points"][0]["hovertext"])
+                annotation_tab_df["Name"] == str(anno_clickdata["points"][0]["hovertext"])
             ]
             print(this_gene_info["chr"].iloc[0])
             print(this_gene_info["start"].iloc[0])
@@ -2106,8 +2082,7 @@ def view(params):
             end_coord = this_gene_info["end"].iloc[0]
             tmp_attr = "Attributes: " + str(
                 annotation_tab_df.loc[
-                    annotation_tab_df["Name"]
-                    == str(anno_clickdata["points"][0]["hovertext"]),
+                    annotation_tab_df["Name"] == str(anno_clickdata["points"][0]["hovertext"]),
                     "attr",
                 ].iloc[0]
             )
@@ -2170,9 +2145,7 @@ def view(params):
         else:
             color_by_input = "selected"
 
-        fig = (
-            go.Figure()
-        )  # annotation_tab_plot(annotation_tab_df, color_by_input, log2_true)
+        fig = go.Figure()  # annotation_tab_plot(annotation_tab_df, color_by_input, log2_true)
         return fig
 
     @app.callback(
@@ -2260,13 +2233,9 @@ def view(params):
             index[anchor_name].chrs.loc[chrs, "id"] + 1
         )  # chrs_list[anchor_name].get_loc(chrs)+1
         # This should be the first time the chromosome callback is called?
-        return update_all_figs(
-            chr_num, chrs, anchor_name, 0, start_coord, end_coord, n_skips
-        )
+        return update_all_figs(chr_num, chrs, anchor_name, 0, start_coord, end_coord, n_skips)
 
-    def update_all_figs(
-        chr_num, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips
-    ):
+    def update_all_figs(chr_num, chrom, anchor_name, redo_wg, start_coord, end_coord, n_skips):
         t_start = time.perf_counter()
 
         sys.stderr.write("Quering genes 8\n")
@@ -2277,9 +2246,9 @@ def view(params):
         all_genes = index.query_genes(
             anchor_name, chrom, 0, index.chrs.loc[anchor_name, chrom]["size"]
         )
-        all_genes["local"] = all_genes["start"].clip(start_coord, None) < all_genes[
-            "end"
-        ].clip(0, end_coord)
+        all_genes["local"] = all_genes["start"].clip(start_coord, None) < all_genes["end"].clip(
+            0, end_coord
+        )
 
         sys.stderr.write("Queried genes 8\n")
         sys.stderr.flush()
@@ -2288,9 +2257,7 @@ def view(params):
         # bounds["break"] = None
         # bounds.to_numpy().flatten(),
 
-        gene_names = all_genes[
-            "name"
-        ]  # [g.split(';')[0].split("=")[1] for g in genes['attr']]
+        gene_names = all_genes["name"]  # [g.split(';')[0].split("=")[1] for g in genes['attr']]
 
         t1 = time.perf_counter()
         print(f"All_genes in {t1-t_start:0.4f} seconds")
@@ -2344,9 +2311,7 @@ def view(params):
         toc_tmp_3 = time.perf_counter()
         print(f"querying in {toc_tmp_3 - toc_tmp_2:0.4f} seconds")
 
-        fig4 = plot_gene_content(
-            all_genes, anchor_name, chrom, int(start_coord), int(end_coord)
-        )
+        fig4 = plot_gene_content(all_genes, anchor_name, chrom, int(start_coord), int(end_coord))
         toc_tmp_31 = time.perf_counter()
         print(f"fig 4 plot in {toc_tmp_31 - toc_tmp_3:0.4f} seconds")
 
@@ -2424,9 +2389,7 @@ def view(params):
         return f"{printme}"
 
     def update_chromosome_list(anchor_name):
-        return_me = [
-            {"label": i, "value": i} for i in index.chrs.loc[anchor_name].index
-        ]
+        return_me = [{"label": i, "value": i} for i in index.chrs.loc[anchor_name].index]
         return return_me
 
     app.run_server(host=params.host, port=params.port, debug=not params.ndebug)

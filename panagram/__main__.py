@@ -84,9 +84,7 @@ class Bitdump:
 
     def run(self):
         idx = Index(self.index_dir)
-        bits = idx.query_bitmap(
-            self.genome, self.chrom, self.start, self.end, self.step
-        )
+        bits = idx.query_bitmap(self.genome, self.chrom, self.start, self.end, self.step)
 
         if self.verbose:
             print(" ".join(idx.genomes))

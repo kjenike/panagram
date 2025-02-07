@@ -80,19 +80,10 @@ ecoli_bitmap = ecoli_genome.query("NZ_CP015023.1", 0, 5506781, step=1)
 # set a threshold for what counts as an intergression
 threshold = 0.75  # 75% co-occurrence across the pangenome
 ecoli_bitmap["frac_co_occurrence"] = ecoli_bitmap.sum(axis=1)
-ecoli_bitmap["frac_co_occurrence"] = ecoli_bitmap["frac_co_occurrence"] / len(
-    index.genomes
-)
+ecoli_bitmap["frac_co_occurrence"] = ecoli_bitmap["frac_co_occurrence"] / len(index.genomes)
 print(ecoli_bitmap)
 
 # the index on the left (+ starting point index) gives you the indices of intergressions
 print(ecoli_bitmap[ecoli_bitmap["frac_co_occurrence"] >= threshold])
 
 # in this example, there are 196262 indices (i.e., there is one at 34329 and one at 5465887)
-# TODO: merge nearby intergression locations into one
-# A run of length > run_threshold is a true intergression
-# TODO: how long are intergressions typically?
-# use a sliding window and take average co-occurance perhaps within a k-sized window
-
-diff_threshold = 10000  # consider different intergression if more than n away?
-# index_diff = df['index'].diff().fillna(0)

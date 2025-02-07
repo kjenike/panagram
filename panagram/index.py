@@ -108,9 +108,7 @@ class Index(Serializable):
         default=None,
         help="GFF features of which to store locations, but not conservation scores",
     )
-    gff_name: str = field(
-        default="Name", help="GFF attributes to store in annotation indexes"
-    )
+    gff_name: str = field(default="Name", help="GFF attributes to store in annotation indexes")
 
     # Subset of genome IDs to generate anchor genomes for. Will use all genomes as anchors if not specified
     anchor_genomes: List[str] = field(default=None)
@@ -133,9 +131,7 @@ class Index(Serializable):
                 elif dataclasses.is_dataclass(val):
                     setattr(root, key, val)
                 else:
-                    raise ValueError(
-                        f"{key} must be dict or dataclass, found {key} = {val}"
-                    )
+                    raise ValueError(f"{key} must be dict or dataclass, found {key} = {val}")
             else:
                 setattr(root, key, val)
 
@@ -199,10 +195,7 @@ class Index(Serializable):
 
             if os.path.isdir(self.input):
                 self.prefix = self.input
-                if not (
-                    os.path.isfile(self.config_fname)
-                    and os.path.isfile(self.samples_fname)
-                ):
+                if not (os.path.isfile(self.config_fname) and os.path.isfile(self.samples_fname)):
                     raise ValueError("Index write directory not initialized")
                 self.input = self.samples_fname
                 self.load_config()
@@ -211,9 +204,7 @@ class Index(Serializable):
                 self.init_config()
 
             else:
-                raise ValueError(
-                    "Index input must be sample TSV or initialized directory"
-                )
+                raise ValueError("Index input must be sample TSV or initialized directory")
 
         else:
             if not os.path.isdir(self.input):
@@ -249,22 +240,16 @@ class Index(Serializable):
 
     def init_config(self):
 
-        samples = pd.read_table(
-            self.input
-        )  # [["name","fasta","gff"]].set_index("name")
+        samples = pd.read_table(self.input)  # [["name","fasta","gff"]].set_index("name")
         if not "name" in samples.columns or not "fasta" in samples.columns:
-            raise ValueError(
-                "Input samples must contain 'name' and 'fasta' column headers"
-            )
+            raise ValueError("Input samples must contain 'name' and 'fasta' column headers")
         if not "gff" in samples:
             samples["gff"] = pd.NA
 
         invalid = ~samples["name"].str.fullmatch(NAME_REGEX)
         if np.any(invalid):
             bad = "', '".join(samples["name"][invalid])
-            raise ValueError(
-                f"Invalid genome names: '{bad}'\nMust match r'{NAME_REGEX}'."
-            )
+            raise ValueError(f"Invalid genome names: '{bad}'\nMust match r'{NAME_REGEX}'.")
 
         samples = samples[["name", "fasta", "gff"]].set_index("name").dropna(how="all")
         samples["id"] = np.arange(len(samples), dtype=int)
@@ -293,9 +278,7 @@ class Index(Serializable):
 
         self.bitsum_bins = pd.concat(
             {
-                genome: self.genomes[
-                    genome
-                ].bitsum_bins  # _read_bitsum_bins().droplevel("end")
+                genome: self.genomes[genome].bitsum_bins  # _read_bitsum_bins().droplevel("end")
                 for genome in self.anchor_genomes
             },
             names=["genome", "chr", "start"],
@@ -303,9 +286,7 @@ class Index(Serializable):
 
         self.bitsum_chrs = pd.concat(
             {
-                genome: self.genomes[
-                    genome
-                ].bitsum_chrs  # _read_bitsum_bins().droplevel("end")
+                genome: self.genomes[genome].bitsum_chrs  # _read_bitsum_bins().droplevel("end")
                 for genome in self.anchor_genomes
             },
             axis=0,
@@ -313,25 +294,19 @@ class Index(Serializable):
 
         self.bitfreq_chrs = pd.concat(
             {
-                genome: self.genomes[
-                    genome
-                ].bitfreq_chrs  # _read_bitsum_bins().droplevel("end")
+                genome: self.genomes[genome].bitfreq_chrs  # _read_bitsum_bins().droplevel("end")
                 for genome in self.anchor_genomes
             },
             axis=0,
         )
         self.bitsum_totals = pd.concat(
             {
-                genome: self.genomes[
-                    genome
-                ].bitsum_total  # _read_bitsum_bins().droplevel("end")
+                genome: self.genomes[genome].bitsum_total  # _read_bitsum_bins().droplevel("end")
                 for genome in self.anchor_genomes
             },
             axis=1,
         ).T
-        self.bitfreq_totals = self.bitsum_totals.divide(
-            self.bitsum_totals.sum(axis=1), axis=0
-        )
+        self.bitfreq_totals = self.bitsum_totals.divide(self.bitsum_totals.sum(axis=1), axis=0)
 
         n = np.array(self.bitfreq_totals.columns)
         self.bitsum_totals_avg = (self.bitfreq_totals * n).sum(axis=1).sort_values()
@@ -457,9 +432,7 @@ class Index(Serializable):
         bin_counts = pd.DataFrame(
             {"count": pancnts.to_numpy(), "bin": pancnts.index // binlen}
         ).value_counts(sort=False)
-        return bin_counts.unstack(level=1, fill_value=0).reindex(
-            self.bitsum_index, fill_value=0
-        )
+        return bin_counts.unstack(level=1, fill_value=0).reindex(self.bitsum_index, fill_value=0)
 
 
 class Genome:
@@ -610,12 +583,8 @@ class Genome:
                 self.steps.append(step)
 
     def init_read(self):
-        self.blocks = {
-            s: self.load_bgz_blocks(self.bitmap_gzi_fname(s)) for s in self.steps
-        }
-        self.bitmaps = {
-            s: bgzf.BgzfReader(self.bitmap_gz_fname(s), "rb") for s in self.steps
-        }
+        self.blocks = {s: self.load_bgz_blocks(self.bitmap_gzi_fname(s)) for s in self.steps}
+        self.bitmaps = {s: bgzf.BgzfReader(self.bitmap_gz_fname(s), "rb") for s in self.steps}
 
         self.bitsum_bins = self._read_bitsum_bins()
         self.bitsum_chrs = self.bitsum_bins.groupby("chr").sum()
@@ -771,9 +740,7 @@ class Genome:
         print(parents[childs])
         print(gene_names.loc[parents[childs]].isna().mean())
         annos.loc[childs, "name"] = gene_names.loc[parents[childs]].to_numpy()
-        annos.loc[roots, "name"] = self._gffattr(
-            annos[roots], self.params["gff_name"], "id"
-        )
+        annos.loc[roots, "name"] = self._gffattr(annos[roots], self.params["gff_name"], "id")
 
         annos = annos[annos["type"] != "transcript"][TABIX_COLS].drop_duplicates()
 
@@ -837,18 +804,14 @@ class Genome:
 
         step = step // bstep
 
-        blk = (
-            np.searchsorted(self.blocks[bstep]["dstart"], byte_start, side="right") - 1
-        )
+        blk = np.searchsorted(self.blocks[bstep]["dstart"], byte_start, side="right") - 1
         blk_offs = byte_start - self.blocks[bstep]["dstart"][blk]
         blk_start = self.blocks[bstep]["rstart"][blk]
 
         self.bitmaps[bstep].seek(bgzf.make_virtual_offset(blk_start, blk_offs))
         buf = self.bitmaps[bstep].read(length * self.nbytes)
 
-        pac = np.frombuffer(buf, "uint8").reshape(
-            (len(buf) // self.nbytes, self.nbytes)
-        )
+        pac = np.frombuffer(buf, "uint8").reshape((len(buf) // self.nbytes, self.nbytes))
 
         if step > 1:
             return pac[::step]
@@ -885,9 +848,7 @@ class Genome:
                 rows = []
 
         rows = list(rows)
-        ret = pd.DataFrame(rows, columns=self.gene_tabix_cols).astype(
-            self.gene_tabix_types
-        )
+        ret = pd.DataFrame(rows, columns=self.gene_tabix_cols).astype(self.gene_tabix_types)
 
         # if "attr" in ret.columns:
         #    attr = lambda a: ret["attr"].str.extract(f"{a}=([^;]+)", re.IGNORECASE)
@@ -997,9 +958,7 @@ class Genome:
         # for chrom,df in gene_df.groupby(level="chr"):
         for chrom in gene_df.index.unique("chr"):
             if not chrom in self.sizes.index:
-                logger.warning(
-                    f"Skipping gene at {chrom}:{start}-{end}, chromosome not found"
-                )
+                logger.warning(f"Skipping gene at {chrom}:{start}-{end}, chromosome not found")
                 continue
             df = gene_df.loc[chrom]
             st = df.index.get_level_values("start").min()
@@ -1013,9 +972,7 @@ class Genome:
                         f"Skipping gene at {chrom}:{start}-{end}, coordinates out-of-bounds"
                     )
                     continue
-                occ, counts = np.unique(
-                    bitsum[start - st : end - st], return_counts=True
-                )
+                occ, counts = np.unique(bitsum[start - st : end - st], return_counts=True)
                 gene_df.loc[(chrom, start, end), occ] += counts
 
             self.bitsum_genes = gene_df.groupby("chr", sort=False)[
@@ -1050,8 +1007,7 @@ class Genome:
         self.chrs["gene_count"] = chr_genes.reindex(self.chrs.index, fill_value=0)
 
         self.bitmaps = {
-            s: bgzip.BGZipWriter(open(self.bitmap_gz_fname(s), "wb"))
-            for s in self.steps
+            s: bgzip.BGZipWriter(open(self.bitmap_gz_fname(s), "wb")) for s in self.steps
         }
         bin_occs = dict()
         logger.info(f"Anchoring Started")

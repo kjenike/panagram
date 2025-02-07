@@ -207,9 +207,7 @@ def read_pangenome_comp(index):
                             label="Linear",
                             method="relayout",
                         ),
-                        dict(
-                            args=[{"xaxis.type": "log"}], label="Log", method="relayout"
-                        ),
+                        dict(args=[{"xaxis.type": "log"}], label="Log", method="relayout"),
                     ]
                 ),
             ),
