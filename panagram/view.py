@@ -191,175 +191,42 @@ def view(params):
     # def render_chromosome_tab():
     #    return [
     CHROMOSOME_TAB = [
-        html.Div(
-            children=[  # summary
-                html.Div(
-                    className="w3-container",
-                    children=[
-                        # left figure
-                        dcc.Graph(
-                            id="chromosome",
-                            config=config,
-                            style={"font-size": 20, "height": 350},
-                        )  # figure = chr_fig,
-                    ],
-                )
-            ]
-        ),
-        html.Div(
-            children=[
-                html.Div(
-                    className="w3-container",
-                    children=[
-                        html.Div(
-                            className="w3-threequarter",
-                            children=[
-                                # left figure - calling this the "Main" figure
-                                dcc.Graph(
-                                    id="primary",
-                                    config=config,  # ,figure = main_fig
-                                    style={"height": 1000, "font-size": 20},
-                                )
-                            ],
-                        ),  # style={'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%',
-                        html.Div(
-                            className="w3-quarter",
-                            children=[
-                                dcc.Graph(
-                                    id="Secondary",
-                                    # Now we have the phylogenetic tree
-                                    # figure = get_local_info(names_simp[x_start_init:x_stop_init], #exon_comp[chrs],
-                                    # gene_comp[anchor_name][chrs],
-                                    # bar_sum_regional, bar_sum_global[anchor_name][chrs], anchor_name, chrs),
-                                    config=config,
-                                    style={"height": 1000, "font-size": 20},
-                                ),
-                            ],
-                        ),
-                    ],
-                )
-            ]
-        ),
-        html.Div(
-            children=[
-                html.Div(
-                    className="w3-container",
-                    children=[
-                        html.Div(
-                            className="w3-third",
-                            children=[
-                                dcc.Graph(
-                                    id="Genes",
-                                    # figure=gene_content_plot,
-                                    config=config,
-                                    style={"font-size": 20, "height": 750},
-                                ),
-                            ],
-                        ),
-                        html.Div(
-                            className="w3-twothird",
-                            children=[
-                                dcc.Graph(
-                                    id="Third",
-                                    # This is the histogram section
-                                    config=config,
-                                    style={"font-size": 20, "height": 750},
-                                ),
-                            ],
-                        ),
-                    ],
-                )
-            ]
-        ),
-    ]
+        html.Div(children=[ #summary 
+            html.Div(className="w3-container", children=[
+                    #left figure
+                    dcc.Graph(id="chromosome", config=config, style={"font-size": 20, "height" : 350})
+            ])
+        ]),
 
-    ANNOTATION_TAB = html.Div(
-        children=[
-            html.Div(
-                className="w3-container",
-                children=[
-                    html.Div(
-                        className="w3-threequarter",
-                        children=[
-                            dcc.Graph(
-                                id="annotation_conservation",
-                                # figure= annotation_tab_plot(annotation_tab_df, "Length", 1), #plot_anno_conserve(anchor_name),
-                                config=config,
-                                style={"height": 1250, "font-size": 40},
-                            )
-                        ],
-                    ),
-                    html.Div(
-                        className="w3-quarter",
-                        children=[
-                            # Control panel for the annotation tab plots
-                            html.I("Color by: ", style={"font-size": 40}),
-                            html.Br(),
-                            dcc.RadioItems(
-                                options=[
-                                    {
-                                        "label": " Log2 gene length",
-                                        "value": " Log2 gene length",
-                                    },
-                                    {"label": " Gene length", "value": " Gene length"},
-                                    {"label": " Chromosome", "value": " Chromosome"},
-                                    {
-                                        "label": " Bed file [FUTURE FEATURE]",
-                                        "value": " Bed file [FUTURE FEATURE]",
-                                        "disabled": True,
-                                    },
-                                    {
-                                        "label": " Selected region [FUTURE FEATURE]",
-                                        "value": " Selected region [FUTURE FEATURE]",
-                                        "disabled": True,
-                                    },
-                                ],
-                                value=" Log2 gene length",
-                                # [' Log2 gene length', ' Gene length', ' Chromosome', ' Bed file [FUTURE FEATURE]'],
-                                #' Log2 gene length',
-                                labelStyle={"display": "block"},
-                                style={
-                                    "font-size": 30,
-                                },
-                                id="radios",
-                            ),
-                            html.Br(),
-                            html.I(
-                                "",
-                                style={"font-size": 30},
-                                id="annotation_tab_clickdata_Name",
-                            ),
-                            html.Br(),
-                            html.I(
-                                "",
-                                style={"font-size": 30},
-                                id="annotation_tab_clickdata_X",
-                            ),
-                            html.Br(),
-                            html.I(
-                                "",
-                                style={"font-size": 30},
-                                id="annotation_tab_clickdata_Y",
-                            ),
-                            html.Br(),
-                            html.I(
-                                "",
-                                style={"font-size": 30},
-                                id="annotation_tab_clickdata_Color",
-                            ),
-                            html.Br(),
-                            html.P(
-                                "",
-                                style={"font-size": 30, "overflow-wrap": "break-word"},
-                                id="annotation_tab_clickdata_Attr",
-                            ),
-                        ],
-                        style={"padding": "1%", "height": 1250},
-                    ),
-                ],
-            )  # "border":"2px grey solid"
-        ]
-    )
+        html.Div(children=[ 
+            html.Div(className="w3-container", children=[
+                dcc.Graph(id="primary", config=config, 
+                    style={"height": 1000,  "font-size": 20})
+            ])
+        ]),
+
+        html.Div(children=[
+            html.Div(className="w3-container", children=[
+                #html.Div(className="w3-third", children=[
+                #    dcc.Graph(id="Secondary", 
+                #        config=config,
+                #        style={"height": 1000, "font-size": 20}),
+                #]),
+                html.Div(className="w3-half", children=[
+                    dcc.Graph(id="Genes", 
+                        #figure=gene_content_plot, 
+                        config=config,
+                        style={"font-size": 20, "height":750}),
+                ]),
+                html.Div(className="w3-half", children=[
+                    dcc.Graph(id="Third", 
+                        #This is the histogram section
+                        config=config,
+                        style={"font-size": 20, "height":750}),
+                ]),
+            ])
+        ])
+    ]
 
     app = dash.Dash(
         __name__,
@@ -652,26 +519,30 @@ def view(params):
             calc_row(tree.root)
         return ycoords
 
-    def get_clade_lines(
-        orientation="horizontal",
-        y_curr=0,
-        start_coord=0,
-        x_curr=0,
-        y_bot=0,
-        y_top=0,
-        line_color="rgb(25,25,25)",
-        line_width=0.5,
-    ):
-        # Adapted from:
-        # https://github.com/plotly/dash-phylogeny
-        """define a shape of type 'line', for branch"""
-        branch_line = dict(
-            type="line", layer="below", line=dict(color=line_color, width=line_width)
-        )
-        if orientation == "horizontal":
-            branch_line.update(x0=start_coord, y0=y_curr, x1=x_curr, y1=y_curr)
-        elif orientation == "vertical":
-            branch_line.update(x0=x_curr, y0=y_bot, x1=x_curr, y1=y_top)
+    def get_clade_lines(orientation='horizontal', y_curr=0, start_coord=0, x_curr=0, y_bot=0, y_top=0,
+                        line_color='rgb(25,25,25)', line_width=0.5):
+        #Adapted from:
+        #https://github.com/plotly/dash-phylogeny
+        """define a shape of type 'line', for branch
+        """
+        branch_line = dict(type='line',
+                           layer='above',
+                           xref="x",yref="y7",
+                           line=dict(color=line_color,
+                                     width=line_width)
+                           )
+        if orientation == 'horizontal':
+            branch_line.update(x0=start_coord,
+                               y0=y_curr,
+                               x1=x_curr,
+                               y1=y_curr,
+                            )
+        elif orientation == 'vertical':
+            branch_line.update(x0=x_curr,
+                               y0=y_bot,
+                               x1=x_curr,
+                               y1=y_top,
+                )
         else:
             raise ValueError("Line type can be 'horizontal' or 'vertical'")
         return branch_line
@@ -766,8 +637,7 @@ def view(params):
         matrix = linkage(bitmap.transpose(), method="ward", metric="euclidean")
         tree_tmp2 = hierarchy.to_tree(matrix, False)
         treedata = get_newick(tree_tmp2, tree_tmp2.dist, index.genome_names)
-        print(treedata)
-
+        
         palette = sns.color_palette("RdPu", 130).as_hex()
         total_kmers = max(kmer_num_tmp)  # [-1] #kmer_num_tmp["Solqui2"]
         kmer_num = {}
@@ -788,19 +658,9 @@ def view(params):
         x_coords = get_x_coordinates(tree)
         y_coords = get_y_coordinates(tree)
         line_shapes = []
-        draw_clade(
-            color_code,
-            total_kmers,
-            kmer_num,
-            palette,
-            tree.root,
-            0,
-            line_shapes,
-            line_color="blue",  #'rgb(25,25,25)',
-            line_width=12,
-            x_coords=x_coords,
-            y_coords=y_coords,
-        )
+        draw_clade(color_code, total_kmers, kmer_num, palette, tree.root, 0, line_shapes, line_color= "blue",#'rgb(25,25,25)',
+                    line_width=6, x_coords=x_coords,
+                    y_coords=y_coords)
         my_tree_clades = x_coords.keys()
         X = []
         Y = []
@@ -842,29 +702,22 @@ def view(params):
                 an_x.append(X[t])
                 an_y.append(Y[t])
         nodes = []
-        node = dict(
-            type="scatter",
-            x=X,
-            y=Y,
-            mode="markers",
-            marker=dict(color=color, size=sizes),
-            text=text,  # vignet information of each node
-            # hoverinfo='',
-            showlegend=False,
-        )
+        node = dict(type='scatter',
+                    x=X, y=Y,
+                    xaxis="x",yaxis="y7",
+                    mode='markers',
+                    marker=dict(color=color,
+                                size=sizes),
+                    text=text,  # vignet information of each node
+                    #hoverinfo='',
+                    showlegend=False
+                )
         nodes.append(node)
 
-        def make_anns(x, y, text, kmer_num, i):
-            tmp_txt = text  # ""
-            tmp_txt += (
-                " - " + str(kmer_num[tmp_txt])[:4] + "% "
-            )  # (" + str(kmer_num_raw[tmp_txt]) + ")"
-            return dict(
-                xref="x",
-                yref="y",
-                x=x,
-                y=y,
-                text="\t" + tmp_txt,
+        def make_anns(x,y, text, kmer_num, i):
+            tmp_txt = text#""
+            tmp_txt += " - " + str(kmer_num[tmp_txt])[:4] + "% " #(" + str(kmer_num_raw[tmp_txt]) + ")" 
+            return dict(xref='x', yref='y7', x=x, y=y, text="\t" + tmp_txt,
                 showarrow=False,
                 xanchor="left",
                 yanchor="middle",
@@ -874,50 +727,50 @@ def view(params):
         for i in range(0, len(label_legend)):
             annotations.append(make_anns(an_x[i], an_y[i], label_legend[i], kmer_num, i))
         max_x = max(an_x)
-        layout = dict(  # title=graph_title,
-            paper_bgcolor="rgba(0,0,0,0)",
-            # dragmode="select",
-            # font=dict(family='Balto', size=22),
-            # width=1000,
-            # height=1500,
-            autosize=True,
-            showlegend=True,
-            xaxis=dict(
-                showline=True,
-                zeroline=False,
-                showgrid=True,  # To visualize the vertical lines
-                ticklen=4,
-                showticklabels=True,
-                title="Branch Length",
-                autorange=False,
-                # range=[0, 0.1]
-            ),
-            yaxis=axis,
-            hovermode="closest",
-            shapes=line_shapes,
-            plot_bgcolor="rgb(250,250,250)",
-            legend={"x": 0, "y": 1},
-            annotations=annotations,
-            xaxis_range=[0, int(max_x * 1.2)],
-        )
-        fig = make_subplots(
-            rows=1,
-            cols=1,
-            specs=[
-                [{"type": "scatter", "colspan": 1}]
-            ],  # , None, {"type": "bar"} ]], #, {"type": "pie"} , {"type": "pie"} ]],
-            horizontal_spacing=0.01,
-            # subplot_titles=("This region","CDS","Exons","Genes", "Whole chromosome")
-        )
-        fig.add_trace(node, row=1, col=1)
-        fig.update_layout(layout)
-        # Sort the hist bars
-        hist_y = []  # list(kmer_num_tmp.values()).sort()
-        hist_x = []
+        layout = dict(#title=graph_title,
+                      paper_bgcolor='rgba(0,0,0,0)',
+                      #dragmode="select",
+                      #font=dict(family='Balto', size=22),
+                      # width=1000,
+                      #height=1500,
+                      autosize=True,
+                      showlegend=True,
+                      xaxis=dict(showline=True,
+                                 zeroline=False,
+                                 showgrid=True,  # To visualize the vertical lines
+                                 ticklen=4,
+                                 showticklabels=True,
+                                 title='Branch Length',
+                                 autorange=False,
+                                 #range=[0, 0.1]
+                                 ),
+                      yaxis=axis,
+                      hovermode='closest',
+                      shapes=line_shapes,
+                      plot_bgcolor='rgb(250,250,250)',
+                      legend={'x': 0, 'y': 1},
+                      annotations=annotations,
+                      xaxis_range=[0,int(max_x*1.2)]
+                  )
+        #fig = make_subplots(
+        #    rows=1, cols=1,
+        #    specs=[[{"type": "scatter", 'colspan':1}]], #, None, {"type": "bar"} ]], #, {"type": "pie"} , {"type": "pie"} ]],
+        #    horizontal_spacing=0.01,
+        #    #subplot_titles=("This region","CDS","Exons","Genes", "Whole chromosome")
+        #)
+        #fig.add_trace(node, row=1, col=1)
+        #fig.update_layout(layout)
+        ##Sort the hist bars 
+        #hist_y = []#list(kmer_num_tmp.values()).sort()
+        #hist_x = []
 
-        fig.update_yaxes(visible=False, showticklabels=False)
-        fig.update_layout(margin=dict(t=20, b=10, l=10, r=10))
-        return fig, label_legend
+        #fig.update_yaxes(visible=False, showticklabels=False)
+        #fig.update_layout(margin=dict(
+        #        t=20,
+        #        b=10,
+        #        l=10,
+        #        r=10))
+        return line_shapes,annotations,node,label_legend #fig,label_legend
 
     def get_local_info(bar_sum_regional, anchor_name, chrs):
         fig = make_subplots(
@@ -978,9 +831,7 @@ def view(params):
 
         return fig
 
-    def plot_interactive(
-        anchor_name, chrom, start_coord, end_coord, step, pancounts, paircounts, genes
-    ):
+    def plot_interactive(anchor_name, chrom, start_coord, end_coord, step, bitmap, pancounts, paircounts, genes):
         t0 = time.perf_counter()
 
         genes["break"] = None
@@ -989,13 +840,15 @@ def view(params):
         # bounds.to_numpy().flatten(),
 
         tmp_lst = []
-        fig = make_subplots(
-            rows=4,
-            cols=1,
+        fig = make_subplots(        
+            rows=4, cols=2,
             shared_xaxes=True,
+            shared_yaxes="rows",
             vertical_spacing=0.01,
-            row_heights=[1, 4, 8, 8],
-            # subplot_titles=("Ref. Sequence Position","", "",  "Conserved K-mers","" )
+            horizontal_spacing=0.01,
+            row_heights=[1,4,8,8],
+            column_widths=[1,5]
+            #subplot_titles=("Ref. Sequence Position","", "",  "Conserved K-mers","" )
         )
         # start_coord = bitmap_counts
 
@@ -1004,6 +857,15 @@ def view(params):
 
         # start_coord = pancnts.index[0]
         # end_coord = pancnts.index[-1] + pancnts.index.step
+
+        b = bitmap.sample(n=min(len(bitmap),50000))
+        tree_shapes,tree_anno,tree_nodes,tree_order = create_tree(b)
+
+        if params.order is not None:
+            order = params.order
+        else:
+            order = tree_order
+        paircounts = paircounts.loc[order]
 
         bin_size = int((end_coord - start_coord) / params.max_chr_bins) + 1
         adjusted_bin_size = int(bin_size / step)
@@ -1035,21 +897,16 @@ def view(params):
         linewidth = 1 if hasexon else 15
         print("WIDTH", linewidth)
 
-        fig.append_trace(
-            go.Scattergl(
-                x=gene_bounds,
-                y=np.full(len(gene_bounds), 0),
-                line=dict(color=ann_colors[0], width=linewidth),
-                showlegend=False,
-                text=np.repeat(gene_names, 3),
-                hovertemplate="<br>x:%{x}<br>m:%{text}",
-                legendgroup="group2",
-                name="gene",
-            ),
-            row=2,
-            col=1,
-        )
-        fig.update_layout(clickmode="event+select")
+        fig.add_trace(go.Scattergl(
+            x=gene_bounds, 
+            xaxis="x2",#yaxis="y2",
+            y=np.full(len(gene_bounds),0), 
+            line=dict(color=ann_colors[0], width=linewidth), 
+            showlegend=False,
+            text=np.repeat(gene_names, 3), 
+            hovertemplate='<br>x:%{x}<br>m:%{text}', legendgroup="group2", 
+            name="gene"), row=2, col=2)
+        fig.update_layout(clickmode='event+select')
 
         t1 = time.perf_counter()
         print(f"\tGene Plot {t1 - t0:0.4f} seconds")
@@ -1084,158 +941,102 @@ def view(params):
                 anno_names.append(name)
                 linewidth = 1
 
-            fig.append_trace(
-                go.Scattergl(
-                    x=xs,
-                    y=ys,
-                    line=dict(width=linewidth, color=ann_colors[t]),
-                    name=name,
-                    # hoverinfo='name',
-                    hovertemplate="<br>x:%{x}<br>m:%{text}",
-                    text=np.repeat(df["name"], 3),
-                    showlegend=False,
-                    opacity=0.7,
-                    marker={
-                        "symbol": "line-ns",
-                        "line_color": ann_colors[t],
-                        "line_width": 1,
-                        "size": 2,
-                    },
-                    mode="lines+markers",
-                ),
-                row=2,
-                col=1,
-            )
+            fig.add_trace(go.Scattergl(x=xs, y=ys, 
+                xaxis="x2",#yaxis="y2",
+                line=dict(width=linewidth,color=ann_colors[t]), 
+                name=name, 
+                #hoverinfo='name',
+                hovertemplate='<br>x:%{x}<br>m:%{text}', 
+                text=np.repeat(df["name"],3),
+                showlegend=False,
+                opacity=0.7,
+                marker={"symbol":"line-ns","line_color":ann_colors[t],"line_width":1,"size":2},
+                mode="lines+markers"
+            ), row=2, col=2)
 
-        # ys = np.arange(-len(ann_colors),0)+1
-        # names = anno_types[::-1]+["gene"] #anno_names[::-1]
-        # if len(ys) > 10:
+        #ys = np.arange(-len(ann_colors),0)+1
+        #names = anno_types[::-1]+["gene"] #anno_names[::-1]
+        #if len(ys) > 10:
         #    n = len(ys)//10
         #    ys = ys[::n]
         #    names = names[::n]
-        # print(ys)
-        # print(names)
+        #print(ys)
+        #print(names)
 
-        # ticks = index.genomes[anchor_name].anno_type_ids.reset_index()
-        # ticks.columns = ["name", "idx"]
-        # ticks.loc[0, "name"] = "gene"
-        # ticks["y"] = -ticks["idx"]
-        # print(ticks)
-        # # ticks.index[0] = "gene"
+        ticks = index.genomes[anchor_name].anno_type_ids.reset_index()
+        ticks.columns = ["name","idx"]
+        ticks.loc[0,"name"] = "gene"
+        ticks["y"] = -ticks["idx"]
 
-        # if len(ticks) > 5:
-        #     n = len(ticks) // 5
-        #     ticks = ticks.iloc[::n]
-        # print(ticks)
+        if len(ticks) > 5:
+            n = len(ticks)//5
+            ticks = ticks.iloc[::n]
 
-        # fig.update_yaxes(
-        #     ticktext=ticks["name"],
-        #     tickvals=ticks["y"],
-        #     range=[-len(ann_colors) - 0.5, 1.5],  # title="Annotation",
-        #     row=2,
-        #     col=1,
-        # )
-
-        # ys = -df[["type_id","type_id","break"]].to_numpy().flatten()
-        # names = np.tile(df["type"],3)
-        # c = np.tile(ann_colors[df["type_id"]],3)
-
-        # bounds = df.set_index("type")[["start","end","break"]].sort_index()
-        # df["y"] = index.anno_type_ids[df["type"]]
-        # for i in index.genomes[anchor_name].gff_anno_types: #rep_types.keys():
-        #    xs = bounds.loc[i].to_numpy().flatten()
-        #    if i == "exon":
-        #        ys = np.tile([0,0,None], len(xs)//3)
-        #        fig.append_trace(go.Scattergl(x=xs, y=ys,
-        #            line=dict(color="#a0da39", width=5),
-        #            name=i, hoverinfo='none'),
-        #        row=2, col=1)
-        #    else:
-        #        if len(xs) > 0:
-        #            print(i, cntr, -cntr-1)
-        #            ys = np.tile([-cntr-1,-cntr-1,None], len(xs)//3)
-        #            fig.append_trace(go.Scattergl(x=xs, y=ys, #mode='markers+lines',
-        #                line=dict(color=rep_colors[cntr]), name=i, legendgroup="group2",
-        #                legendgrouptitle_text="Annotations", hoverinfo='name'
-        #            ), #layout_yaxis_range=[0,(len(rep_list))],
-        #            row=2, col=1)
-        #        cntr += 1
+        fig.update_yaxes(
+            ticktext=ticks["name"],tickvals=ticks["y"],
+            range=[-len(ann_colors)-0.5,1.5], #title="Annotation",
+            showticklabels=True,
+            row=2, col=2
+        )
 
         t1 = time.perf_counter()
         print(f"\tAnno Plot {t1 - t0:0.4f} seconds")
         t0 = t1
 
-        # This is the conserved kmer plotting section
-        fig.append_trace(
-            go.Bar(
-                x=x,
-                y=pancounts.loc[0],
-                name=str(0),
-                # legendgroup="group1",
-                # legendgrouptitle_text="Conserved K-mers",
+
+        #This is the conserved kmer plotting section
+        fig.add_trace(go.Bar(x=x, y=pancounts.loc[0], name=str(0),
+                xaxis="x2",#yaxis="y4",
+                #legendgroup="group1", 
+                #legendgrouptitle_text="Conserved K-mers",
                 showlegend=False,
-                marker=dict(color="grey"),
-                marker_line=dict(color="grey"),
-            ),
-            row=3,
-            col=1,
-        )
+                marker=dict(color='grey'), 
+                marker_line=dict(color='grey')
+            ), row=3, col=2 )
 
         t1 = time.perf_counter()
         print(f"\tConserved k-mers (grey) {t1 - t0:0.4f} seconds")
         t0 = t1
 
-        fig.add_trace(
-            go.Scattergl(
-                x=[1, 2],
-                y=[1, 2],
+        fig.add_trace(go.Scattergl(
+            x=[1,2],y=[1,2],
+            xaxis="x2",#yaxis="y4",
+            marker=dict(
+                color=[1, index.ngenomes],
+                coloraxis="coloraxis",
+                colorscale="viridis",
+                colorbar_title="Pan-Count"
+            ), showlegend=False,opacity=0
+        ),row=3,col=2)
+        
+        for i in pancounts.index[1:]:
+            fig.add_trace(go.Bar(x=x, y=pancounts.loc[i], name=str(i),
+                xaxis="x2",#yaxis="y4",
+                legendgroup="group1", 
+                legendgrouptitle_text="Conserved K-mers",
                 marker=dict(
-                    color=[1, index.ngenomes],
-                    coloraxis="coloraxis",
-                    colorscale="viridis",
-                    colorbar_title="Pan-Count",
+                    color=colors[i-1],
+                    line_color=colors[i-1],
                 ),
                 showlegend=False,
-                opacity=0,
-            ),
-            row=3,
-            col=1,
-        )
+            ), row=3, col=2 )
 
-        for i in pancounts.index[1:]:
-            fig.append_trace(
-                go.Bar(
-                    x=x,
-                    y=pancounts.loc[i],
-                    name=str(i),
-                    legendgroup="group1",
-                    legendgrouptitle_text="Conserved K-mers",
-                    marker=dict(
-                        color=colors[i - 1],
-                        line_color=colors[i - 1],
-                        # colorscale="viridis",
-                        # coloraxis="coloraxis",colorbar_title="Pan-Count",
-                    ),
-                    # marker_line=dict(color=colors[i-1]),
-                    showlegend=False,
-                ),
-                row=3,
-                col=1,
-            )
+        fig.update_layout(barmode='stack', bargap=0.0)
+        fig.update_xaxes(showticklabels=False, row=3, col=2)
 
-        fig.update_layout(barmode="stack", bargap=0.0)
-        fig.update_xaxes(showticklabels=False, row=3, col=1)
+        fig.add_trace(go.Heatmap(
+            z=paircounts, x=paircounts.columns, y=paircounts.index, 
+            xaxis="x2",#yaxis="y6",
+            coloraxis="coloraxis2"
+        ), row=4, col=2 )
+        #fig.update_yaxes(anchor="y6",row=4,col=1)
+        #fig.update_shapes(yref="y7",row=4,col=1)
 
-        fig.add_trace(
-            go.Heatmap(
-                z=paircounts,
-                x=paircounts.columns,
-                y=paircounts.index,
-                coloraxis="coloraxis2",
-            ),
-            row=4,
-            col=1,
-        )
+        print(tree_nodes)
+        print(tree_shapes)
+        fig.add_trace(tree_nodes,row=4,col=1)
+        fig.update_layout(annotations=tree_anno,shapes=tree_shapes)
+        #fig.add_shapes(tree_shapes,row=4,col=1)
 
         t1 = time.perf_counter()
         print(f"\tConserved kmers, non-grey {t1 - t0:0.4f} seconds")
@@ -1244,30 +1045,23 @@ def view(params):
         # Now we add the reference sequence:
         ticks = np.linspace(start_coord, end_coord + 1, 10).round().astype(int)
         yvals = np.ones(len(ticks))
-        fig.append_trace(
-            go.Scattergl(
-                x=ticks,
-                y=yvals,
-                text=ticks.astype(str),
-                textposition="top center",
-                showlegend=False,
-                mode="lines+markers+text",
-                line=dict(color="grey"),
-                marker=dict(size=5, symbol="line-ns"),
-            ),
-            row=1,
-            col=1,
-        )
+        fig.add_trace(go.Scattergl(
+            x=ticks, y=yvals, text=ticks.astype(str), 
+            xaxis="x2",#yaxis="y2",
+            textposition='top center', showlegend=False, 
+            mode='lines+markers+text', line=dict(color="grey"), 
+            marker = dict(size=5, symbol='line-ns')), row=1, col=2)
 
         t1 = time.perf_counter()
         print(f"\tFinishing touches {t1 - t0:0.4f} seconds")
         t0 = t1
 
-        fig.update_yaxes(visible=False, range=[0.9, 4], row=1, col=1)
-        fig.update_xaxes(visible=False, title_text="Sequence position", row=1, col=1)
-        fig.update_xaxes(title_text="Sequence position", row=4, col=1)
-        # fig.update_yaxes(title_text="# of k-mers", range=[0,bin_size]  , row=3, col=1)
-        fig.update_yaxes(title_text="# of k-mers", range=[0, adjusted_bin_size], row=3, col=1)
+        fig.update_yaxes(visible=False, range=[0.9,4], row=1, col=2)
+
+        fig.update_xaxes(visible=False, title_text="Sequence position", row=1, col=2)
+        fig.update_xaxes(title_text="Sequence position", row=4, col=2)
+        #fig.update_yaxes(title_text="# of k-mers", range=[0,bin_size]  , row=3, col=1)
+        fig.update_yaxes(showticklabels=True, title_text="# of k-mers", range=[0,adjusted_bin_size]  , row=3, col=2)
 
         # TODO don't use template, manually set background to white
         pan_cax = {
@@ -1292,8 +1086,9 @@ def view(params):
             },
         }
 
+        fig.update_xaxes(range=[start_coord,end_coord],row=1,col=2)
+
         fig.update_layout(
-            xaxis_range=[start_coord, end_coord],
             font=dict(size=16),
             coloraxis=pan_cax,
             coloraxis2=pair_cax,
@@ -1621,44 +1416,30 @@ def view(params):
             ]
         )
         cntr += 1
-        while cntr < len(sort_by):  # s in sort_by:
-            fig.add_trace(
-                go.Scattergl(
-                    x=x,
-                    y=df_sorted[sort_by[cntr]],
-                    text=df_sorted["name"],
-                    customdata=df_sorted[["start", "end"]].to_numpy(),
-                    marker=dict(color=colors[cntr]),
-                    name="% " + sort_by[cntr],
-                    mode="markers",
-                )
-            )
+        while cntr < len(sort_by): #s in sort_by:  
+            fig.add_trace(go.Scattergl(
+                x=x, y=df_sorted[sort_by[cntr]], 
+                xaxis="x",yaxis="y",
+                text=df_sorted['name'], 
+                customdata=df_sorted[["start","end"]].to_numpy(),  
+                marker=dict(color=colors[cntr]),
+                name="% " + sort_by[cntr], mode="markers"))
             cntr += 1
         fig.update_layout(clickmode="event+select")
         fig.update_layout(hovermode="x unified")
 
         df2 = df_sorted[df_sorted["local"]]
 
-        fig.add_trace(
-            go.Scattergl(
-                x=df2["X"],
-                y=df2["Universal"],
-                marker=dict(color="#FF2192", size=10),
-                mode="markers",
-                hoverinfo="skip",
-                showlegend=False,
-            )
-        )
-        fig.add_trace(
-            go.Scattergl(
-                x=df2["X"],
-                y=df2["Unique"],
-                marker=dict(color="#FF2192", size=10),
-                mode="markers",
-                hoverinfo="skip",
-                showlegend=False,
-            )
-        )
+        fig.add_trace(go.Scattergl(
+            x=df2['X'], y=df2['Universal'], 
+            xaxis="x",yaxis="y",
+            marker=dict(color='#FF2192', size=10), 
+            mode="markers", hoverinfo='skip', showlegend=False))
+        fig.add_trace(go.Scattergl(
+            x=df2['X'], y=df2['Unique'], 
+            xaxis="x",yaxis="y",
+            marker=dict(color='#FF2192', size=10), 
+            mode="markers", hoverinfo='skip', showlegend=False))
 
         fig.add_hline(y=uniq_avg, line_dash="dash", line_color="goldenrod")
         fig.add_hline(y=univ_avg, line_dash="dash", line_color="#440154")
@@ -2058,34 +1839,24 @@ def view(params):
         # Chromosome main plot, triggers CHROMOSOME
         elif triggered_id == "primary":
             print(chrtab_primary_relayout)
-            if (
-                chrtab_primary_relayout != None
-                and "xaxis.range[0]" in chrtab_primary_relayout.keys()
-            ):
-                start_coord = int(chrtab_primary_relayout["xaxis.range[0]"])
-                end_coord = int(chrtab_primary_relayout["xaxis.range[1]"])
-
-        # Annotation tab triggered when gene is selected in annotation plot
-        elif triggered_id == "annotation_conservation":
-            this_gene_info = annotation_tab_df.loc[
-                annotation_tab_df["Name"] == str(anno_clickdata["points"][0]["hovertext"])
-            ]
-            print(this_gene_info["chr"].iloc[0])
-            print(this_gene_info["start"].iloc[0])
-            print(this_gene_info["end"].iloc[0])
-            tmp_name = "Name: " + str(anno_clickdata["points"][0]["hovertext"])
-            tmp_x = "X: " + str(anno_clickdata["points"][0]["x"])
-            tmp_y = "Y: " + str(anno_clickdata["points"][0]["y"])
-            tmp_color = "Color: " + str(anno_clickdata["points"][0]["marker.color"])
-            chrom = this_gene_info["chr"].iloc[0]
-            start_coord = this_gene_info["start"].iloc[0]
-            end_coord = this_gene_info["end"].iloc[0]
-            tmp_attr = "Attributes: " + str(
-                annotation_tab_df.loc[
-                    annotation_tab_df["Name"] == str(anno_clickdata["points"][0]["hovertext"]),
-                    "attr",
-                ].iloc[0]
-            )
+            if chrtab_primary_relayout != None and 'xaxis2.range[0]' in chrtab_primary_relayout.keys():
+                start_coord = int(chrtab_primary_relayout['xaxis2.range[0]'])
+                end_coord = int(chrtab_primary_relayout['xaxis2.range[1]'])
+        
+        #Annotation tab triggered when gene is selected in annotation plot 
+        elif triggered_id == 'annotation_conservation':
+            this_gene_info = annotation_tab_df.loc[annotation_tab_df['Name'] == str(anno_clickdata['points'][0]['hovertext'])]
+            print(this_gene_info['chr'].iloc[0])
+            print(this_gene_info['start'].iloc[0])
+            print(this_gene_info['end'].iloc[0])
+            tmp_name = "Name: " + str(anno_clickdata['points'][0]['hovertext'])
+            tmp_x = "X: " + str(anno_clickdata['points'][0]['x'])
+            tmp_y = "Y: " + str(anno_clickdata['points'][0]['y'])
+            tmp_color = "Color: " + str(anno_clickdata['points'][0]['marker.color'])
+            chrom = this_gene_info['chr'].iloc[0]
+            start_coord = this_gene_info['start'].iloc[0]
+            end_coord = this_gene_info['end'].iloc[0]
+            tmp_attr = "Attributes: " + str(annotation_tab_df.loc[annotation_tab_df['Name'] == str(anno_clickdata['points'][0]['hovertext']), 'attr'].iloc[0])
 
         if start_coord is None or end_coord is None:
             start_out = end_out = no_update
@@ -2206,25 +1977,26 @@ def view(params):
         return figs + (update_chromosome_list(anchor_name), anchor_name)
 
     @app.callback(
-        Output("chromosome", "figure"),  # chromosome
-        Output("primary", "figure"),  # chromosome
-        Output("Secondary", "figure"),  # chromosome
-        Output("Third", "figure"),  # chromosome
-        Output("Genes", "figure"),  # chromosome
-        Output("regional_genes", "children"),  # chromosome
-        Input("tabs", "value"),  # all
-        Input("start-coord-state", "children"),  # start_coord div (constant?)
-        Input("end-coord-state", "children"),  # x_end div (constant?)
-        State("selected-chrom-state", "children"),
-        State("selected-anchor-state", "children"),
-        # State('gene-names-state','children'),
+        Output('chromosome','figure'),               #chromosome
+        Output('primary','figure'),                  #chromosome
+        Output('Third', 'figure'),                   #chromosome
+        Output('Genes', 'figure'),                   #chromosome
+        Output('regional_genes', 'children'),        #chromosome
+
+        Input('tabs', 'value'),                  #all
+        Input('start-coord-state','children'),   #start_coord div (constant?)
+        Input('end-coord-state','children'),     #x_end div (constant?)
+
+        State('selected-chrom-state', 'children'),
+        State('selected-anchor-state', 'children'),
+        #State('gene-names-state','children'),
     )
     def chromosome_callback(tab, start_coord, end_coord, chrs, anchor_name):
         print("chromosome_callback\t" + str(tab))
         # tic = time.perf_counter()
         if tab != "chromosome":
-            # return ({},)*5 + (no_update,)#+ (no_update,)*4
-            return (no_update,) * 6
+            #return ({},)*5 + (no_update,)#+ (no_update,)*4
+            return (no_update,)*5
 
         triggered_id = ctx.triggered_id
 
@@ -2271,9 +2043,6 @@ def view(params):
         print(f"query bitmap {t1 - t0:0.4f} seconds")
         t0 = t1
 
-        b = bitmap.sample(n=min(len(bitmap), 50000))
-        fig3, genome_order = create_tree(b)
-
         t1 = time.perf_counter()
         print(f"tree plot in {t1 - t0:0.4f} seconds")
         t0 = t1
@@ -2281,22 +2050,13 @@ def view(params):
         bin_size = ((end_coord - start_coord) // params.max_chr_bins) + 1
         pan, pair = index.bitmap_to_bins(bitmap, bin_size)
 
-        if params.order is not None:
-            genome_order = params.order
-        pair = pair.loc[genome_order]
-
         t1 = time.perf_counter()
         print(f"transform bitmap {t1 - t0:0.4f} seconds")
         toc_tmp_1 = t1
 
         fig1 = plot_interactive(
-            anchor_name,
-            chrom,
-            start_coord,
-            end_coord,
-            n_skips,
-            pan,
-            pair,
+            anchor_name, chrom, start_coord, end_coord, n_skips,
+            bitmap,pan,pair,
             all_genes.query("local"),
         )
         toc_tmp_2 = time.perf_counter()
@@ -2358,12 +2118,9 @@ def view(params):
         toc = time.perf_counter()
         print(f"Update all in {toc - t_start:0.4f} seconds")
         return (
-            chr_fig,
-            fig1,
-            fig2,
-            fig3,
-            fig4,
-            update_gene_locals(local_genes, chrom, start_coord, end_coord, anchor_name),
+            chr_fig, 
+            fig1, fig2, fig4,  
+            update_gene_locals(local_genes, chrom, start_coord, end_coord, anchor_name)
         )
 
     def update_output_div(chrs, start, stop, anchor_name):

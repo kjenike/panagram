@@ -913,7 +913,7 @@ class Genome:
 
         if self.nbytes <= 4:
             n = self.nbytes
-        elif db_i == len(self.kmc_dbs) and self.nbytes % 4 > 0:
+        elif db_i == len(self.kmc_dbs)-1 and self.nbytes % 4 > 0:
             n = self.nbytes % 4
         else:
             n = 4
