@@ -246,7 +246,7 @@ output_dir = (
 
 index = Index(index_dir)
 # NOTE: could also make this proportionate to pangenome size int(len(index.genomes) / 10)
-set_difference_threshold = 2 # currently unused in favor of setting max diff to 10%
+set_difference_threshold = 2  # currently unused in favor of setting max diff to 10%
 
 # For testing with tomato pangenome
 # for anchor in ["BGV006775"]:
