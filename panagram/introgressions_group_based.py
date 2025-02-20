@@ -16,7 +16,7 @@ def visualize(pair, output_file, inverse=False):
             y=pair.index,
             aspect="auto",
             zmin=0,
-            zmax=1,
+            # zmax=1,
         )
     else:
         fig = px.imshow(
@@ -83,6 +83,36 @@ def threshold_introgressions(pair, anchor, comp_group):
     return group_sims
 
 
+def threshold_to_bed(group_sims, bin_size, chr_name, comp_group, output_file):
+    # find start/end coordinates
+    introgressions = group_sims[group_sims.introgression > 0].copy()
+    introgressions["start"] = introgressions.index
+    introgressions["end"] = introgressions["start"] + bin_size
+
+    # call adjacent introgressions as the same
+    # check if end of the prev col is the same as the start of the current
+    introgressions["groups"] = (introgressions.start - introgressions.end.shift(1)).fillna(0)
+    # use cumsum to assign adjacent intros to the same group
+    introgressions["groups"] = introgressions["groups"].cumsum()
+    # get the number of bins in each group and use to calculate new start/end
+    bins_in_groups = introgressions.groupby("groups").count()["end"]
+    introgressions = introgressions.drop_duplicates(subset="groups", keep="first")
+    introgressions = introgressions.drop(columns="end").merge(bins_in_groups, on="groups")
+    introgressions["end"] = introgressions.start + (introgressions.end * bin_size)
+
+    # write out a bed file of all found introgressions (chr, start, end)
+    introgressions["chr"] = chr_name
+    introgressions["name"] = f"{comp_group}_intro"
+    introgressions = introgressions[["chr", "start", "end", "name"]]
+    introgressions.to_csv(
+        output_file,
+        header=False,
+        index=False,
+        sep="\t",
+    )
+    return
+
+
 def run_introgression_finder(
     index,
     anchor,
@@ -113,45 +143,36 @@ def run_introgression_finder(
     # get the kmer similarities for the anchor's group and the comparison group
     pair = pair.merge(groups, left_index=True, right_index=True, how="left")
 
-    # TODO: for comp_group in comp_groups
+    merged_sims = None
     for comp_group in comp_groups:
         group_sims = threshold_introgressions(pair, anchor, comp_group)
+        if merged_sims is None:
+            merged_sims = group_sims
+        else:
+            merged_sims += group_sims
 
         # show user introgressions labeled on the original heatmap from panagram
         # invert values for figure so that introgressions = 0
         pair.loc["Intro. Score"] = (~(group_sims["introgression"].astype(bool))).astype(int)
-        visualize(pair.drop(columns=["group"]), output_dir / f"{anchor}_{chr_name}_{comp_group}_heatmap.png", inverse=True)
+        output_vis = output_dir / f"{anchor}_{chr_name}_{comp_group}_heatmap.png"
+        visualize(pair.drop(columns=["group"]), output_vis, inverse=True)
 
-        print(comp_group)
-        print(group_sims)
-        exit(0)
+        # save introgressions to bed file
+        output_bed = output_dir / f"{anchor}_{chr_name}_{comp_group}.bed"
+        threshold_to_bed(group_sims, bin_size, chr_name, comp_group, output_bed)
 
-        # find start/end coordinates
-        introgressions = group_sims[group_sims.introgression > 0].copy()
-        introgressions["start"] = introgressions.index
-        introgressions["end"] = introgressions["start"] + bin_size
+    # repeat analysis one more with merged introgressions from all comp_groups
+    # pair.loc["Intro. Score"] = (~(merged_sims["introgression"].astype(bool))).astype(int)
 
-        # call adjacent introgressions as the same
-        # check if end of the prev col is the same as the start of the current
-        introgressions["groups"] = (introgressions.start - introgressions.end.shift(1)).fillna(0)
-        # use cumsum to assign adjacent intros to the same group
-        introgressions["groups"] = introgressions["groups"].cumsum()
-        # get the number of bins in each group and use to calculate new start/end
-        bins_in_groups = introgressions.groupby("groups").count()["end"]
-        introgressions = introgressions.drop_duplicates(subset="groups", keep="first")
-        introgressions = introgressions.drop(columns="end").merge(bins_in_groups, on="groups")
-        introgressions["end"] = introgressions.start + (introgressions.end * bin_size)
+    # divide by the max to get between 0 and 1, do 1 - x to invert
+    pair.loc["Intro. Score"] = 1 - (merged_sims["introgression"] / merged_sims["introgression"].max())
 
-        # write out a bed file of all found introgressions (chr, start, end)
-        introgressions["chr"] = chr_name
-        introgressions["name"] = f"{comp_group}_intro"
-        introgressions = introgressions[["chr", "start", "end", "name"]]
-        introgressions.to_csv(
-            output_dir / f"{anchor}_{chr_name}_{comp_group}.bed",
-            header=False,
-            index=False,
-            sep="\t",
-        )
+    output_vis = output_dir / f"{anchor}_{chr_name}_merged_heatmap.png"
+    visualize(pair.drop(columns=["group"]), output_vis, inverse=True)
+
+    # save introgressions to bed file
+    output_bed = output_dir / f"{anchor}_{chr_name}_merged.bed"
+    threshold_to_bed(merged_sims, bin_size, chr_name, comp_group, output_bed)
     return
 
 
@@ -169,25 +190,10 @@ def main():
     index = Index(index_dir)
 
     # For testing with tomato pangenome
-    for anchor in ["M82"]:
-        genome = index.genomes[anchor]
-        print(genome.sizes.keys())
-        for chr_name in ["chr11", "chr4"]:
-            print("Now running introgression analysis for", anchor, chr_name)
-            run_introgression_finder(
-                index,
-                anchor,
-                chr_name,
-                group_tsv,
-                comp_groups,
-                bitmap_step,
-                bin_size,
-                output_dir,
-            )
-
-    # for anchor in index.genomes.keys():
+    # for anchor in ["M82"]:
     #     genome = index.genomes[anchor]
-    #     for chr_name in genome.sizes.keys():
+    #     print(genome.sizes.keys())
+    #     for chr_name in ["chr11", "chr4"]:
     #         print("Now running introgression analysis for", anchor, chr_name)
     #         run_introgression_finder(
     #             index,
@@ -199,7 +205,22 @@ def main():
     #             bin_size,
     #             output_dir,
     #         )
-    # NOTE: if anchor not in SLL group, we can skip
+
+    for anchor in index.genomes.keys():
+        genome = index.genomes[anchor]
+        for chr_name in genome.sizes.keys():
+            print("Now running introgression analysis for", anchor, chr_name)
+            run_introgression_finder(
+                index,
+                anchor,
+                chr_name,
+                group_tsv,
+                comp_groups,
+                bitmap_step,
+                bin_size,
+                output_dir,
+            )
+    # NOTE: if anchor not in SLL group, we could skip
     return
 
 
