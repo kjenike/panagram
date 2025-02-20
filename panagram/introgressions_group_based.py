@@ -68,13 +68,9 @@ def threshold_introgressions(pair, anchor, comp_group):
 
     if anchor_group == comp_group:
         # print(f"{anchor} is part of group {comp_group}. Comparing using thresholding...")
-        group_sims["introgression"] = fill_gaps(
-            (group_sims.comp_sim < 0.9).astype(int)
-        )
+        group_sims["introgression"] = fill_gaps((group_sims.comp_sim < 0.9).astype(int))
     elif comp_group == "REF":
-        group_sims["introgression"] = fill_gaps(
-            (group_sims.comp_sim < 0.9).astype(int)
-        )
+        group_sims["introgression"] = fill_gaps((group_sims.comp_sim < 0.9).astype(int))
     else:
         group_sims["introgression"] = fill_gaps(
             (group_sims.comp_sim >= group_sims.anchor_sim).astype(int)
@@ -165,7 +161,9 @@ def run_introgression_finder(
     # pair.loc["Intro. Score"] = (~(merged_sims["introgression"].astype(bool))).astype(int)
 
     # divide by the max to get between 0 and 1, do 1 - x to invert
-    pair.loc["Intro. Score"] = 1 - (merged_sims["introgression"] / merged_sims["introgression"].max())
+    pair.loc["Intro. Score"] = 1 - (
+        merged_sims["introgression"] / merged_sims["introgression"].max()
+    )
 
     output_vis = output_dir / f"{anchor}_{chr_name}_merged_heatmap.png"
     visualize(pair.drop(columns=["group"]), output_vis, inverse=True)
