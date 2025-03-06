@@ -2,6 +2,7 @@ from pathlib import Path
 import pandas as pd
 from panagram.index import Index
 import plotly.express as px
+import subprocess
 
 
 def visualize(pair, output_file, inverse=False):
@@ -157,7 +158,7 @@ def run_introgression_finder(
         output_bed = output_dir / f"{anchor}_{chr_name}_{comp_group}.bed"
         threshold_to_bed(group_sims, bin_size, chr_name, comp_group, output_bed)
 
-    # repeat analysis one more with merged introgressions from all comp_groups
+    # repeat analysis one more time with merged introgressions from all comp_groups
     # pair.loc["Intro. Score"] = (~(merged_sims["introgression"].astype(bool))).astype(int)
 
     # divide by the max to get between 0 and 1, do 1 - x to invert
@@ -170,11 +171,12 @@ def run_introgression_finder(
 
     # save introgressions to bed file
     output_bed = output_dir / f"{anchor}_{chr_name}_merged.bed"
-    threshold_to_bed(merged_sims, bin_size, chr_name, comp_group, output_bed)
+    threshold_to_bed(merged_sims, bin_size, chr_name, "merged", output_bed)
     return
 
 
 def main():
+    # TODO: allow for a 2-bin gap
     # USER PARAMS
     bitmap_step = 100
     bin_size = 1000000
