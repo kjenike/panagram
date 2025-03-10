@@ -198,7 +198,9 @@ def view(params):
                     children=[
                         # left figure
                         dcc.Graph(
-                            id="chromosome", config=config, style={"font-size": 20, "height": 350}
+                            id="chromosome",
+                            config=config,
+                            style={"font-size": 20, "height": 350},
                         )
                     ],
                 )
@@ -210,7 +212,9 @@ def view(params):
                     className="w3-container",
                     children=[
                         dcc.Graph(
-                            id="primary", config=config, style={"height": 1000, "font-size": 20}
+                            id="primary",
+                            config=config,
+                            style={"height": 1000, "font-size": 20},
                         )
                     ],
                 )
@@ -888,7 +892,15 @@ def view(params):
         return fig
 
     def plot_interactive(
-        anchor_name, chrom, start_coord, end_coord, step, bitmap, pancounts, paircounts, genes
+        anchor_name,
+        chrom,
+        start_coord,
+        end_coord,
+        step,
+        bitmap,
+        pancounts,
+        paircounts,
+        genes,
     ):
         t0 = time.perf_counter()
 

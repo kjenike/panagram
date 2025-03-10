@@ -12,7 +12,6 @@
 
 from pathlib import Path
 import subprocess
-import math
 import numpy as np
 import pandas as pd
 from panagram.index import Index
@@ -264,27 +263,37 @@ def read_introgressions(introgression_file, fix_names=False):
     return intro_df
 
 
-def score_introgressions(called_intro_file, gt_intro_file, threshold):
-    # get confusion matrix for introgressions given ground truth in the same coordinate/bin space
+def threshold_introgressions_helper(intro_df, threshold):
+    intro_df[intro_df < threshold] = 0
+    intro_df[intro_df != 0] = 1
+    return intro_df
+
+
+def threshold_introgressions(called_intro_file, gt_intro_file, threshold):
     # if given multiple gt files, merge together
-    if type(gt_intro_file) == list:
+    if type(gt_intro_file) == list or type(gt_intro_file) == tuple:
         gt_intro_df1 = read_introgressions(gt_intro_file[0], fix_names=True)
         gt_intro_df2 = read_introgressions(gt_intro_file[1], fix_names=True)
         # threshold and merge multiple intro types
-        gt_intro_df1[gt_intro_df1 <= threshold] = 0
-        gt_intro_df1[gt_intro_df1 != 0] = 1
-        gt_intro_df2[gt_intro_df2 <= threshold] = 0
-        gt_intro_df2[gt_intro_df2 != 0] = 1
+        gt_intro_df1 = threshold_introgressions_helper(gt_intro_df1, threshold)
+        gt_intro_df2 = threshold_introgressions_helper(gt_intro_df2, threshold)
         gt_intro_df = gt_intro_df1 + gt_intro_df2
         gt_intro_df[gt_intro_df > 0] = 1
     else:
         gt_intro_df = read_introgressions(gt_intro_file, fix_names=True)
-        gt_intro_df[gt_intro_df <= threshold] = 0
-        gt_intro_df[gt_intro_df != 0] = 1
+        threshold_introgressions_helper(gt_intro_df, threshold)
 
     # make sure all called introgressions are scored as a 1
     called_intro_df = read_introgressions(called_intro_file)
-    called_intro_df[called_intro_df >= 1] = 1
+    called_intro_df = threshold_introgressions_helper(called_intro_df, threshold=1)
+    return called_intro_df, gt_intro_df
+
+
+def score_introgressions(called_intro_file, gt_intro_file, threshold):
+    # get confusion matrix for introgressions given ground truth in the same coordinate/bin space
+    called_intro_df, gt_intro_df = threshold_introgressions(
+        called_intro_file, gt_intro_file, threshold
+    )
 
     # rotate dfs, sort cols, and drop all columns that aren't shared btwn called and gt
     shared_cols = list(set(called_intro_df.index).intersection(set(gt_intro_df.index)))
@@ -324,49 +333,6 @@ def score_introgressions(called_intro_file, gt_intro_file, threshold):
     metrics = pd.DataFrame([metrics])
 
     return metrics
-
-
-def create_heatmap(distances_file):
-    import plotly.express as px
-
-    distances_file = Path(distances_file)
-    output_file = distances_file.parent / (distances_file.stem + ".png")
-    distances = pd.read_csv(distances_file, sep="\t", index_col=0).fillna(0)
-    new_index = list(distances.index)
-
-    # for sl4
-    # new_index = [i.split(".")[0] for i in new_index]
-    # for sl5 - get the name of the acession without number added by Jasmine
-    new_index = [i.split("_")[1] for i in new_index]
-
-    distances.index = new_index
-    distances = distances.sort_index()
-
-    fig = px.imshow(distances, color_continuous_scale="Greens", aspect="auto", zmin=0, zmax=1)
-    fig.update_layout(yaxis=dict(tickmode="linear"), title=distances_file.stem)
-    fig.write_image(output_file)
-    return
-
-
-def self_dotplot(seq):
-    import numpy as np
-    import matplotlib.pyplot as plt
-
-    # look at a 10kb piece of a sequence
-    middle = int(len(seq) / 2)
-    seq = seq[middle - 5000 : middle + 5000]
-    length = len(seq)
-
-    matrix = np.zeros((length, length))
-
-    for i in range(length):
-        for j in range(length):
-            if seq[i] == seq[j]:
-                matrix[i, j] = 1
-
-    plt.imshow(matrix, cmap="Greys", interpolation="none")
-    plt.savefig("./test.png")
-    return
 
 
 def score_all_introgressions():
