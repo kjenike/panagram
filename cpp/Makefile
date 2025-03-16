@@ -7,8 +7,6 @@ INCLUDE=./htslib
 SRC=.
 BUILD=build
 
-#ANCHOR_BIN=anchor
-#SW_BIN = $(BIN)/sw
 
 KMC_API_DIR = ../KMC/kmc_api
 KMC_DUMP_DIR = ../KMC/kmc_dump
@@ -28,9 +26,9 @@ OBJS = $(patsubst %, $(BUILD)/%, $(_OBJS))
 
 DEPENDS := $(patsubst %.o, %.d, $(OBJS))
 
-all: dirs anchor
+all: dirs run_anchor
 
-anchor: build/anchor.o
+run_anchor: build/anchor.o
 	$(CC) $(KMC_API_OBJS) $(CFLAGS) $< -o $@ -lz $(HTS_LIB) $(LIBS)
 
 -include $(DEPENDS)

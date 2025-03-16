@@ -80,6 +80,7 @@ struct KMCdb {
 
                         size_t s = name.find(' ');
                         chrs_out << name.substr(0,s) << "\t" << chr_num << "\t" << ksize << "\t0\n";
+		        chrs_out.flush();
                         chr_num += 1;
                     }
                     name = line.substr(1);
@@ -92,6 +93,7 @@ struct KMCdb {
             auto ksize = write_bits(chr_num, seq, bitmap1, bitmap100, bitsum_out);
             size_t s = name.find(' ');
             chrs_out << name.substr(0,s) << "\t" << chr_num << "\t" << ksize << "\t0\n";
+	    chrs_out.flush();
         }
 
         bgzf_index_dump(bitmap1, basename.c_str(), ".gzi");
@@ -169,6 +171,7 @@ struct KMCdb {
                 bitsum_out << "\t" << c;
             }
             bitsum_out << "\n";
+	    bitsum_out.flush();
         }
         return popcnts.size();
 
