@@ -16,12 +16,14 @@ make install
 
 #compile anchor binary
 cd ..
-make anchor
+make run_anchor
 ```
 
 # Usage
+Copy the `Snakefile` and `run_anchor` binary from this directory to build the indexing using the C++ implementation. Does not support annotations.
 ```
 panagram index --prepare samples.tsv
-cp ~/panagram/cpp/Snakefile . #copy Snakefile from panagram/cpp
+cp ~/panagram/cpp/Snakefile ~/panagram/cpp/run_anchor . #copy Snakefile from panagram/cpp
+vim Snakefile ... #edit to specify anchor binary path
 snakemake -c <cores> .
 ```
