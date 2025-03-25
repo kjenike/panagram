@@ -290,6 +290,7 @@ def threshold_introgressions(called_intro_file, gt_intro_file, threshold):
 
 
 def score_introgressions(called_intro_file, gt_intro_file, threshold):
+    # TODO: perform gap filling here? This way, its performed once for GT and called post-centromere processing in REF space
     # get confusion matrix for introgressions given ground truth in the same coordinate/bin space
     called_intro_df, gt_intro_df = threshold_introgressions(
         called_intro_file, gt_intro_file, threshold
@@ -348,7 +349,7 @@ def score_all_introgressions():
         "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/samples.tsv"
     )
     output_dir = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v2/postprocessed"
+        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v3/postprocessed"
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -375,11 +376,22 @@ def score_all_introgressions():
         else:
             raise ValueError("Invalid introgression type selected.")
 
+        # if process GT
+        # TODO: threshold ground truth; merge sp and slc together if comparing REF/merged intros
+
+        # convert to bedfile
+
+        # centromere filling
+
+        # convert back to bins
+
+        # save, and pass gt_df to score_intros
+
         for anchor in index.genomes.keys():
             print(f"Processing {chr_name}, {anchor}")
 
             bed_file = Path(
-                f"/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v2/{anchor}_{chr_name}_{introgression_type}.bed"
+                f"/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v3/{anchor}_{chr_name}_{introgression_type}.bed"
             )
             paf_file = Path(
                 f"/home/nbrown62/data_mschatz1/nbrown62/minimap2_data/tomato_sl4/{anchor}_edited_{reference}_edited.paf"

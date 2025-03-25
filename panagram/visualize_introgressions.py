@@ -101,7 +101,7 @@ def create_heatmap_runner():
 def create_scored_heatmap_runner():
     # NOTE: change folders here
     called_intros_folder = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v2/postprocessed"
+        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v3/postprocessed"
     )
     gt_intros_folder = Path(
         "/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper"

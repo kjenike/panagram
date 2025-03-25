@@ -66,7 +66,8 @@ def threshold_introgressions(pair, anchor, comp_group):
     # 4. Average of all introgression calls for comp_group when comp_group is a list
     # than its own group
     # Postprocessing: gap fill between nearby introgressions
-
+    # TODO: try no gap filling; try changing logic: if one tomato in the group has large diffs w/ REF, throw it out before comparing to anchor
+    # if all tomatoes in the group have large diffs with REF, just compare to REF
     if anchor_group == comp_group:
         # print(f"{anchor} is part of group {comp_group}. Comparing using thresholding...")
         group_sims["introgression"] = fill_gaps((group_sims.comp_sim < 0.9).astype(int))
@@ -110,14 +111,36 @@ def threshold_to_bed(group_sims, bin_size, chr_name, comp_group, output_file):
     return
 
 
+def bitmap_to_bins(bitmap, binlen, omit_fixed_kmers=False):
+    # modded version of the same function found in the Index class
+
+    # change index from chr position to the number of the bin the position falls in
+    df = bitmap.set_index(bitmap.index // binlen)
+
+    # remove fixed kmers shared by all members of the pangenome (i.e., rows that are all 1)
+    if omit_fixed_kmers:
+        df = df.loc[~(df == 1).all(axis=1)]
+
+    # get the sum of how many kmers equal 1 in each bin
+    paircount_bins = df.groupby(level=0).sum()
+
+    # fix the index's bin number to be the bin's chr position and transpose
+    paircount_bins = paircount_bins.set_index(paircount_bins.index * binlen).T
+
+    # divide each kmer sum in each column by the max # of kmers in the bin (some bins are uneven)
+    paircount_bins = paircount_bins.div(paircount_bins.max(axis=0), axis=1)
+    return paircount_bins
+
+
 def run_introgression_finder(
-    index,
     anchor,
+    genome,
     chr_name,
     group_tsv,
     comp_groups,
     bitmap_step,
     bin_size,
+    omit_fixed_kmers,
     output_dir,
 ):
     # only generate missing bed files
@@ -127,7 +150,6 @@ def run_introgression_finder(
     # Step 1 - choose an anchor and re-create pairwise correlation matrix for it
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    genome = index.genomes[anchor]
     groups = pd.read_csv(group_tsv, sep="\t", index_col=0)
 
     # get an entire chr's bitmap
@@ -135,7 +157,7 @@ def run_introgression_finder(
     chr_bitmap = genome.query(chr_name, 0, chr_size, step=bitmap_step)
 
     # get correlation matrix
-    _, pair = index.bitmap_to_bins(chr_bitmap, bin_size)
+    pair = bitmap_to_bins(chr_bitmap, bin_size, omit_fixed_kmers)
 
     # get the kmer similarities for the anchor's group and the comparison group
     pair = pair.merge(groups, left_index=True, right_index=True, how="left")
@@ -176,15 +198,15 @@ def run_introgression_finder(
 
 
 def main():
-    # TODO: allow for a 2-bin gap
     # USER PARAMS
     bitmap_step = 100
     bin_size = 1000000
+    omit_fixed_kmers = True
     index_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4"
     group_tsv = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/group.tsv"
     comp_groups = ["SP", "SLC", "SLL", "REF"]
     output_dir = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v2/"
+        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v3/"
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     index = Index(index_dir)
@@ -211,13 +233,14 @@ def main():
         for chr_name in genome.sizes.keys():
             print("Now running introgression analysis for", anchor, chr_name)
             run_introgression_finder(
-                index,
                 anchor,
+                genome,
                 chr_name,
                 group_tsv,
                 comp_groups,
                 bitmap_step,
                 bin_size,
+                omit_fixed_kmers,
                 output_dir,
             )
     # NOTE: if anchor not in SLL group, we could skip
