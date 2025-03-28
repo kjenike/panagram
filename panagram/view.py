@@ -47,10 +47,7 @@ def view(params):
     # This will have the figure componants that we need
     layout = go.Layout(
         margin=go.layout.Margin(
-            l=10,  # left margin
-            r=10,  # right margin
-            b=10,  # bottom margin
-            t=10,  # top margin
+            l=10, r=10, b=10, t=10  # left margin  # right margin  # bottom margin  # top margin
         )
     )
 
@@ -73,11 +70,7 @@ def view(params):
         html.Div(
             className="w3-half",
             children=[
-                dcc.Graph(
-                    id="all_genomes",
-                    style={"font-size": 20, "height": 1500},
-                    config=config,
-                ),
+                dcc.Graph(id="all_genomes", style={"font-size": 20, "height": 1500}, config=config),
             ],
         ),
         html.Div(
@@ -86,10 +79,7 @@ def view(params):
                 dcc.Graph(
                     id="all_genomes_kmer_comp",
                     config=config,
-                    style={
-                        "font-size": 30,
-                        "height": 1500,
-                    },  # , figure = pangenome_comp_fig
+                    style={"font-size": 30, "height": 1500},  # , figure = pangenome_comp_fig
                 )
             ],
         ),
@@ -109,10 +99,7 @@ def view(params):
                 dcc.Graph(
                     id="average_kmer_content",
                     config=config,
-                    style={
-                        "font-size": 30,
-                        "height": 500,
-                    },  # figure = pangenome_avg_fig,
+                    style={"font-size": 30, "height": 500},  # figure = pangenome_avg_fig,
                 )
             ],
         ),
@@ -198,9 +185,7 @@ def view(params):
                     children=[
                         # left figure
                         dcc.Graph(
-                            id="chromosome",
-                            config=config,
-                            style={"font-size": 20, "height": 350},
+                            id="chromosome", config=config, style={"font-size": 20, "height": 350}
                         )
                     ],
                 )
@@ -212,9 +197,7 @@ def view(params):
                     className="w3-container",
                     children=[
                         dcc.Graph(
-                            id="primary",
-                            config=config,
-                            style={"height": 1000, "font-size": 20},
+                            id="primary", config=config, style={"height": 1000, "font-size": 20}
                         )
                     ],
                 )
@@ -257,6 +240,77 @@ def view(params):
             ]
         ),
     ]
+
+    ANNOTATION_TAB = html.Div(
+        children=[
+            html.Div(
+                className="w3-container",
+                children=[
+                    html.Div(
+                        className="w3-threequarter",
+                        children=[
+                            dcc.Graph(
+                                id="annotation_conservation",
+                                # figure= annotation_tab_plot(annotation_tab_df, "Length", 1), #plot_anno_conserve(anchor_name),
+                                config=config,
+                                style={"height": 1250, "font-size": 40},
+                            )
+                        ],
+                    ),
+                    html.Div(
+                        className="w3-quarter",
+                        children=[
+                            # Control panel for the annotation tab plots
+                            html.I("Color by: ", style={"font-size": 40}),
+                            html.Br(),
+                            dcc.RadioItems(
+                                options=[
+                                    {"label": " Log2 gene length", "value": " Log2 gene length"},
+                                    {"label": " Gene length", "value": " Gene length"},
+                                    {"label": " Chromosome", "value": " Chromosome"},
+                                    {
+                                        "label": " Bed file [FUTURE FEATURE]",
+                                        "value": " Bed file [FUTURE FEATURE]",
+                                        "disabled": True,
+                                    },
+                                    {
+                                        "label": " Selected region [FUTURE FEATURE]",
+                                        "value": " Selected region [FUTURE FEATURE]",
+                                        "disabled": True,
+                                    },
+                                ],
+                                value=" Log2 gene length",
+                                # [' Log2 gene length', ' Gene length', ' Chromosome', ' Bed file [FUTURE FEATURE]'],
+                                #' Log2 gene length',
+                                labelStyle={"display": "block"},
+                                style={
+                                    "font-size": 30,
+                                },
+                                id="radios",
+                            ),
+                            html.Br(),
+                            html.I("", style={"font-size": 30}, id="annotation_tab_clickdata_Name"),
+                            html.Br(),
+                            html.I("", style={"font-size": 30}, id="annotation_tab_clickdata_X"),
+                            html.Br(),
+                            html.I("", style={"font-size": 30}, id="annotation_tab_clickdata_Y"),
+                            html.Br(),
+                            html.I(
+                                "", style={"font-size": 30}, id="annotation_tab_clickdata_Color"
+                            ),
+                            html.Br(),
+                            html.P(
+                                "",
+                                style={"font-size": 30, "overflow-wrap": "break-word"},
+                                id="annotation_tab_clickdata_Attr",
+                            ),
+                        ],
+                        style={"padding": "1%", "height": 1250},
+                    ),
+                ],
+            )  # "border":"2px grey solid"
+        ]
+    )
 
     app = dash.Dash(
         __name__,
@@ -836,10 +890,7 @@ def view(params):
         fig = make_subplots(
             rows=2,
             cols=2,
-            specs=[
-                [{"type": "bar", "colspan": 2}, None],
-                [{"type": "bar"}, {"type": "bar"}],
-            ],
+            specs=[[{"type": "bar", "colspan": 2}, None], [{"type": "bar"}, {"type": "bar"}]],
             subplot_titles=(
                 "Whole chromosome",
                 "This region",
@@ -892,15 +943,7 @@ def view(params):
         return fig
 
     def plot_interactive(
-        anchor_name,
-        chrom,
-        start_coord,
-        end_coord,
-        step,
-        bitmap,
-        pancounts,
-        paircounts,
-        genes,
+        anchor_name, chrom, start_coord, end_coord, step, bitmap, pancounts, paircounts, genes
     ):
         t0 = time.perf_counter()
 
@@ -954,19 +997,14 @@ def view(params):
         t0 = t1
 
         anno_types = index.genomes[anchor_name].gff_anno_types
-        # NOTE: EDITED
-        if anno_types == None:
-            hasexon = False
-            anno_types = []
-        else:
-            hasexon = "exon" in anno_types
+        hasexon = "exon" in anno_types
 
         c = np.arange(len(anno_types) + (not hasexon))
         ann_colors = np.array(px.colors.qualitative.Prism)
         ann_colors = ann_colors[c % len(ann_colors)]
 
         linewidth = 1 if hasexon else 15
-        print("WIDTH", linewidth)
+        print("WIDHT", linewidth)
 
         fig.add_trace(
             go.Scattergl(
@@ -998,14 +1036,8 @@ def view(params):
             anchor_name, chrom, start_coord, end_coord
         )  # .set_index("type_id").sort_index()
         anno["break"] = np.nan
-
-        print(anno)
-        if anno.empty:
-            grp = []
-        else:
-            grp = anno.groupby("type_id")
-
-        for t, df in grp:  # anno.groupby("type_id"):
+        grp = anno.groupby("type_id")
+        for t, df in anno.groupby("type_id"):
             # for i,t in enumerate(anno_types):
             #    df = anno.loc[t]
             xs = df[["start", "end", "break"]].to_numpy().flatten()
@@ -1350,14 +1382,7 @@ def view(params):
         )
 
         chr_fig.append_trace(
-            go.Heatmap(
-                x=x,
-                z=z_genes,
-                y=y,
-                type="heatmap",
-                colorscale="magma_r",
-                showscale=False,
-            ),
+            go.Heatmap(x=x, z=z_genes, y=y, type="heatmap", colorscale="magma_r", showscale=False),
             row=3,
             col=1,
         )
@@ -1384,20 +1409,14 @@ def view(params):
         )
 
         chr_fig.update_xaxes(
-            fixedrange=True,
-            range=[0, index.chrs.loc[anchor_name, this_chr]["size"]],
-            row=1,
-            col=1,
+            fixedrange=True, range=[0, index.chrs.loc[anchor_name, this_chr]["size"]], row=1, col=1
         )
         chr_fig.update_yaxes(
             title_text="Univ.", range=[0.5, 1.5], showticklabels=False, row=1, col=1
         )
 
         chr_fig.update_xaxes(
-            fixedrange=True,
-            range=[0, index.chrs.loc[anchor_name, this_chr]["size"]],
-            row=2,
-            col=1,
+            fixedrange=True, range=[0, index.chrs.loc[anchor_name, this_chr]["size"]], row=2, col=1
         )
         chr_fig.update_yaxes(
             title_text="Uniq.", range=[0.5, 1.5], showticklabels=False, row=2, col=1
@@ -1704,15 +1723,9 @@ def view(params):
                     buttons=list(
                         [
                             dict(
-                                args=[{"yaxis.type": "linear"}],
-                                label="Linear",
-                                method="relayout",
+                                args=[{"yaxis.type": "linear"}], label="Linear", method="relayout"
                             ),
-                            dict(
-                                args=[{"yaxis.type": "log"}],
-                                label="Log",
-                                method="relayout",
-                            ),
+                            dict(args=[{"yaxis.type": "log"}], label="Log", method="relayout"),
                         ]
                     ),
                 ),
@@ -1740,7 +1753,7 @@ def view(params):
         #    except :
         #        print("failed", anchor_name + "\t" + this_chrom)
         chrs = index[anchor_name].chrs
-        fig = go.Figure(data=[go.Scattergl(x=chrs.index, y=chrs["gene_count"])])
+        fig = go.Figure(data=[(go.Scattergl(x=chrs.index, y=chrs["gene_count"]))])
         fig.update_yaxes(
             title_text="Gene density",
         )
@@ -1762,15 +1775,9 @@ def view(params):
                     buttons=list(
                         [
                             dict(
-                                args=[{"yaxis.type": "linear"}],
-                                label="Linear",
-                                method="relayout",
+                                args=[{"yaxis.type": "linear"}], label="Linear", method="relayout"
                             ),
-                            dict(
-                                args=[{"yaxis.type": "log"}],
-                                label="Log",
-                                method="relayout",
-                            ),
+                            dict(args=[{"yaxis.type": "log"}], label="Log", method="relayout"),
                         ]
                     ),
                 ),

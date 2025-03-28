@@ -202,11 +202,7 @@ def read_pangenome_comp(index):
                 yanchor="top",
                 buttons=list(
                     [
-                        dict(
-                            args=[{"xaxis.type": "linear"}],
-                            label="Linear",
-                            method="relayout",
-                        ),
+                        dict(args=[{"xaxis.type": "linear"}], label="Linear", method="relayout"),
                         dict(args=[{"xaxis.type": "log"}], label="Log", method="relayout"),
                     ]
                 ),
