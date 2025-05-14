@@ -29,14 +29,14 @@ def create_heatmap(distances_file):
     distances_file = Path(distances_file)
     output_file = distances_file.parent / (distances_file.stem + ".png")
     distances = pd.read_csv(distances_file, sep="\t", index_col=0).fillna(0)
-    # new_index = list(distances.index)
+    new_index = list(distances.index)
 
-    # for sl4
+    # for paper
     # new_index = [i.split(".")[0] for i in new_index]
-    # for sl5 - get the name of the acession without number added by Jasmine
-    # new_index = [i.split("_")[1] for i in new_index]
+    # get the name of the acession without number added by Jasmine
+    new_index = [i.split("_")[1] for i in new_index]
 
-    # distances.index = new_index
+    distances.index = new_index
     distances = distances.sort_index()
 
     fig = px.imshow(distances, color_continuous_scale="Greens", aspect="auto", zmin=0, zmax=1)
@@ -46,6 +46,7 @@ def create_heatmap(distances_file):
 
 
 def create_scored_heatmap(called_intro_file, gt_intro_file, threshold):
+
     # read both distances files
     output_file = called_intro_file.parent / (called_intro_file.stem + ".scored.png")
 
@@ -53,6 +54,11 @@ def create_scored_heatmap(called_intro_file, gt_intro_file, threshold):
     called_intro_df, gt_intro_df = threshold_introgressions(
         called_intro_file, gt_intro_file, threshold
     )
+
+    # NOTE: accession names must match
+    # TODO: throw error when they do not match
+    # hack to remove numbers from paper_subset gt accesssions
+    gt_intro_df.index = [x.split("_")[1] for x in gt_intro_df.index]
 
     # only visualize the accessions that are shared btwn both files
     shared_accessions = list(
@@ -76,7 +82,10 @@ def create_scored_heatmap(called_intro_file, gt_intro_file, threshold):
 
     # visualize
     fig = px.imshow(
-        called_intro_df, color_continuous_scale=["red", "yellow", "gray", "green"], aspect="auto"
+        called_intro_df,
+        color_continuous_scale=["red", "yellow", "gray", "green"],
+        range_color=[2, 5],
+        aspect="auto",
     )
     fig.update_layout(
         coloraxis_showscale=False, yaxis=dict(tickmode="linear"), title=output_file.stem
@@ -88,7 +97,7 @@ def create_scored_heatmap(called_intro_file, gt_intro_file, threshold):
 def create_heatmap_runner():
     # NOTE: change folder here
     input_folder = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v2/postprocessed"
+        "/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper_subset"
     )
 
     distances_files = list(input_folder.glob("chr*.txt"))
@@ -101,10 +110,10 @@ def create_heatmap_runner():
 def create_scored_heatmap_runner():
     # NOTE: change folders here
     called_intros_folder = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v3/postprocessed"
+        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v5/postprocessed"
     )
     gt_intros_folder = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper"
+        "/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper_subset"
     )
     introgression_type = "REF"
     threshold = 0.5

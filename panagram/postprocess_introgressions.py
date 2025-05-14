@@ -80,6 +80,18 @@ def extract_bed_region(bed_row, fasta_df):
     return introgression_sequence
 
 
+def bed_file_is_empty(bed_file):
+    try:
+        bed_df = pd.read_csv(
+            bed_file,
+            sep="\t",
+            header=None,
+        )
+    except pd.errors.EmptyDataError as e:
+        return True
+    return False
+
+
 def read_bed_file(
     bed_file,
     accession=None,
@@ -105,15 +117,15 @@ def read_bed_file(
     :rtype: tuple(pd.DataFrame, pd.DataFrame)
     """
 
-    try:
-        bed_df = pd.read_csv(
-            bed_file,
-            sep="\t",
-            header=None,
-        )
-    except pd.errors.EmptyDataError as e:
-        print("Bed file is empty. Returning None.")
+    if bed_file_is_empty(bed_file):
         return None, None
+
+    bed_df = pd.read_csv(
+        bed_file,
+        sep="\t",
+        header=None,
+    )
+
     bed_df = bed_df.iloc[:, 0:4]
     col_names = ["Chromosome", "Start", "End", "Notes"]
     bed_df.columns = col_names
@@ -296,6 +308,11 @@ def score_introgressions(called_intro_file, gt_intro_file, threshold):
         called_intro_file, gt_intro_file, threshold
     )
 
+    # NOTE: accession names must match
+    # TODO: throw error when they do not match
+    # hack to remove numbers from paper_subset gt accesssions
+    gt_intro_df.index = [x.split("_")[1] for x in gt_intro_df.index]
+
     # rotate dfs, sort cols, and drop all columns that aren't shared btwn called and gt
     shared_cols = list(set(called_intro_df.index).intersection(set(gt_intro_df.index)))
     called_intro_df = called_intro_df.transpose()[shared_cols]
@@ -338,18 +355,29 @@ def score_introgressions(called_intro_file, gt_intro_file, threshold):
 
 def score_all_introgressions():
     # NOTE: change parameters here
+    # TODO: add param for gap filling
     index_dir = Path("/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4")
+
     index = Index(index_dir)
     reference = "SL4"
     genome = index.genomes[reference]
     introgression_type = "REF"
     bin_size = 1000000
     threshold = 0.5
+    centromere_filling = False
+
+    called_intros_dir = Path(
+        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v5/"
+    )
+    gt_intros_dir = Path(
+        "/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper_subset/"
+    )
+    paf_dir = Path("/home/nbrown62/data_mschatz1/nbrown62/minimap2_data/tomato_sl4/")
     samples_file = Path(
         "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/samples.tsv"
     )
     output_dir = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v3/postprocessed"
+        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v5/postprocessed"
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -359,12 +387,8 @@ def score_all_introgressions():
         chr_length = genome.sizes[chr_name]
 
         # NOTE: change paths to point to correct folders
-        gt_introgression_sp = Path(
-            f"/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper/{chr_name}.SP.txt"
-        )
-        gt_introgression_slc = Path(
-            f"/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper/{chr_name}.SLC.txt"
-        )
+        gt_introgression_sp = gt_intros_dir / f"{chr_name}.SP.txt"
+        gt_introgression_slc = gt_intros_dir / f"{chr_name}.SLC.txt"
 
         # figure out which ground truth to use
         if introgression_type == "SP":
@@ -376,47 +400,46 @@ def score_all_introgressions():
         else:
             raise ValueError("Invalid introgression type selected.")
 
-        # if process GT
-        # TODO: threshold ground truth; merge sp and slc together if comparing REF/merged intros
-
-        # convert to bedfile
-
-        # centromere filling
-
+        # TODO: if postprocess_GT == True:
+        # threshold ground truth; merge sp and slc together if comparing REF/merged intros
+        # convert result to bedfile
+        # perform centromere filling
+        # perform gap filling
         # convert back to bins
-
         # save, and pass gt_df to score_intros
 
         for anchor in index.genomes.keys():
+            bed_file = called_intros_dir / f"{anchor}_{chr_name}_{introgression_type}.bed"
+            paf_file = paf_dir / f"{anchor}_edited_{reference}_edited.paf"
+
+            if not bed_file.exists():
+                continue
             print(f"Processing {chr_name}, {anchor}")
 
-            bed_file = Path(
-                f"/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v3/{anchor}_{chr_name}_{introgression_type}.bed"
-            )
-            paf_file = Path(
-                f"/home/nbrown62/data_mschatz1/nbrown62/minimap2_data/tomato_sl4/{anchor}_edited_{reference}_edited.paf"
-            )
-
             # load bed file - get sequences and merge centromeres
-            bed_df, fasta_df = read_bed_file(bed_file, anchor, samples_file, index_dir)
-            if bed_df is None:
+            bed_file_to_liftover = bed_file
+
+            if bed_file_is_empty(bed_file):
                 anchor_intro_df = get_intro_df_template(bin_size, chr_length)
             else:
-                bed_df = merge_centromere_regions(bed_df, fasta_df, bin_size)
+                if centromere_filling:
+                    bed_df, fasta_df = read_bed_file(bed_file, anchor, samples_file, index_dir)
+                    bed_df = merge_centromere_regions(bed_df, fasta_df, bin_size)
 
-                # get bed file path and name without extension
-                bed_file_merged_centromeres = bed_file.stem + "_with_centromeres.bed"
-                bed_file_merged_centromeres = output_dir / bed_file_merged_centromeres
+                    # get bed file path and name without extension
+                    bed_file_merged_centromeres = bed_file.stem + "_with_centromeres.bed"
+                    bed_file_merged_centromeres = output_dir / bed_file_merged_centromeres
 
-                # save bed file with merged centromeres
-                bed_df[["Chromosome", "Start", "End", "Notes"]].to_csv(
-                    bed_file_merged_centromeres, index=False, header=False, sep="\t"
-                )
+                    # save bed file with merged centromeres
+                    bed_df[["Chromosome", "Start", "End", "Notes"]].to_csv(
+                        bed_file_merged_centromeres, index=False, header=False, sep="\t"
+                    )
+                    bed_file_to_liftover = bed_file_merged_centromeres
 
                 # save bed file lifted over to SL4 coordinate space
                 bed_file_liftover = bed_file.stem + f"_liftover_{reference}.bed"
                 bed_file_liftover = output_dir / bed_file_liftover
-                liftover_to_reference(str(bed_file_merged_centromeres), paf_file, bed_file_liftover)
+                liftover_to_reference(str(bed_file_to_liftover), paf_file, bed_file_liftover)
 
                 # save introgressions as bins
                 anchor_intro_df = bed_to_bins(bed_file_liftover, bin_size, chr_length)

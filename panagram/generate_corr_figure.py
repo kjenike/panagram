@@ -24,6 +24,7 @@ def better_dir(item):
 #     fig.write_image(output_file)
 #     return
 
+
 def visualize(pair, output_file, inverse=False):
     # take a look at what pair looks like after manipulation
     if inverse:
@@ -54,7 +55,7 @@ def visualize(pair, output_file, inverse=False):
     return
 
 
-index_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4_flye"
+index_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4_101"
 anchor = "SL4"  # "SL5"
 # chr_name = "BGV006775_MAS2.0ch11"
 output_dir = Path(index_dir) / "introgression_analysis_v1"

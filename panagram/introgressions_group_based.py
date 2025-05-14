@@ -2,7 +2,6 @@ from pathlib import Path
 import pandas as pd
 from panagram.index import Index
 import plotly.express as px
-import subprocess
 
 
 def visualize(pair, output_file, inverse=False):
@@ -49,11 +48,27 @@ def threshold_introgressions(pair, anchor, comp_group):
     # get the group the anchor belongs to
     anchor_group = pair.loc[anchor, "group"]
 
-    # make sure anchor's self-similarity gets dropped
+    # define df with group info and kmer sims of anchor's group; drop anchor's self-similarity
     pair_anchor_group = (
         pair[pair["group"] == anchor_group].drop(columns=["group"]).drop(anchor, axis=0)
     )
+    # define df with group info and kmer sim for comparison group
     pair_comp_group = pair[pair["group"] == comp_group].drop(columns=["group"])
+
+    # throw out all acessions with large diffs w/ the rest of the anchor group
+    # NOTE: could also define a "support" variable, where #support of the group
+    # must be more dissimilar for a bin to count as an introgression (or inverse w/ comp_group)
+    if len(pair_anchor_group) > 1:
+        for acession, row in pair_anchor_group.iterrows():
+            if row.mean() < 0.75:
+                pair_anchor_group = pair_anchor_group[pair_anchor_group.index != acession]
+    # print(pair_anchor_group)
+    # print(pair_comp_group)
+    if pair_anchor_group.empty:
+        print(f"Warning: accession {anchor} is not similar to any of its group members...")
+        if comp_group != "REF":
+            print("Skipping...")
+            return None
 
     # get mean kmer similarities per window for each group
     group_sims = pair_anchor_group.mean(axis=0).to_frame(name="anchor_sim")
@@ -65,18 +80,13 @@ def threshold_introgressions(pair, anchor, comp_group):
     # 3. If anchor isn't in comp_group: introgression is where anchor is more similar to comp_group
     # 4. Average of all introgression calls for comp_group when comp_group is a list
     # than its own group
-    # Postprocessing: gap fill between nearby introgressions
-    # TODO: try no gap filling; try changing logic: if one tomato in the group has large diffs w/ REF, throw it out before comparing to anchor
-    # if all tomatoes in the group have large diffs with REF, just compare to REF
     if anchor_group == comp_group:
-        # print(f"{anchor} is part of group {comp_group}. Comparing using thresholding...")
-        group_sims["introgression"] = fill_gaps((group_sims.comp_sim < 0.9).astype(int))
+        group_sims["introgression"] = (group_sims.anchor_sim < 0.8).astype(int)
     elif comp_group == "REF":
-        group_sims["introgression"] = fill_gaps((group_sims.comp_sim < 0.9).astype(int))
+        # comp_group should only consist of 1 REF
+        group_sims["introgression"] = (group_sims.comp_sim < 0.8).astype(int)
     else:
-        group_sims["introgression"] = fill_gaps(
-            (group_sims.comp_sim >= group_sims.anchor_sim).astype(int)
-        )
+        group_sims["introgression"] = (group_sims.comp_sim >= group_sims.anchor_sim).astype(int)
 
     return group_sims
 
@@ -136,7 +146,7 @@ def run_introgression_finder(
     anchor,
     genome,
     chr_name,
-    group_tsv,
+    groups,
     comp_groups,
     bitmap_step,
     bin_size,
@@ -150,7 +160,6 @@ def run_introgression_finder(
     # Step 1 - choose an anchor and re-create pairwise correlation matrix for it
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    groups = pd.read_csv(group_tsv, sep="\t", index_col=0)
 
     # get an entire chr's bitmap
     chr_size = genome.sizes[chr_name]
@@ -162,38 +171,42 @@ def run_introgression_finder(
     # get the kmer similarities for the anchor's group and the comparison group
     pair = pair.merge(groups, left_index=True, right_index=True, how="left")
 
+    # Step 2 - identify potential introgressions by thresholding kmer similarities
     merged_sims = None
     for comp_group in comp_groups:
         group_sims = threshold_introgressions(pair, anchor, comp_group)
-        if merged_sims is None:
+        if group_sims is None:
+            continue
+        elif merged_sims is None:
             merged_sims = group_sims
         else:
             merged_sims += group_sims
 
+        # Step 3 - visualization
         # show user introgressions labeled on the original heatmap from panagram
         # invert values for figure so that introgressions = 0
         pair.loc["Intro. Score"] = (~(group_sims["introgression"].astype(bool))).astype(int)
         output_vis = output_dir / f"{anchor}_{chr_name}_{comp_group}_heatmap.png"
         visualize(pair.drop(columns=["group"]), output_vis, inverse=True)
 
-        # save introgressions to bed file
+        # Step 4 - save introgressions to bed file
         output_bed = output_dir / f"{anchor}_{chr_name}_{comp_group}.bed"
+        print(f"Saving to {output_bed}")
         threshold_to_bed(group_sims, bin_size, chr_name, comp_group, output_bed)
 
-    # repeat analysis one more time with merged introgressions from all comp_groups
-    # pair.loc["Intro. Score"] = (~(merged_sims["introgression"].astype(bool))).astype(int)
+    # Step 5 - repeat analysis one more time with merged introgressions from all comp_groups
+    if merged_sims is not None:
+        # divide by the max to get between 0 and 1, do 1 - x to invert
+        pair.loc["Intro. Score"] = 1 - (
+            merged_sims["introgression"] / merged_sims["introgression"].max()
+        )
 
-    # divide by the max to get between 0 and 1, do 1 - x to invert
-    pair.loc["Intro. Score"] = 1 - (
-        merged_sims["introgression"] / merged_sims["introgression"].max()
-    )
+        output_vis = output_dir / f"{anchor}_{chr_name}_merged_heatmap.png"
+        visualize(pair.drop(columns=["group"]), output_vis, inverse=True)
 
-    output_vis = output_dir / f"{anchor}_{chr_name}_merged_heatmap.png"
-    visualize(pair.drop(columns=["group"]), output_vis, inverse=True)
-
-    # save introgressions to bed file
-    output_bed = output_dir / f"{anchor}_{chr_name}_merged.bed"
-    threshold_to_bed(merged_sims, bin_size, chr_name, "merged", output_bed)
+        # save introgressions to bed file
+        output_bed = output_dir / f"{anchor}_{chr_name}_merged.bed"
+        threshold_to_bed(merged_sims, bin_size, chr_name, "merged", output_bed)
     return
 
 
@@ -205,30 +218,38 @@ def main():
     index_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4"
     group_tsv = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/group.tsv"
     comp_groups = ["SP", "SLC", "SLL", "REF"]
+    skip_groups = ["REF", "SP", "SLC"]
     output_dir = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v3/"
+        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v5/"
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     index = Index(index_dir)
+    groups = pd.read_csv(group_tsv, sep="\t", index_col=0)
 
-    # For testing with tomato pangenome
+    # # For testing with tomato pangenome
     # for anchor in ["M82"]:
+    #     anchor_group = groups.loc[anchor, "group"]
+    #     if anchor_group in skip_groups:
+    #         continue
     #     genome = index.genomes[anchor]
-    #     print(genome.sizes.keys())
-    #     for chr_name in ["chr11", "chr4"]:
+    #     for chr_name in ["chr4", "chr5"]:
     #         print("Now running introgression analysis for", anchor, chr_name)
     #         run_introgression_finder(
-    #             index,
     #             anchor,
+    #             genome,
     #             chr_name,
-    #             group_tsv,
+    #             groups,
     #             comp_groups,
     #             bitmap_step,
     #             bin_size,
+    #             omit_fixed_kmers,
     #             output_dir,
     #         )
 
     for anchor in index.genomes.keys():
+        anchor_group = groups.loc[anchor, "group"]
+        if anchor_group in skip_groups:
+            continue
         genome = index.genomes[anchor]
         for chr_name in genome.sizes.keys():
             print("Now running introgression analysis for", anchor, chr_name)
@@ -236,14 +257,13 @@ def main():
                 anchor,
                 genome,
                 chr_name,
-                group_tsv,
+                groups,
                 comp_groups,
                 bitmap_step,
                 bin_size,
                 omit_fixed_kmers,
                 output_dir,
             )
-    # NOTE: if anchor not in SLL group, we could skip
     return
 
 
