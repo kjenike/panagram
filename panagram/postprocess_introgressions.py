@@ -1,20 +1,11 @@
-# take in:
-# samples.tsv
-# a folder where bed files live
-# a chromosome
-
-# extract introgressions using bed files
-# convert to kmer dictionary
-# while doing this, append kmers to a set
-# convert all dicts to vectors of kmer counts
-# cluster vectors using umap/tsne/dbscan/etc.
-# color by acession
-
+import argparse
 from pathlib import Path
 import subprocess
+import math
 import numpy as np
 import pandas as pd
 from panagram.index import Index
+from call_introgressions import bins_to_bed
 
 
 def read_fasta_generator(fp):
@@ -197,16 +188,40 @@ def merge_centromere_regions(bed_df, fasta_df, bin_size):
     return bed_df
 
 
+def align_to_reference(
+    reference_file,
+    query_file,
+    minimap_flags,
+    output_file,
+):
+    # Call minimap2 command - requires minimap2 to be in path
+    minimap_command = ["minimap2"] + minimap_flags + [reference_file, query_file]
+
+    # Run the command
+    try:
+        result = subprocess.run(minimap_command, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print("Error:", e.stderr)
+        exit(1)
+
+    # Save the result as a bed file
+    log_file = output_file.parent / f"{output_file.stem}.log"
+
+    with open(log_file, "w") as f:
+        f.write(result.stderr)
+    with open(output_file, "w") as f:
+        f.write(result.stdout)
+    return
+
+
 def liftover_to_reference(
     bed_file,
     paf_file,
     output_file,
-    paftools_script_path="/home/nbrown62/data_mschatz1/nbrown62/minimap2/misc/paftools.js",
 ):
-    # Call liftover script - requires k8 to be in path
+    # Call liftover script - requires paftools.js to be in path
     liftover_command = [
-        "k8",
-        paftools_script_path,
+        "paftools.js",
         "liftover",
         paf_file,
         bed_file,
@@ -224,6 +239,15 @@ def liftover_to_reference(
     with open(output_file, "w") as f:
         f.write(result.stdout)
     return
+
+
+def get_intro_df_template(bin_size, chr_length):
+    # create pandas df full of 0s
+    n_bins = math.ceil(chr_length / bin_size)
+    bin_names = [i * bin_size for i in range(n_bins)]
+    zeros = np.zeros((1, n_bins), dtype=int)
+    intro_df = pd.DataFrame(zeros, columns=bin_names)
+    return intro_df
 
 
 def bed_to_bins(bed_file, bin_size, chr_length):
@@ -251,226 +275,156 @@ def bed_to_bins(bed_file, bin_size, chr_length):
             continue
         intro_df.loc[:, bin_label] += 1
 
+    # match the format of the bins_df from call_introgressions
+    intro_df = intro_df.T
+    intro_df.columns = ["introgression"]
     return intro_df
 
 
-def get_intro_df_template(bin_size, chr_length):
-    # create pandas df full of 0s
-    n_bins = chr_length // bin_size
-    bin_names = [i * bin_size for i in range(n_bins)]
-    zeros = np.zeros((1, n_bins), dtype=int)
-    intro_df = pd.DataFrame(zeros, columns=bin_names)
-    return intro_df
+def fill_gaps(row, rounds=1):
+    # Fill small gaps of 0s surrounded by 1s
+    row = row.values
+    for j in range(rounds):
+        for i in range(1, len(row) - 1):
+            if row[i] == 0 and (row[i - 1] >= 1 and row[i + 1] >= 1):
+                row[i] = 1
+    return row
 
 
-def read_introgressions(introgression_file, fix_names=False):
-    # read introgressions for a chromosome
-    intro_df = pd.read_csv(introgression_file, sep="\t", header=0, index_col=0).fillna(0)
-
-    if fix_names:
-        new_index = list(intro_df.index)
-        # changing a specific name
-        new_index = ["Fla8924" if i == "Fla.8924.ont.s" else i.split(".")[0] for i in new_index]
-        intro_df.index = new_index
-    return intro_df
+def remove_single_bins(row):
+    # omit introgressions that are only a single bin wide
+    # recommend running fill gaps prior to this func after liftover, which can fragment intros
+    for i in range(1, len(row) - 1):
+        if row[i] >= 1 and (row[i - 1] == 0 and row[i + 1] == 0):
+            row[i] = 0
+    return row
 
 
-def threshold_introgressions_helper(intro_df, threshold):
-    intro_df[intro_df < threshold] = 0
-    intro_df[intro_df != 0] = 1
-    return intro_df
-
-
-def threshold_introgressions(called_intro_file, gt_intro_file, threshold):
-    # if given multiple gt files, merge together
-    if type(gt_intro_file) == list or type(gt_intro_file) == tuple:
-        gt_intro_df1 = read_introgressions(gt_intro_file[0], fix_names=True)
-        gt_intro_df2 = read_introgressions(gt_intro_file[1], fix_names=True)
-        # threshold and merge multiple intro types
-        gt_intro_df1 = threshold_introgressions_helper(gt_intro_df1, threshold)
-        gt_intro_df2 = threshold_introgressions_helper(gt_intro_df2, threshold)
-        gt_intro_df = gt_intro_df1 + gt_intro_df2
-        gt_intro_df[gt_intro_df > 0] = 1
-    else:
-        gt_intro_df = read_introgressions(gt_intro_file, fix_names=True)
-        threshold_introgressions_helper(gt_intro_df, threshold)
-
-    # make sure all called introgressions are scored as a 1
-    called_intro_df = read_introgressions(called_intro_file)
-    called_intro_df = threshold_introgressions_helper(called_intro_df, threshold=1)
-    return called_intro_df, gt_intro_df
-
-
-def score_introgressions(called_intro_file, gt_intro_file, threshold):
-    # TODO: perform gap filling here? This way, its performed once for GT and called post-centromere processing in REF space
-    # get confusion matrix for introgressions given ground truth in the same coordinate/bin space
-    called_intro_df, gt_intro_df = threshold_introgressions(
-        called_intro_file, gt_intro_file, threshold
+def postprocess_introgressions():
+    # does postprocessing on specified file or all files in a folder
+    # allows for liftover, gap filling, centromere filling, and lone bin removal in any order
+    parser = argparse.ArgumentParser(description="Introgression postprocessing.")
+    parser.add_argument(
+        "--bed", type=str, help="path to introgression bed file or folder", required=True
     )
+    parser.add_argument("--idx", type=str, help="path to Panagram index folder", required=True)
+    parser.add_argument(
+        "-a",
+        nargs="+",
+        help="action(s) to perform on introgression file: lift, fgap, fcen, rmbn",
+        required=True,
+    )
+    parser.add_argument("--ref", type=str, help="name of reference in Panagram")
+    parser.add_argument(
+        "--map",
+        type=str,
+        help="minimap flags to use",
+        default="-x asm20 -c -t 3",
+    )
+    parser.add_argument(
+        "--paf",
+        type=str,
+        help="path to minimap paf file or folder for liftover to ref space",
+    )
+    parser.add_argument(
+        "--bin",
+        type=int,
+        help="size of bitmap bin used during calling",
+        default=1000000,
+    )
+    args = parser.parse_args()
 
-    # NOTE: accession names must match
-    # TODO: throw error when they do not match
-    # hack to remove numbers from paper_subset gt accesssions
-    gt_intro_df.index = [x.split("_")[1] for x in gt_intro_df.index]
+    actions = args.a
+    for action in actions:
+        if action not in ["lift", "fgap", "fcen", "rmbn"]:
+            raise ValueError(f"Unrecognized action {action}. Check -a flag for valid actions.")
 
-    # rotate dfs, sort cols, and drop all columns that aren't shared btwn called and gt
-    shared_cols = list(set(called_intro_df.index).intersection(set(gt_intro_df.index)))
-    called_intro_df = called_intro_df.transpose()[shared_cols]
-    gt_intro_df = gt_intro_df.transpose()[shared_cols]
-
-    # calculate confusion matrix
-    total = gt_intro_df.size
-
-    # true pos
-    true_pos = ((called_intro_df == 1) & (gt_intro_df == 1)).values.sum()
-
-    # true neg
-    true_neg = ((called_intro_df == 0) & (gt_intro_df == 0)).values.sum()
-
-    # false pos
-    false_pos = ((called_intro_df == 1) & (gt_intro_df == 0)).values.sum()
-
-    # false neg
-    false_neg = ((called_intro_df == 0) & (gt_intro_df == 1)).values.sum()
-
-    # accuracy
-    acc = (true_pos + true_neg) / total
-    precision = true_pos / (true_pos + false_pos)
-    recall = true_pos / (true_pos + false_neg)
-
-    # return the metrics as a df
-    metrics = {
-        "True Positive": true_pos,
-        "True Negative": true_neg,
-        "False Positive": false_pos,
-        "False Negative": false_neg,
-        "Accuracy": acc,
-        "Precision": precision,
-        "Recall": recall,
-    }
-    metrics = pd.DataFrame([metrics])
-
-    return metrics
-
-
-def score_all_introgressions():
-    # NOTE: change parameters here
-    # TODO: add param for gap filling
-    index_dir = Path("/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4")
-
+    index_dir = Path(args.idx)
+    if not index_dir.is_dir():
+        raise ValueError("Index directory not found. Check --idx path.")
     index = Index(index_dir)
-    reference = "SL4"
-    genome = index.genomes[reference]
-    introgression_type = "REF"
-    bin_size = 1000000
-    threshold = 0.5
-    centromere_filling = False
 
-    called_intros_dir = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v5/"
-    )
-    gt_intros_dir = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper_subset/"
-    )
-    paf_dir = Path("/home/nbrown62/data_mschatz1/nbrown62/minimap2_data/tomato_sl4/")
-    samples_file = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/samples.tsv"
-    )
-    output_dir = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v5/postprocessed"
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # figure out if user provided a file or folder
+    bed_files = Path(args.bed)
+    if bed_files.is_file():
+        bed_files = [bed_files]
+    elif bed_files.is_dir():
+        bed_files = bed_files.glob("*.bed")
+    else:
+        raise ValueError("Bed file/folder not found. Check --bed path.")
 
-    all_metrics_df = None
-    for chr_name in genome.sizes.keys():
-        chr_intro_df = None
-        chr_length = genome.sizes[chr_name]
+    for bed_file in bed_files:
+        # TODO: handle empty bed files by warning and outputting empty processed bed file and skipping
+        # accession is inferred using the bed file name
+        bed_accession = bed_file.name.split("_")[0]
+        bed_chr = bed_file.name.split("_")[1]
+        bed_intro_type = bed_file.stem.split("_")[2]
+        bed_genome = index.genomes[bed_accession]
+        bed_output = bed_file.parent / (bed_file.stem + f"_postprocessed.bed")
 
-        # NOTE: change paths to point to correct folders
-        gt_introgression_sp = gt_intros_dir / f"{chr_name}.SP.txt"
-        gt_introgression_slc = gt_intros_dir / f"{chr_name}.SLC.txt"
+        for action in actions:
+            if action == "lift":
+                # lift - perform liftover - requires ref; paf optional
+                if args.ref is None:
+                    raise ValueError("--ref must be specified for liftover.")
+                reference_accession = args.ref
+                reference_genome = index.genomes[reference_accession]
+                reference_file = index_dir / reference_genome.fasta
+                if not reference_file.is_file():
+                    raise ValueError("Reference file not found. Check --ref path.")
 
-        # figure out which ground truth to use
-        if introgression_type == "SP":
-            gt_intro_file = gt_introgression_sp
-        elif introgression_type == "SLC":
-            gt_intro_file = gt_introgression_slc
-        elif introgression_type in ["REF", "merged"]:
-            gt_intro_file = [gt_introgression_slc, gt_introgression_sp]
-        else:
-            raise ValueError("Invalid introgression type selected.")
+                # run minimap if paf files are not already provided
+                if args.paf is None:
+                    # find FASTA file associated with bed file
+                    query_file = index_dir / bed_genome.fasta
+                    minimap_flags = args.map.split(" ")
+                    output_dir = index_dir / "alignments"
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    paf_file = output_dir / f"{bed_accession}_{reference_accession}.paf"
+                    align_to_reference(reference_file, query_file, minimap_flags, paf_file)
+                else:
+                    paf_file = Path(args.paf)
+                    # find paf file with the same name of the bed file
+                    if paf_file.is_dir():
+                        paf_file = paf_file / f"{bed_accession}_{reference_accession}.paf"
+                    if not paf_file.is_file():
+                        raise ValueError("Cannot find paf file. Check --paf path.")
 
-        # TODO: if postprocess_GT == True:
-        # threshold ground truth; merge sp and slc together if comparing REF/merged intros
-        # convert result to bedfile
-        # perform centromere filling
-        # perform gap filling
-        # convert back to bins
-        # save, and pass gt_df to score_intros
+                # save bed file lifted over to reference coordinate space
+                liftover_to_reference(bed_file, paf_file, bed_output)
+                bed_file = bed_output
+                # bed genome is now the reference since we are in reference space
+                bed_genome = reference_genome
 
-        for anchor in index.genomes.keys():
-            bed_file = called_intros_dir / f"{anchor}_{chr_name}_{introgression_type}.bed"
-            paf_file = paf_dir / f"{anchor}_edited_{reference}_edited.paf"
+            elif action in ["fgap", "rmbn"]:
+                # fgap - merge regions >=1 bin size apart - requires bin size
+                # rmbn - perform singleton bin removal - requires bin size
+                # similar actions - just differ in function applied to the row of bins
+                apply_func = fill_gaps
+                if action == "rmbn":
+                    apply_func = remove_single_bins
 
-            if not bed_file.exists():
-                continue
-            print(f"Processing {chr_name}, {anchor}")
+                bin_size = args.bin
+                chr_length = bed_genome.sizes[bed_chr]
+                bins_df = bed_to_bins(bed_file, bin_size, chr_length)
+                bins_df["introgression"] = bins_df.apply(apply_func, axis=0)
 
-            # load bed file - get sequences and merge centromeres
-            bed_file_to_liftover = bed_file
+                # save
+                bed_df = bins_to_bed(bins_df, bin_size, bed_chr, bed_intro_type)
+                bed_df.to_csv(bed_output, header=False, index=False, sep="\t")
+                bed_file = bed_output
 
-            if bed_file_is_empty(bed_file):
-                anchor_intro_df = get_intro_df_template(bin_size, chr_length)
-            else:
-                if centromere_filling:
-                    bed_df, fasta_df = read_bed_file(bed_file, anchor, samples_file, index_dir)
-                    bed_df = merge_centromere_regions(bed_df, fasta_df, bin_size)
+            elif action == "fcen":
+                # fcen - fill in centromeres between introgression regions - requires bin size
+                fasta_file = index_dir / bed_genome.fasta
+                bed_df, fasta_df = read_bed_file(bed_file, fasta_file=fasta_file)
+                bed_df = merge_centromere_regions(bed_df, fasta_df, bin_size)
 
-                    # get bed file path and name without extension
-                    bed_file_merged_centromeres = bed_file.stem + "_with_centromeres.bed"
-                    bed_file_merged_centromeres = output_dir / bed_file_merged_centromeres
-
-                    # save bed file with merged centromeres
-                    bed_df[["Chromosome", "Start", "End", "Notes"]].to_csv(
-                        bed_file_merged_centromeres, index=False, header=False, sep="\t"
-                    )
-                    bed_file_to_liftover = bed_file_merged_centromeres
-
-                # save bed file lifted over to SL4 coordinate space
-                bed_file_liftover = bed_file.stem + f"_liftover_{reference}.bed"
-                bed_file_liftover = output_dir / bed_file_liftover
-                liftover_to_reference(str(bed_file_to_liftover), paf_file, bed_file_liftover)
-
-                # save introgressions as bins
-                anchor_intro_df = bed_to_bins(bed_file_liftover, bin_size, chr_length)
-
-            anchor_intro_df.index = [anchor]
-            anchor_intro_df = anchor_intro_df.rename_axis("Sample")
-
-            if chr_intro_df is None:
-                chr_intro_df = anchor_intro_df
-            else:
-                # add introgressions to df with other anchors
-                chr_intro_df = pd.concat([chr_intro_df, anchor_intro_df.iloc[[0]]])
-
-        # save off called introgressions
-        chr_intro_file = output_dir / f"{chr_name}.{introgression_type}.txt"
-        chr_intro_df.to_csv(chr_intro_file, sep="\t")
-
-        metrics = score_introgressions(chr_intro_file, gt_intro_file, threshold)
-        metrics.index = [chr_name]
-        metrics_file = output_dir / f"metrics_{chr_name}_{introgression_type}.tsv"
-        metrics.to_csv(metrics_file, sep="\t", index=False)
-
-        if all_metrics_df is None:
-            all_metrics_df = metrics
-        else:
-            all_metrics_df = pd.concat([all_metrics_df, metrics.iloc[[0]]])
-
-    all_metrics_file = output_dir / f"all_metrics_{introgression_type}.tsv"
-    all_metrics_df.to_csv(all_metrics_file, sep="\t")
+                # save
+                bed_df.to_csv(bed_output, header=False, index=False, sep="\t")
+                bed_file = bed_output
     return
 
 
 if __name__ == "__main__":
-    score_all_introgressions()
+    postprocess_introgressions()
