@@ -83,33 +83,17 @@ def bed_file_is_empty(bed_file):
     return False
 
 
-def read_bed_file(
-    bed_file,
-    accession=None,
-    samples_file=None,
-    index_dir=None,
-    fasta_file=None,
-):
-    """Read in a given bed file. If given a corresponding FASTA file, copy the sequence data into
-    the dataframe. Finds the FASTA file location given the acession, samples_file and index_dir if
-    its path is not provided.
+def read_bed_file(bed_file):
+    """Read in a given bed file.
 
     :param bed_file: path to bed file with introgression locations
     :type bed_file: str or Path
-    :param accession: id used in panagram for the genome, defaults to None
-    :type accession: str, optional
-    :param samples_file: samples.tsv file provided to panagram, defaults to None
-    :type samples_file: str or Path, optional
-    :param index_dir: panagram index folder; required if samples_file contains relative paths, defaults to None
-    :type index_dir: str or Path, optional
-    :param fasta_file: path to FASTA file; if provided, samples_file is not required, defaults to None
-    :type fasta_file: str or Path, optional
-    :return: dataframes representing bed file and FASTA file
-    :rtype: tuple(pd.DataFrame, pd.DataFrame)
+    :return: dataframe representing bed file
+    :rtype: pd.DataFrame
     """
 
     if bed_file_is_empty(bed_file):
-        return None, None
+        return None
 
     bed_df = pd.read_csv(
         bed_file,
@@ -122,25 +106,7 @@ def read_bed_file(
     bed_df.columns = col_names
     bed_df["Sequence"] = None
 
-    if fasta_file:
-        accession_fasta = fasta_file
-    elif samples_file:
-        # get the fasta file associated with the given accession
-        samples_df = pd.read_csv(samples_file, sep="\t", header=0, index_col=0)
-        accession_fasta = samples_df.loc[accession, "fasta"]
-        # convert relative path to absolute path if a relative path was given in the samples.tsv
-        if index_dir:
-            accession_fasta = Path(index_dir) / accession_fasta
-    # return bed file without Sequence data if no FASTA is provided
-    else:
-        return bed_df, None
-
-    # read fasta and bed file
-    fasta_df = read_fasta(accession_fasta)
-
-    # extract the sequence from the FASTA and put it into the bed df
-    bed_df["Sequence"] = bed_df.apply(extract_bed_region, axis=1, fasta_df=fasta_df)
-    return bed_df, fasta_df
+    return bed_df
 
 
 def merge_centromere_regions(bed_df, fasta_df, bin_size):
@@ -250,13 +216,12 @@ def get_intro_df_template(bin_size, chr_length):
     return intro_df
 
 
-def bed_to_bins(bed_file, bin_size, chr_length):
+def bed_to_bins(bed_df, bin_size, chr_length):
     # convert bedfile coordinates back into an index of bins for a chromosome
     # match format of txt files from original introgressions script
     # with a per-bin 0/1 introgression score
 
     # read in bed file
-    bed_df, _ = read_bed_file(bed_file)
     intro_df = get_intro_df_template(bin_size, chr_length)
 
     # convert coordinates to bin labels
@@ -270,10 +235,10 @@ def bed_to_bins(bed_file, bin_size, chr_length):
     # for each bedfile entry, add 1 to corresponding bins in df
     bin_labels = [pos for sublist in bed_df["Bin Labels"] for pos in sublist]
     for bin_label in bin_labels:
-        # the last few chr coords were clipped in get_distances.py if they didn't form a full bin
+        # clip accidental extra bins
         if bin_label > intro_df.columns[-1]:
             continue
-        intro_df.loc[:, bin_label] += 1
+        intro_df.loc[:, bin_label] = 1
 
     # match the format of the bins_df from call_introgressions
     intro_df = intro_df.T
@@ -294,6 +259,7 @@ def fill_gaps(row, rounds=1):
 def remove_single_bins(row):
     # omit introgressions that are only a single bin wide
     # recommend running fill gaps prior to this func after liftover, which can fragment intros
+    row = row.values
     for i in range(1, len(row) - 1):
         if row[i] >= 1 and (row[i - 1] == 0 and row[i + 1] == 0):
             row[i] = 0
@@ -308,6 +274,7 @@ def postprocess_introgressions():
         "--bed", type=str, help="path to introgression bed file or folder", required=True
     )
     parser.add_argument("--idx", type=str, help="path to Panagram index folder", required=True)
+    parser.add_argument("--out", type=str, help="path to folder to save all outputs", required=True)
     parser.add_argument(
         "-a",
         nargs="+",
@@ -353,14 +320,22 @@ def postprocess_introgressions():
     else:
         raise ValueError("Bed file/folder not found. Check --bed path.")
 
+    output_dir = Path(args.out)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     for bed_file in bed_files:
-        # TODO: handle empty bed files by warning and outputting empty processed bed file and skipping
-        # accession is inferred using the bed file name
+        # information is inferred using the bed file name
         bed_accession = bed_file.name.split("_")[0]
         bed_chr = bed_file.name.split("_")[1]
         bed_intro_type = bed_file.stem.split("_")[2]
         bed_genome = index.genomes[bed_accession]
-        bed_output = bed_file.parent / (bed_file.stem + f"_postprocessed.bed")
+        bed_output = output_dir / bed_file.name
+
+        # handle empty bed files by warning and outputting empty processed bed file and skipping
+        if bed_file_is_empty(bed_file):
+            print(f"Warning: {bed_file.name} is empty. Outputting empty postprocessed bed file.")
+            bed_output.touch()
+            continue
 
         for action in actions:
             if action == "lift":
@@ -406,7 +381,8 @@ def postprocess_introgressions():
 
                 bin_size = args.bin
                 chr_length = bed_genome.sizes[bed_chr]
-                bins_df = bed_to_bins(bed_file, bin_size, chr_length)
+                bed_df = read_bed_file(bed_file)
+                bins_df = bed_to_bins(bed_df, bin_size, chr_length)
                 bins_df["introgression"] = bins_df.apply(apply_func, axis=0)
 
                 # save
@@ -417,7 +393,8 @@ def postprocess_introgressions():
             elif action == "fcen":
                 # fcen - fill in centromeres between introgression regions - requires bin size
                 fasta_file = index_dir / bed_genome.fasta
-                bed_df, fasta_df = read_bed_file(bed_file, fasta_file=fasta_file)
+                fasta_df = read_fasta(fasta_file)
+                bed_df = read_bed_file(bed_file)
                 bed_df = merge_centromere_regions(bed_df, fasta_df, bin_size)
 
                 # save
