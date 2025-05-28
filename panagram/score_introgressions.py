@@ -1,0 +1,373 @@
+import argparse
+from pathlib import Path
+import numpy as np
+import pandas as pd
+from panagram.index import Index
+from call_introgressions import bins_to_bed
+import postprocess_introgressions as post
+import plotly.express as px
+
+
+def merge_bed_files(bed_files, bin_size, chr_length):
+    # append bed files together as rows in a df to match the style of the df returned by read_text_file
+    merged_df = None
+    for bed_file in bed_files:
+        bed_accession = bed_file.name.split("_")[0]
+
+        # make sure empty bed files get an empty row
+        if post.bed_file_is_empty(bed_file):
+            bed_df = post.get_intro_df_template(bin_size, chr_length)
+        else:
+            bed_df = post.read_bed_file(bed_file)
+            bed_df = post.bed_to_bins(bed_df, bin_size, chr_length).T
+
+        bed_df.index = [bed_accession]
+        bed_df = bed_df.rename_axis("Sample")
+
+        if merged_df is None:
+            merged_df = bed_df
+        else:
+            # append row to df with other accessions
+            merged_df = pd.concat([merged_df, bed_df.iloc[[0]]])
+
+    merged_df = merged_df.sort_index()
+    return merged_df
+
+
+def merge_text_files(text_files):
+    # merge dfs together using max operator
+    text_dfs = []
+    for text_file in text_files:
+        text_dfs.append(read_text_file(text_file))
+    merged_df = pd.concat(text_dfs).groupby(level=0).max()
+    return merged_df
+
+
+def read_text_file(introgression_file):
+    # read ground-truth introgressions for a chromosome from get_distances.py
+    intro_df = pd.read_csv(introgression_file, sep="\t", header=0, index_col=0).fillna(0)
+    intro_df.columns = intro_df.columns.astype(int)
+    return intro_df
+
+
+def merge_centromere_regions_helper(row, bin_size, chr_length, fasta_df):
+    # convert row to bed file - save temporarily
+    bins_df = row.rename("introgression").to_frame()
+    bins_df.index = bins_df.index.astype(int)
+
+    # match format that merge_centromere_regions expects
+    bed_df = bins_to_bed(bins_df, bin_size, "nan", "nan")
+    col_names = ["Chromosome", "Start", "End", "Notes"]
+    bed_df.columns = col_names
+    bed_df["Sequence"] = None
+
+    # merge chrs
+    bed_df = post.merge_centromere_regions(bed_df, fasta_df, bin_size)
+
+    # convert back to bins
+    new_row = post.bed_to_bins(bed_df, bin_size, chr_length)["introgression"]
+    return new_row
+
+
+def threshold_introgressions_helper(intro_df, threshold):
+    intro_df[intro_df < threshold] = 0
+    intro_df[intro_df != 0] = 1
+    return intro_df
+
+
+def threshold_introgressions(pred_df, gt_df, threshold):
+    # threshold introgressions for scoring
+    gt_df = threshold_introgressions_helper(gt_df, threshold)
+
+    # make sure all predicted introgressions are labeled as a 1
+    pred_df = threshold_introgressions_helper(pred_df, threshold=1)
+    return pred_df, gt_df
+
+
+def score_overlaps(pred_df, gt_df):
+    # TODO: add how = bin/overlap argument to score_introgressions
+    # for overlap - assign bins to "regions"
+    # add gt introgression scores as separate col
+    # group gt intros by region
+    # for each gt region, label as tp, tn, fp, fn
+    # calculate precision, recall, specificity, sensitivity for POC
+
+    return metrics
+
+
+def score_introgressions(pred_df, gt_df, how):
+    # get confusion matrix and related metrics for introgressions given ground truth in the same coordinate/bin space
+    # NOTE: accession names must match
+    # rotate dfs, sort cols, and drop all columns that aren't shared btwn called and gt
+    shared_cols = list(set(pred_df.index).intersection(set(gt_df.index)))
+    pred_df = pred_df.transpose()[shared_cols]
+    gt_df = gt_df.transpose()[shared_cols]
+
+    # calculate confusion matrix
+    total = gt_df.size
+
+    # true pos
+    true_pos = ((pred_df == 1) & (gt_df == 1)).values.sum()
+    # true neg
+    true_neg = ((pred_df == 0) & (gt_df == 0)).values.sum()
+    # false pos
+    false_pos = ((pred_df == 1) & (gt_df == 0)).values.sum()
+    # false neg
+    false_neg = ((pred_df == 0) & (gt_df == 1)).values.sum()
+
+    # accuracy
+    with np.errstate(invalid="ignore"):
+        acc = (true_pos + true_neg) / total
+        precision = true_pos / (true_pos + false_pos)
+        recall = true_pos / (true_pos + false_neg)
+        fpr = false_pos / (false_pos + true_neg)
+
+    # return the metrics as a df
+    metrics = {
+        "True Positive": true_pos,
+        "True Negative": true_neg,
+        "False Positive": false_pos,
+        "False Negative": false_neg,
+        "Accuracy": acc,
+        "Precision": precision,
+        "Recall": recall,
+        "FPR": fpr,
+    }
+    metrics = pd.DataFrame([metrics])
+
+    return metrics
+
+
+def create_scored_heatmap(pred_df, gt_df, output_file):
+    pred_df = pred_df.copy()
+    # only visualize the accessions that are shared btwn both files
+    shared_accessions = list(set(pred_df.index.values).intersection(set(gt_df.index.values)))
+    pred_df = pred_df[pred_df.index.isin(shared_accessions)].sort_index()
+    gt_df = gt_df[gt_df.index.isin(shared_accessions)].sort_index()
+
+    # label all positions as green for TP, yellow for FP, red for FN, white/blank for TN
+    # this won't work if the column labels are not the same name/type
+    # true pos
+    pred_df[(pred_df == 1) & (gt_df == 1)] = 5
+    # true neg
+    pred_df[(pred_df == 0) & (gt_df == 0)] = 4
+    # false pos
+    pred_df[(pred_df == 1) & (gt_df == 0)] = 3
+    # false neg
+    pred_df[(pred_df == 0) & (gt_df == 1)] = 2
+
+    # visualize
+    fig = px.imshow(
+        pred_df,
+        color_continuous_scale=["red", "yellow", "gray", "green"],
+        range_color=[2, 5],
+        aspect="auto",
+    )
+    fig.update_layout(
+        coloraxis_showscale=False, yaxis=dict(tickmode="linear"), title=output_file.stem
+    )
+    fig.write_image(output_file)
+    return
+
+
+def main():
+    # scores introgressions using ground truth derived from SV calling and get_distances
+    parser = argparse.ArgumentParser(description="Introgression postprocessing.")
+    parser.add_argument(
+        "--pre",
+        type=str,
+        help="path to file/folder of predicted introgression bed files",
+        required=True,
+    )
+    parser.add_argument(
+        "--gdt",
+        type=str,
+        help="path to file/folder of ground truth introgression text files",
+        required=True,
+    )
+    parser.add_argument(
+        "--how",
+        type=str,
+        help="whether to use bins or overlaps in scoring calculations",
+        required=True,
+    )
+    parser.add_argument("--out", type=str, help="path to folder to save all outputs", required=True)
+    parser.add_argument("--vis", action="store_true", help="save pngs of visualized results")
+    parser.add_argument(
+        "--thr",
+        type=float,
+        default=0.5,
+        help="ground truth Jaccard similarity lower threshold to be considered an introgression",
+    )
+    parser.add_argument(
+        "-g",
+        nargs="+",
+        help="for REF/merged introgression types, list all comp groups",
+    )
+    parser.add_argument("--idx", type=str, help="path to Panagram index folder")
+    parser.add_argument("--ref", type=str, help="name of reference in Panagram")
+    parser.add_argument(
+        "-a",
+        nargs="+",
+        help="action(s) to perform on introgression file: fgap, fcen, rmbn",
+    )
+    args = parser.parse_args()
+
+    # input checking
+    gt_intros = Path(args.gdt)
+    if not gt_intros.is_dir() and not gt_intros.is_file():
+        raise ValueError(f"Ground truth file/directory not found. Check --gdt path.")
+
+    actions = args.a
+    if actions is not None:
+        index_dir = Path(args.idx)
+        if not index_dir.is_dir():
+            raise ValueError("Index directory not found. Check --idx path.")
+        index = Index(index_dir)
+
+        for action in actions:
+            if action not in ["fgap", "fcen", "rmbn"]:
+                raise ValueError(f"Unrecognized action {action}. Check -a flag for valid actions.")
+            if action == "fcen":
+                ref_accession = args.ref
+                if ref_accession is None:
+                    raise ValueError("--ref must be provided for fcen.")
+
+    # figure out if user provided a file or folder
+    bed_files = Path(args.pre)
+    if bed_files.is_file():
+        bed_files = [bed_files]
+    elif bed_files.is_dir():
+        bed_files = list(bed_files.glob(f"*.bed"))
+    else:
+        raise ValueError("Bed file/folder not found. Check --bed path.")
+
+    # figure out names of chrs and intros to loop through
+    chrs = set()
+    intro_types = set()
+    for bed_file in bed_files:
+        bed_chr = bed_file.name.split("_")[1]
+        bed_intro_type = bed_file.stem.split("_")[2]
+        chrs.add(bed_chr)
+        intro_types.add(bed_intro_type)
+    chrs = list(chrs)
+    intro_types = list(intro_types)
+
+    intro_groups = args.g
+    if ("REF" in intro_types or "merged" in intro_types) and (intro_groups is None):
+        raise ValueError("-g is required to process REF/merged bed files.")
+
+    output_dir = Path(args.out)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pred_dir = output_dir / "pred"
+    pred_dir.mkdir(parents=True, exist_ok=True)
+    gt_dir = output_dir / "gt_postprocessed"
+    gt_dir.mkdir(parents=True, exist_ok=True)
+
+    threshold = args.thr
+    how_to_score = args.how
+    render_vis = args.vis
+    if render_vis:
+        vis_dir = output_dir / "heatmaps"
+        vis_dir.mkdir(parents=True, exist_ok=True)
+
+    all_metrics = {}
+    for chr in chrs:
+        for intro_type in intro_types:
+            # find the correct gt_intro_file if it is a dir
+            # read in corresponding GT introgressions file
+            if gt_intros.is_file():
+                gt_intro_file = gt_intros
+            else:
+                if intro_type in ["REF", "merged"]:
+                    gt_intro_files = []
+                    for intro_group in intro_groups:
+                        gt_intro_files += list(gt_intros.glob(f"{chr}_{intro_group}.txt"))
+                    if len(gt_intro_files) != len(intro_groups):
+                        raise ValueError(
+                            f"--gt directory specified does not contain all files needed for REF/merged scoring."
+                        )
+                    gt_df = merge_text_files(gt_intro_files)
+                else:
+                    gt_intro_file = list(gt_intros.glob(f"{chr}_{intro_type}.txt"))
+                    if not gt_intro_file:
+                        raise ValueError(
+                            f"--gt directory specified does not contain {chr}_{intro_type}.txt"
+                        )
+                    gt_df = read_text_file(gt_intro_file[0])
+
+            # get bin size from gt_df
+            bin_size = int(gt_df.columns[1])
+            # make sure num bins matches gt
+            chr_length = int(gt_df.columns[-1]) + bin_size
+
+            # find and merge predicted bed files
+            accession_bed_files = [
+                path for path in bed_files if path.name.endswith(f"_{chr}_{intro_type}.bed")
+            ]
+            pred_df = merge_bed_files(accession_bed_files, bin_size, chr_length)
+
+            # save off merged file as text
+            pred_output_file = pred_dir / f"{chr}_{intro_type}.txt"
+            pred_df.to_csv(pred_output_file, sep="\t")
+
+            # perform actions on gt
+            pred_df, gt_df = threshold_introgressions(pred_df, gt_df, threshold)
+
+            if actions:
+                for action in actions:
+                    if action in ["fgap", "rmbn"]:
+                        # fgap - merge regions >=1 bin size apart
+                        # rmbn - perform singleton bin removal
+                        # similar actions - just differ in function applied to the row of bins
+                        apply_func = post.fill_gaps
+                        if action == "rmbn":
+                            apply_func = post.remove_single_bins
+                        # save col names - they can be broken after an apply
+                        col_names = gt_df.columns
+                        gt_df = gt_df.apply(apply_func, axis=1, result_type="expand")
+                        gt_df.columns = col_names
+
+                    elif action == "fcen":
+                        # fcen - fill in centromeres between introgression regions - requires ref
+                        # will have to do this per row
+                        ref_genome = index.genomes[ref_accession]
+                        fasta_file = index_dir / ref_genome.fasta
+                        fasta_df = post.read_fasta(fasta_file)
+                        gt_df = gt_df.apply(
+                            merge_centromere_regions_helper,
+                            bin_size=bin_size,
+                            fasta_df=fasta_df,
+                            chr_length=chr_length,
+                            axis=1,
+                        )
+
+                # save
+                gt_output_file = gt_dir / f"{chr}_{intro_type}.txt"
+                gt_df.to_csv(gt_output_file, sep="\t")
+
+            # score introgressions
+            metrics = score_introgressions(pred_df, gt_df, how_to_score)
+            metrics.index = [chr]
+
+            # visualize introgressions
+            if render_vis:
+                vis_output_file = vis_dir / f"{chr}_{intro_type}.png"
+                create_scored_heatmap(pred_df, gt_df, vis_output_file)
+
+            # aggregate metrics
+            if intro_type in all_metrics:
+                all_metrics[intro_type] = pd.concat([all_metrics[intro_type], metrics.iloc[[0]]])
+            else:
+                all_metrics[intro_type] = metrics
+
+    # save aggregated metrics
+    for intro_type, all_metrics_df in all_metrics.items():
+        all_metrics_file = output_dir / f"metrics_{intro_type}.tsv"
+        all_metrics_df.to_csv(all_metrics_file, sep="\t")
+
+    return
+
+
+if __name__ == "__main__":
+    main()
