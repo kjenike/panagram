@@ -10,14 +10,11 @@ def visualize(pair, output_file, inverse=False):
     if inverse:
         fig = px.imshow(
             pair,
-            color_continuous_scale=px.colors.sequential.Greens[
-                ::-1
-            ],  # px.colors.sequential.Plasma[::-1],
+            color_continuous_scale=px.colors.sequential.Greens[::-1],
             x=pair.columns,
             y=pair.index,
             aspect="auto",
             zmin=0,
-            # zmax=1,
         )
     else:
         fig = px.imshow(
@@ -35,7 +32,7 @@ def visualize(pair, output_file, inverse=False):
     return
 
 
-def threshold_introgressions(pair, anchor, comp_group, threshold):
+def threshold_introgressions(pair, anchor, comp_group, threshold, row_mean_threshold=0.75):
     # get the group the anchor belongs to
     anchor_group = pair.loc[anchor, "group"]
 
@@ -48,28 +45,30 @@ def threshold_introgressions(pair, anchor, comp_group, threshold):
     pair_comp_group = pair[pair["group"] == comp_group].drop(columns=["group"])
 
     # throw out all acessions with large global diffs w/ the anchor
-    # TODO: maybe make this a parameter
     if len(pair_anchor_group) > 1:
         for acession, row in pair_anchor_group.iterrows():
-            # TODO: make this at least 0.85 when omit fixed is not active; its too low otherwise
-            if row.mean() < 0.75:
+            if row.mean() < row_mean_threshold:
                 pair_anchor_group = pair_anchor_group[pair_anchor_group.index != acession]
 
         if pair_anchor_group.empty:
-            print(f"Warning: accession {anchor} is not similar to any of its group members...")
             # run anyway only if comparing to REF
             if comp_group != "REF":
-                print("Skipping...")
-                return None
+                print(
+                    f"Warning: accession {anchor} is not similar to any of its group members. Cannot find any introgressions without REF."
+                )
+                group_sims = pair_anchor_group.mean(axis=0).to_frame(name="anchor_sim")
+                group_sims["comp_sim"] = pd.NA
+                group_sims["introgression"] = 0
+                return group_sims
 
     # get mean kmer similarities per window for each group
     group_sims = pair_anchor_group.mean(axis=0).to_frame(name="anchor_sim")
     group_sims["comp_sim"] = pair_comp_group.mean(axis=0)
 
     # 4 ways to define an introgression:
-    # 1. If anchor is in comp_group: introgression is where anchor has low similarity to its group
-    # 2. If "REF" is the comp_group: introgression is where anchor has low similarity to REF group
-    # 3. If anchor isn't in comp_group: introgression is where anchor is more similar to comp_group
+    # 1. If anchor is in comp_group: introgression is where anchor has similarity lower than threshold to its group
+    # 2. If "REF" is the comp_group: introgression is where anchor has similarity lower than threshold to REF group
+    # 3. If anchor isn't in comp_group: introgression is where anchor is >10% more similar to comp_group and >= threshold
     # 4. Average of all introgression calls for comp_group when comp_group is a list
     # than its own group
     if anchor_group == comp_group:
@@ -77,9 +76,11 @@ def threshold_introgressions(pair, anchor, comp_group, threshold):
     elif comp_group == "REF":
         # comp_group should only consist of 1 REF
         group_sims["introgression"] = (group_sims.comp_sim < threshold).astype(int)
-    # TODO: could refine so that must be at least 10% more similar to comp_sim
     else:
-        group_sims["introgression"] = (group_sims.comp_sim >= group_sims.anchor_sim).astype(int)
+        group_sims["introgression"] = (
+            (group_sims.comp_sim > group_sims.anchor_sim * 1.10)
+            & (group_sims.comp_sim >= threshold)
+        ).astype(int)
     return group_sims
 
 
@@ -99,7 +100,7 @@ def bins_to_bed(bins_df, bin_size, chr_name, comp_group):
     bins_in_groups = introgressions.groupby("groups").count()["end"]
     introgressions = introgressions.drop_duplicates(subset="groups", keep="first")
     introgressions = introgressions.drop(columns="end").merge(bins_in_groups, on="groups")
-    introgressions["end"] = introgressions.start + (introgressions.end * bin_size)
+    introgressions["end"] = introgressions.start + (introgressions.end * bin_size) - 1
 
     # put into bed file format (chr, start, end, name)
     introgressions["chr"] = chr_name
@@ -157,10 +158,15 @@ def run_introgression_finder(
     # Step 2 - identify potential introgressions by thresholding kmer similarities
     merged_sims = None
     for comp_group in comp_groups:
-        group_sims = threshold_introgressions(pair, anchor, comp_group, threshold)
-        if group_sims is None:
-            continue
-        elif merged_sims is None:
+        # make this at least 0.85 when omit fixed is not active; its too low otherwise
+        row_mean_threshold = 0.75
+        if not omit_fixed_kmers:
+            row_mean_threshold = 0.85
+        group_sims = threshold_introgressions(
+            pair, anchor, comp_group, threshold, row_mean_threshold
+        )
+
+        if merged_sims is None:
             merged_sims = group_sims
         else:
             merged_sims += group_sims
@@ -170,7 +176,9 @@ def run_introgression_finder(
         # invert values for figure so that introgressions = 0
         pair.loc["Intro. Score"] = (~(group_sims["introgression"].astype(bool))).astype(int)
         if render_vis:
-            output_vis = output_dir / f"{anchor}_{chr_name}_{comp_group}_heatmap.png"
+            output_vis = output_dir / "heatmaps"
+            output_vis.mkdir(parents=True, exist_ok=True)
+            output_vis = output_vis / f"{anchor}_{chr_name}_{comp_group}_heatmap.png"
             visualize(pair.drop(columns=["group"]), output_vis, inverse=True)
 
         # Step 4 - save introgressions to bed file
@@ -201,7 +209,10 @@ def main():
     parser.add_argument("--stp", type=int, default=100, help="bitmap kmer step size")
     parser.add_argument("--bin", type=int, default=1000000, help="size of bitmap bin in bases")
     parser.add_argument(
-        "--thr", type=float, default=0.75, help="introgression kmer similarity lower threshold"
+        "--thr",
+        type=float,
+        default=0.75,
+        help="introgressions marked as regions with kmer similarity lower than this threshold",
     )
     parser.add_argument("--rmf", action="store_true", help="remove fixed kmers from bitmap")
     parser.add_argument("--vis", action="store_true", help="save pngs of visualized results")
@@ -257,6 +268,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for anchor in anchors:
+        print("Now running introgression analysis for", anchor)
         loop_comp_groups = comp_groups
         anchor_group = groups.loc[anchor, "group"]
 
@@ -274,7 +286,6 @@ def main():
             chromosomes = genome.sizes.keys()
 
         for chr_name in chromosomes:
-            print("Now running introgression analysis for", anchor, chr_name)
             run_introgression_finder(
                 anchor,
                 genome,
@@ -288,6 +299,8 @@ def main():
                 render_vis,
                 output_dir,
             )
+
+    print("Done.")
     return
 
 
