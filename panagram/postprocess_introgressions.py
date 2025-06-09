@@ -245,24 +245,35 @@ def bed_to_bins(bed_df, bin_size, chr_length):
     intro_df.columns = ["introgression"]
     return intro_df
 
-
-def fill_gaps(row, rounds=1):
+# TODO: take gap size argument; count 0s between gaps; if the gap is <= gap_size, fill it
+def fill_gaps(row, gap_size=1):
     # Fill small gaps of 0s surrounded by 1s
-    row = row.values
-    for j in range(rounds):
-        for i in range(1, len(row) - 1):
-            if row[i] == 0 and (row[i - 1] >= 1 and row[i + 1] >= 1):
-                row[i] = 1
+    row = row.values.copy()
+    for i in range(1, len(row) - 1):
+        if row[i] == 0 and (row[i - 1] >= 1 and row[i + 1] >= 1):
+            row[i] = 1
     return row
 
 
-def remove_single_bins(row):
-    # omit introgressions that are only a single bin wide
+def remove_small_regions(row, min_size=1):
+    # omit introgressions that are smaller than the minimum size
     # recommend running fill gaps prior to this func after liftover, which can fragment intros
-    row = row.values
-    for i in range(1, len(row) - 1):
-        if row[i] >= 1 and (row[i - 1] == 0 and row[i + 1] == 0):
-            row[i] = 0
+    row = row.values.copy()
+    i = 0
+    while  i < len(row):
+        if row[i] == 1:
+            region_start = i
+            # figure out how many 1s in a row there are
+            while i < len(row) and row[i] == 1:
+                i += 1
+            region_end = i
+            region_length = region_end - region_start
+
+            if region_length < min_size:
+                row[region_start:region_end] = 0
+        else:
+            i += 1
+
     return row
 
 
@@ -299,6 +310,12 @@ def postprocess_introgressions():
         help="size of bitmap bin used during calling",
         default=1000000,
     )
+    parser.add_argument(
+        "--min",
+        type=int,
+        help="minimum number of bins an introgression must be; all smaller are clipped by rmbn",
+        default=4,
+    )
     args = parser.parse_args()
 
     actions = args.a
@@ -331,13 +348,14 @@ def postprocess_introgressions():
         bed_genome = index.genomes[bed_accession]
         bed_output = output_dir / bed_file.name
 
-        # handle empty bed files by warning and outputting empty processed bed file and skipping
-        if bed_file_is_empty(bed_file):
-            print(f"Warning: {bed_file.name} is empty. Outputting empty postprocessed bed file.")
-            bed_output.touch()
-            continue
-
         for action in actions:
+            # handle empty bed files by warning and outputting empty processed bed file and skipping
+            # note that liftover and rmbn can produce empty bed files, so we have to check after each action
+            if bed_file_is_empty(bed_file):
+                # print(f"Warning: {bed_file.name} is empty. Outputting empty postprocessed bed file.")
+                bed_output.touch()
+                break
+
             if action == "lift":
                 # lift - perform liftover - requires ref; paf optional
                 if args.ref is None:
@@ -371,19 +389,27 @@ def postprocess_introgressions():
                 # bed genome is now the reference since we are in reference space
                 bed_genome = reference_genome
 
-            elif action in ["fgap", "rmbn"]:
+            elif action == "fgap":
                 # fgap - merge regions >=1 bin size apart - requires bin size
-                # rmbn - perform singleton bin removal - requires bin size
-                # similar actions - just differ in function applied to the row of bins
-                apply_func = fill_gaps
-                if action == "rmbn":
-                    apply_func = remove_single_bins
-
                 bin_size = args.bin
                 chr_length = bed_genome.sizes[bed_chr]
                 bed_df = read_bed_file(bed_file)
                 bins_df = bed_to_bins(bed_df, bin_size, chr_length)
-                bins_df["introgression"] = bins_df.apply(apply_func, axis=0)
+                bins_df["introgression"] = bins_df.apply(fill_gaps, axis=0)
+
+                # save
+                bed_df = bins_to_bed(bins_df, bin_size, bed_chr, bed_intro_type)
+                bed_df.to_csv(bed_output, header=False, index=False, sep="\t")
+                bed_file = bed_output
+
+            elif action == "rmbn":
+                # rmbn - perform singleton bin removal - requires bin size, min. introgression size
+                bin_size = args.bin
+                chr_length = bed_genome.sizes[bed_chr]
+                min_size = args.min
+                bed_df = read_bed_file(bed_file)
+                bins_df = bed_to_bins(bed_df, bin_size, chr_length)
+                bins_df["introgression"] = bins_df.apply(remove_small_regions, min_size=min_size, axis=0)
 
                 # save
                 bed_df = bins_to_bed(bins_df, bin_size, bed_chr, bed_intro_type)
