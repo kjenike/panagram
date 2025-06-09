@@ -1,8 +1,17 @@
+"""
+Extra functions for visualization of introgressions.
+"""
+
+import argparse
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import plotly.express as px
-from postprocess_introgressions import threshold_introgressions
+from PIL import Image
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.utils import ImageReader
+import io
 
 
 def self_dotplot(seq):
@@ -26,17 +35,10 @@ def self_dotplot(seq):
 
 
 def create_heatmap(distances_file):
+    # visualize ground truth bins from get_distances.py by themselves
     distances_file = Path(distances_file)
     output_file = distances_file.parent / (distances_file.stem + ".png")
     distances = pd.read_csv(distances_file, sep="\t", index_col=0).fillna(0)
-    new_index = list(distances.index)
-
-    # for paper
-    # new_index = [i.split(".")[0] for i in new_index]
-    # get the name of the acession without number added by Jasmine
-    new_index = [i.split("_")[1] for i in new_index]
-
-    distances.index = new_index
     distances = distances.sort_index()
 
     fig = px.imshow(distances, color_continuous_scale="Greens", aspect="auto", zmin=0, zmax=1)
@@ -45,107 +47,160 @@ def create_heatmap(distances_file):
     return
 
 
-def create_scored_heatmap(called_intro_file, gt_intro_file, threshold):
-
-    # read both distances files
-    output_file = called_intro_file.parent / (called_intro_file.stem + ".scored.png")
-
-    # threshold and rename the accessions to match
-    called_intro_df, gt_intro_df = threshold_introgressions(
-        called_intro_file, gt_intro_file, threshold
-    )
-
-    # NOTE: accession names must match
-    # TODO: throw error when they do not match
-    # hack to remove numbers from paper_subset gt accesssions
-    gt_intro_df.index = [x.split("_")[1] for x in gt_intro_df.index]
-
-    # only visualize the accessions that are shared btwn both files
-    shared_accessions = list(
-        set(called_intro_df.index.values).intersection(set(gt_intro_df.index.values))
-    )
-    called_intro_df = called_intro_df[called_intro_df.index.isin(shared_accessions)].sort_index()
-    gt_intro_df = gt_intro_df[gt_intro_df.index.isin(shared_accessions)].sort_index()
-
-    # label all positions as green for TP, yellow for FP, red for FN, white/blank for TN
-    # true pos
-    called_intro_df[(called_intro_df == 1) & (gt_intro_df == 1)] = 5
-
-    # true neg
-    called_intro_df[(called_intro_df == 0) & (gt_intro_df == 0)] = 4
-
-    # false pos
-    called_intro_df[(called_intro_df == 1) & (gt_intro_df == 0)] = 3
-
-    # false neg
-    called_intro_df[(called_intro_df == 0) & (gt_intro_df == 1)] = 2
-
-    # visualize
-    fig = px.imshow(
-        called_intro_df,
-        color_continuous_scale=["red", "yellow", "gray", "green"],
-        range_color=[2, 5],
-        aspect="auto",
-    )
-    fig.update_layout(
-        coloraxis_showscale=False, yaxis=dict(tickmode="linear"), title=output_file.stem
-    )
-    fig.write_image(output_file)
-    return
-
-
-def create_heatmap_runner():
-    # NOTE: change folder here
-    input_folder = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper_subset"
-    )
-
-    distances_files = list(input_folder.glob("chr*.txt"))
+def create_heatmap_runner(input_dir):
+    distances_files = list(input_dir.glob("chr*.txt"))
     for file in distances_files:
         print(f"Visualizing {file.name}")
         create_heatmap(file)
     return
 
 
-def create_scored_heatmap_runner():
-    # NOTE: change folders here
-    called_intros_folder = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgression_analysis_v5/postprocessed"
+def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
+    scored_dir_name = f"scored_{how_to_score}"
+    output_file = f"{input_dir}/fgap_rmbn_{how_to_score}_pr_{intro_type}.png"
+
+    # find the file we need
+    results = []
+    for threshold in thresholds:
+        all_metrics_file = (
+            f"{input_dir}/{input_dir.name}_{threshold}/{scored_dir_name}/metrics_{intro_type}.tsv"
+        )
+
+        # create df of precisions and recalls across thresholds
+        metrics = pd.read_csv(all_metrics_file, sep="\t", index_col=0)
+        precision = metrics["Precision"].mean()
+        recall = metrics["Recall"].mean()
+        results.append({"threshold": threshold, "precision": precision, "recall": recall})
+
+    # plot results
+    results_df = pd.DataFrame(results).fillna(0)
+    fig = px.line(
+        results_df,
+        x="recall",
+        y="precision",
+        markers=True,
+        text="threshold",
+        title="Precision-Recall Curve",
     )
-    gt_intros_folder = Path(
-        "/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper_subset"
+    fig.update_traces(textposition="top center")
+    fig.update_layout(xaxis_title="Recall", yaxis_title="Precision")
+    fig.write_image(output_file)
+    return
+
+
+def create_scored_heatmap_collage(input_dir, intro_type, how_to_score, thresholds):
+    # create a collage of heatmaps; each page should have a chromosome through each threshold
+    scored_dir_name = f"scored_{how_to_score}"
+    output_file = f"{input_dir}/fgap_rmbn_{how_to_score}_{intro_type}_scored_heatmaps.pdf"
+
+    # image_batches: list of lists, each with 9 image paths
+    image_batches = []
+    for threshold in thresholds:
+        threshold_path = input_dir / f"{input_dir.name}_{threshold}" / scored_dir_name / "heatmaps"
+        threshold_heatmaps = list(threshold_path.glob(f"*_{intro_type}.png"))
+        threshold_heatmaps.sort()
+        image_batches.append(threshold_heatmaps)
+
+    # get heatmaps organized by chr instead of by threshold
+    # assumes every chr's heatmap exists
+    image_batches = list(zip(*image_batches))
+    final_batches = []
+    for lst in image_batches:
+        final_batches.append(lst[:9])
+        final_batches.append(lst[9:])
+
+    # Setup
+    pagesize = landscape(A4)
+    page_w, page_h = pagesize
+    grid_size = (3, 3)
+
+    # Set high-res tiling canvas (e.g., 1000x1000 per cell)
+    hires_cell_w, hires_cell_h = 500, 500
+    tiled_w = hires_cell_w * grid_size[0]
+    tiled_h = hires_cell_h * grid_size[1]
+
+    c = canvas.Canvas(output_file, pagesize=pagesize)
+
+    for batch in final_batches:
+        tiled = Image.new('RGB', (tiled_w, tiled_h), color='white')
+
+        for idx, path in enumerate(batch):
+            img = Image.open(path).resize((hires_cell_w, hires_cell_h))
+            x = (idx % grid_size[0]) * hires_cell_w
+            y = (idx // grid_size[0]) * hires_cell_h
+            tiled.paste(img, (x, y))
+
+        buf = io.BytesIO()
+        tiled.save(buf, format='PNG')
+        buf.seek(0)
+
+        # Draw scaled-down image to PDF (full page)
+        c.drawImage(ImageReader(buf), 0, 0, width=page_w, height=page_h)
+        c.showPage()
+
+    c.save()
+    return
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Introgression visualization.")
+    parser.add_argument(
+        "-v",
+        nargs="+",
+        help="visual type(s) to create: htmp, shtmp, prc",
+        required=True,
     )
-    introgression_type = "REF"
-    threshold = 0.5
+    parser.add_argument(
+        "--dir",
+        type=str,
+        help="path to input folder for visualization",
+        required=True,
+    )
+    parser.add_argument(
+        "--how",
+        type=str,
+        help="whether bins or overlaps were used during scoring",
+    )
+    args = parser.parse_args()
 
-    # get gt and called intro files
-    called_intros_files = list(called_intros_folder.glob(f"chr*{introgression_type}.txt"))
-    gt_intros_files_sp = list(gt_intros_folder.glob(f"chr*SP.txt"))
-    gt_intros_files_slc = list(gt_intros_folder.glob(f"chr*SLC.txt"))
+    input_dir = Path(args.dir)
+    if not input_dir.is_dir():
+        raise ValueError("Index directory not found. Check --idx path.")
 
-    if introgression_type == "SP":
-        gt_intros_files = gt_intros_files_sp
-    elif introgression_type == "SLC":
-        gt_intros_files = gt_intros_files_slc
-    elif introgression_type == "merged" or introgression_type == "REF":
-        # merge files together
-        gt_intros_files_sp.sort()
-        gt_intros_files_slc.sort()
-        gt_intros_files = list(zip(gt_intros_files_slc, gt_intros_files_sp))
+    vis_functions = args.v
+    for func in vis_functions:
+        if func not in ["htmp", "shtmp", "prc"]:
+            raise ValueError("Unknown visualization function specified. Check args.v.")
 
-    # sort the files and make sure there are equal numbers of files
-    called_intros_files.sort()
-    gt_intros_files.sort()
+    if ("shtmp" in vis_functions) or ("prc" in vis_functions):
+        how_to_score = args.how
+        if how_to_score not in ["bins", "overlaps"]:
+            raise ValueError("--how must be either 'bins' or 'overlaps'.")
 
-    if len(called_intros_files) != len(gt_intros_files):
-        raise ValueError("Unequal numbers of GT and called chromosome files...")
+        thresholds = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
 
-    # pass tuples of files to create_scored_heatmap for each chromosome
-    for called_intros_file, gt_intros_file in zip(called_intros_files, gt_intros_files):
-        create_scored_heatmap(called_intros_file, gt_intros_file, threshold=0.5)
+        # take the first threshold path and check for introgression types
+        scored_dir_name = f"scored_{how_to_score}"
+        scored_dir_path = input_dir / f"{input_dir.name}_{thresholds[0]}" / scored_dir_name
+        score_tsvs = scored_dir_path.glob("*.tsv")
+
+        intro_types = set()
+        for score_tsv in score_tsvs:
+            intro_type = score_tsv.stem.split("_")[1]
+            intro_types.add(intro_type)
+
+    for func in vis_functions:
+        if func == "prc":
+            for intro_type in intro_types:
+                create_pr_curve(input_dir, intro_type, how_to_score, thresholds)
+        elif func == "shtmp":
+            for intro_type in intro_types:
+                create_scored_heatmap_collage(input_dir, intro_type, how_to_score, thresholds)
+        elif func == "htmp":
+                create_heatmap_runner(input_dir)
     return
 
 
 if __name__ == "__main__":
-    # create_heatmap_runner()
-    create_scored_heatmap_runner()
+    main()
+
