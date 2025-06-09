@@ -78,7 +78,7 @@ def threshold_introgressions(pair, anchor, comp_group, threshold, row_mean_thres
         group_sims["introgression"] = (group_sims.comp_sim < threshold).astype(int)
     else:
         group_sims["introgression"] = (
-            (group_sims.comp_sim > group_sims.anchor_sim * 1.10)
+            (group_sims.comp_sim >= group_sims.anchor_sim * 1.05)
             & (group_sims.comp_sim >= threshold)
         ).astype(int)
     return group_sims
