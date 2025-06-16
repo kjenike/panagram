@@ -50,6 +50,21 @@ def read_text_file(introgression_file):
     return intro_df
 
 
+def rescale_introgressions_helper(row, original_bin_size, new_bin_size, chr_length):
+    # quick function to rescale bins to new bin size
+    bins_df = row.rename("introgression").to_frame()
+    bins_df.index = bins_df.index.astype(int)
+    bed_df = bins_to_bed(bins_df, original_bin_size, "nan", "nan")
+    col_names = ["Chromosome", "Start", "End", "Notes"]
+    bed_df.columns = col_names
+    bed_df["Sequence"] = None
+    if bed_df.empty:
+        new_row = post.get_intro_df_template(new_bin_size, chr_length).loc[0]
+    else:
+        new_row = post.bed_to_bins(bed_df, new_bin_size, chr_length)["introgression"]
+    return new_row
+
+
 def merge_centromere_regions_helper(row, bin_size, chr_length, fasta_df):
     # convert row to bed file - save temporarily
     bins_df = row.rename("introgression").to_frame()
@@ -293,6 +308,9 @@ def create_scored_heatmap(pred_df, gt_df, output_file):
         coloraxis_showscale=False, yaxis=dict(tickmode="linear"), title=output_file.stem
     )
     fig.write_image(output_file)
+
+    # save out pred df to make more visuals with if needed
+    pred_df.to_csv(output_file.with_suffix(".csv"), sep="\t")
     return
 
 
@@ -317,13 +335,27 @@ def main():
         help="whether to use bins or overlaps in scoring calculations",
         required=True,
     )
+    parser.add_argument("--idx", type=str, help="path to Panagram index folder", required=True)
+    parser.add_argument("--ref", type=str, help="name of reference in Panagram", required=True)
     parser.add_argument("--out", type=str, help="path to folder to save all outputs", required=True)
     parser.add_argument("--vis", action="store_true", help="save pngs of visualized results")
+    parser.add_argument(
+        "--bin",
+        type=int,
+        help="size of bitmap bin used during calling - gt is rescaled to match this",
+        default=1000000,
+    )
     parser.add_argument(
         "--min",
         type=int,
         help="minimum number of bins an introgression must be; all smaller are clipped by rmbn",
         default=4,
+    )
+    parser.add_argument(
+        "--gap",
+        type=int,
+        help="maximum number of bins to fill between introgressions for fgap",
+        default=1,
     )
     parser.add_argument(
         "--thr",
@@ -342,8 +374,6 @@ def main():
         nargs="+",
         help="for REF/merged introgression types, list all comp groups",
     )
-    parser.add_argument("--idx", type=str, help="path to Panagram index folder")
-    parser.add_argument("--ref", type=str, help="name of reference in Panagram")
     parser.add_argument(
         "-a",
         nargs="+",
@@ -356,20 +386,20 @@ def main():
     if not gt_intros.is_dir() and not gt_intros.is_file():
         raise ValueError(f"Ground truth file/directory not found. Check --gdt path.")
 
+    ref_accession = args.ref
+    bin_size = args.bin
+
+    index_dir = Path(args.idx)
+    if not index_dir.is_dir():
+        raise ValueError("Index directory not found. Check --idx path.")
+    index = Index(index_dir)
+    ref_genome = index.genomes[ref_accession]
+
     actions = args.a
     if actions is not None:
-        index_dir = Path(args.idx)
-        if not index_dir.is_dir():
-            raise ValueError("Index directory not found. Check --idx path.")
-        index = Index(index_dir)
-
         for action in actions:
             if action not in ["fgap", "fcen", "rmbn"]:
                 raise ValueError(f"Unrecognized action {action}. Check -a flag for valid actions.")
-            if action == "fcen":
-                ref_accession = args.ref
-                if ref_accession is None:
-                    raise ValueError("--ref must be provided for fcen.")
 
     # figure out if user provided a file or folder
     bed_files = Path(args.pre)
@@ -406,6 +436,7 @@ def main():
 
     threshold = args.thr
     min_size = args.min
+    gap_size = args.gap
     how_to_score = args.how
     if how_to_score not in ["bins", "overlaps"]:
         raise ValueError("--how must be either 'bins' or 'overlaps'.")
@@ -442,12 +473,10 @@ def main():
                         )
                     gt_df = read_text_file(gt_intro_file[0])
 
-            # get bin size from gt_df
-            bin_size = int(gt_df.columns[1])
-            # make sure num bins matches gt
-            chr_length = int(gt_df.columns[-1]) + bin_size
+            # get chr length from ref
+            chr_length = ref_genome.sizes[chr]
 
-            # find and merge predicted bed files
+            # find and merge predicted bed files; this rescales automatically if needed
             accession_bed_files = [
                 path for path in bed_files if path.name.endswith(f"_{chr}_{intro_type}.bed")
             ]
@@ -460,27 +489,46 @@ def main():
             # perform actions on gt
             pred_df, gt_df = threshold_introgressions(pred_df, gt_df, threshold)
 
+            # rescale gt to match pred if needed
+            original_bin_size = int(gt_df.columns[1])
+            if bin_size != original_bin_size:
+                gt_df = gt_df.apply(
+                    rescale_introgressions_helper,
+                    original_bin_size=original_bin_size,
+                    new_bin_size=bin_size,
+                    chr_length=chr_length,
+                    axis=1,
+                )
+
             if actions:
                 for action in actions:
                     if action in "fgap":
                         # fgap - merge regions >=1 bin size apart
                         # save col names - they can be broken after an apply
                         col_names = gt_df.columns
-                        gt_df = gt_df.apply(post.fill_gaps, axis=1, result_type="expand")
+                        gt_df = gt_df.apply(
+                            post.fill_gaps,
+                            gap_size=gap_size,
+                            axis=1,
+                            result_type="expand",
+                        )
                         gt_df.columns = col_names
 
                     elif action in "rmbn":
                         # rmbn - perform singleton bin removal
                         # save col names - they can be broken after an apply
                         col_names = gt_df.columns
-                        gt_df = gt_df.apply(post.remove_small_regions, min_size=min_size, axis=1, result_type="expand")
+                        gt_df = gt_df.apply(
+                            post.remove_small_regions,
+                            min_size=min_size,
+                            axis=1,
+                            result_type="expand",
+                        )
                         gt_df.columns = col_names
-
 
                     elif action == "fcen":
                         # fcen - fill in centromeres between introgression regions - requires ref
                         # will have to do this per row
-                        ref_genome = index.genomes[ref_accession]
                         fasta_file = index_dir / ref_genome.fasta
                         fasta_df = post.read_fasta(fasta_file)
                         gt_df = gt_df.apply(
