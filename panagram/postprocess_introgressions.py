@@ -245,22 +245,41 @@ def bed_to_bins(bed_df, bin_size, chr_length):
     intro_df.columns = ["introgression"]
     return intro_df
 
-# TODO: take gap size argument; count 0s between gaps; if the gap is <= gap_size, fill it
-def fill_gaps(row, gap_size=1):
-    # Fill small gaps of 0s surrounded by 1s
+
+def fill_gaps(row, gap_size):
+    # take gap size argument; count 0s between intros; if the gap is <= gap_size, fill it
+    # recommend running fill gaps prior to remove_small_regions after liftover, which can fragment intros
     row = row.values.copy()
-    for i in range(1, len(row) - 1):
-        if row[i] == 0 and (row[i - 1] >= 1 and row[i + 1] >= 1):
-            row[i] = 1
+    i = 0
+    while i < len(row):
+        # find an introgression
+        if row[i] == 1:
+            # run past the introgression into the 0 space
+            while i < len(row) and row[i] == 1:
+                i += 1
+            # define start of 0 space between 2 intros
+            region_start = i
+            # measure the length of the 0 spaces
+            while i < len(row) and row[i] == 0:
+                i += 1
+            # 0 space ends when we hit another 1 (start of a new intro)
+            region_end = i
+
+            # fill the gap if it is small enough
+            region_length = region_end - region_start
+            if region_length <= gap_size:
+                row[region_start:region_end] = 1
+        else:
+            i += 1
     return row
 
 
-def remove_small_regions(row, min_size=1):
+def remove_small_regions(row, min_size):
     # omit introgressions that are smaller than the minimum size
     # recommend running fill gaps prior to this func after liftover, which can fragment intros
     row = row.values.copy()
     i = 0
-    while  i < len(row):
+    while i < len(row):
         if row[i] == 1:
             region_start = i
             # figure out how many 1s in a row there are
@@ -315,6 +334,12 @@ def postprocess_introgressions():
         type=int,
         help="minimum number of bins an introgression must be; all smaller are clipped by rmbn",
         default=4,
+    )
+    parser.add_argument(
+        "--gap",
+        type=int,
+        help="maximum number of bins to fill between introgressions for fgap",
+        default=1,
     )
     args = parser.parse_args()
 
@@ -393,9 +418,10 @@ def postprocess_introgressions():
                 # fgap - merge regions >=1 bin size apart - requires bin size
                 bin_size = args.bin
                 chr_length = bed_genome.sizes[bed_chr]
+                gap_size = args.gap
                 bed_df = read_bed_file(bed_file)
                 bins_df = bed_to_bins(bed_df, bin_size, chr_length)
-                bins_df["introgression"] = bins_df.apply(fill_gaps, axis=0)
+                bins_df["introgression"] = bins_df.apply(fill_gaps, gap_size=gap_size, axis=0)
 
                 # save
                 bed_df = bins_to_bed(bins_df, bin_size, bed_chr, bed_intro_type)
@@ -409,7 +435,9 @@ def postprocess_introgressions():
                 min_size = args.min
                 bed_df = read_bed_file(bed_file)
                 bins_df = bed_to_bins(bed_df, bin_size, chr_length)
-                bins_df["introgression"] = bins_df.apply(remove_small_regions, min_size=min_size, axis=0)
+                bins_df["introgression"] = bins_df.apply(
+                    remove_small_regions, min_size=min_size, axis=0
+                )
 
                 # save
                 bed_df = bins_to_bed(bins_df, bin_size, bed_chr, bed_intro_type)
