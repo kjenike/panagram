@@ -55,10 +55,10 @@ def visualize(pair, output_file, inverse=False):
     return
 
 
-index_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4_101"
-anchor = "SL4"  # "SL5"
+index_dir = "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/aethiopicum"
+anchor = "Saet3"  # "SL5"
 # chr_name = "BGV006775_MAS2.0ch11"
-output_dir = Path(index_dir) / "introgression_analysis_v1"
+output_dir = Path(index_dir) / "panagram_visuals"
 output_dir.mkdir(parents=True, exist_ok=True)
 index = Index(index_dir)
 genome = index.genomes[anchor]
