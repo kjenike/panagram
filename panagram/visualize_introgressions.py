@@ -57,7 +57,7 @@ def create_heatmap_runner(input_dir):
 
 def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
     scored_dir_name = f"scored_{how_to_score}"
-    output_file = f"{input_dir}/fgap_rmbn_{how_to_score}_pr_{intro_type}.png"
+    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prc.png"
 
     # find the file we need
     results = []
@@ -88,10 +88,106 @@ def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
     return
 
 
+def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
+    scored_dir_name = f"scored_{how_to_score}"
+    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prca.png"
+
+    # find the file we need
+    results = []
+    for threshold in thresholds:
+        threshold_path = input_dir / f"{input_dir.name}_{threshold}" / scored_dir_name / "heatmaps"
+        metrics_files = list(threshold_path.glob(f"*_{intro_type}.csv"))
+        counts_across_all_chrs = None
+
+        # add up TP, TN, FP, FN across all chrs for each accession
+        for metrics_file in metrics_files:
+            # Count labels per sample and rename columns for clarity
+            accession_metrics = pd.read_csv(metrics_file, sep="\t", index_col=0)
+            counts = accession_metrics.apply(lambda row: row.value_counts(), axis=1).fillna(0)
+            counts = counts.rename(columns={5: "TP", 4: "TN", 3: "FP", 2: "FN"})
+
+            # Ensure all expected columns are present
+            for col in ["TP", "TN", "FP", "FN"]:
+                if col not in counts:
+                    counts[col] = 0
+
+            if counts_across_all_chrs is None:
+                counts_across_all_chrs = counts
+            else:
+                counts_across_all_chrs += counts
+
+        # Compute precision and recall
+        counts_across_all_chrs["Precision"] = counts_across_all_chrs["TP"] / (
+            counts_across_all_chrs["TP"] + counts_across_all_chrs["FP"]
+        )
+        counts_across_all_chrs["Recall"] = counts_across_all_chrs["TP"] / (
+            counts_across_all_chrs["TP"] + counts_across_all_chrs["FN"]
+        )
+
+        # Handle division by zero (e.g., no TP or FP)
+        counts_across_all_chrs["Precision"] = counts_across_all_chrs["Precision"].fillna(0)
+        counts_across_all_chrs["Recall"] = counts_across_all_chrs["Recall"].fillna(0)
+        counts_across_all_chrs["Threshold"] = threshold
+        counts_across_all_chrs["Sample"] = counts_across_all_chrs.index
+        results.append(counts_across_all_chrs[["Sample", "Threshold", "Precision", "Recall"]])
+
+    results = pd.concat(results, ignore_index=True)
+
+    # Plot PR curves: one line per sample
+    fig = px.line(
+        results,
+        x="Recall",
+        y="Precision",
+        color="Sample",
+        markers=True,
+        # text="Threshold",
+        title="Precision-Recall Curves per Sample",
+    )
+    fig.update_traces(textposition="top center")
+    fig.update_layout(xaxis_title="Recall", yaxis_title="Precision")
+    fig.write_image(output_file)
+    return
+
+
+def create_pr_curve_chromosomes(input_dir, intro_type, how_to_score, thresholds):
+    scored_dir_name = f"scored_{how_to_score}"
+    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prcc.png"
+
+    # find the file we need
+    results = []
+    for threshold in thresholds:
+        all_metrics_file = (
+            f"{input_dir}/{input_dir.name}_{threshold}/{scored_dir_name}/metrics_{intro_type}.tsv"
+        )
+
+        # create df of precisions and recalls across thresholds
+        metrics = pd.read_csv(all_metrics_file, sep="\t", index_col=0).fillna(0)
+        metrics["Chromosome"] = metrics.index
+        metrics["Threshold"] = threshold
+        results.append(metrics[["Chromosome", "Threshold", "Precision", "Recall"]])
+
+    results = pd.concat(results, ignore_index=True)
+
+    # Plot PR curves: one line per chromosome
+    fig = px.line(
+        results,
+        x="Recall",
+        y="Precision",
+        color="Chromosome",
+        markers=True,
+        # text="Threshold",
+        title="Precision-Recall Curves per Chromosome",
+    )
+    fig.update_traces(textposition="top center")
+    fig.update_layout(xaxis_title="Recall", yaxis_title="Precision")
+    fig.write_image(output_file)
+    return
+
+
 def create_scored_heatmap_collage(input_dir, intro_type, how_to_score, thresholds):
     # create a collage of heatmaps; each page should have a chromosome through each threshold
     scored_dir_name = f"scored_{how_to_score}"
-    output_file = f"{input_dir}/fgap_rmbn_{how_to_score}_{intro_type}_scored_heatmaps.pdf"
+    output_file = f"{input_dir}/{how_to_score}_{intro_type}_scored_heatmaps.pdf"
 
     # image_batches: list of lists, each with 9 image paths
     image_batches = []
@@ -122,7 +218,7 @@ def create_scored_heatmap_collage(input_dir, intro_type, how_to_score, threshold
     c = canvas.Canvas(output_file, pagesize=pagesize)
 
     for batch in final_batches:
-        tiled = Image.new('RGB', (tiled_w, tiled_h), color='white')
+        tiled = Image.new("RGB", (tiled_w, tiled_h), color="white")
 
         for idx, path in enumerate(batch):
             img = Image.open(path).resize((hires_cell_w, hires_cell_h))
@@ -131,7 +227,7 @@ def create_scored_heatmap_collage(input_dir, intro_type, how_to_score, threshold
             tiled.paste(img, (x, y))
 
         buf = io.BytesIO()
-        tiled.save(buf, format='PNG')
+        tiled.save(buf, format="PNG")
         buf.seek(0)
 
         # Draw scaled-down image to PDF (full page)
@@ -143,17 +239,18 @@ def create_scored_heatmap_collage(input_dir, intro_type, how_to_score, threshold
 
 
 def main():
+    print("Visualizing results...")
     parser = argparse.ArgumentParser(description="Introgression visualization.")
     parser.add_argument(
         "-v",
         nargs="+",
-        help="visual type(s) to create: htmp, shtmp, prc",
+        help="visual type(s) to create: htmp, shtmp, prc, prcc, prca",
         required=True,
     )
     parser.add_argument(
         "--dir",
         type=str,
-        help="path to input folder for visualization",
+        help="path to introgression results folder for visualization",
         required=True,
     )
     parser.add_argument(
@@ -165,19 +262,38 @@ def main():
 
     input_dir = Path(args.dir)
     if not input_dir.is_dir():
-        raise ValueError("Index directory not found. Check --idx path.")
+        raise ValueError("Input directory not found. Check --dir path.")
 
     vis_functions = args.v
     for func in vis_functions:
-        if func not in ["htmp", "shtmp", "prc"]:
+        if func not in ["htmp", "shtmp", "prc", "prcc", "prca"]:
             raise ValueError("Unknown visualization function specified. Check args.v.")
 
-    if ("shtmp" in vis_functions) or ("prc" in vis_functions):
+    if any(func in vis_functions for func in ("shtmp", "prc", "prcc", "prca")):
         how_to_score = args.how
         if how_to_score not in ["bins", "overlaps"]:
             raise ValueError("--how must be either 'bins' or 'overlaps'.")
 
-        thresholds = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+        thresholds = [
+            0.1,
+            0.15,
+            0.2,
+            0.25,
+            0.3,
+            0.35,
+            0.4,
+            0.45,
+            0.5,
+            0.55,
+            0.6,
+            0.65,
+            0.7,
+            0.75,
+            0.8,
+            0.85,
+            0.9,
+            0.95,
+        ]
 
         # take the first threshold path and check for introgression types
         scored_dir_name = f"scored_{how_to_score}"
@@ -193,14 +309,20 @@ def main():
         if func == "prc":
             for intro_type in intro_types:
                 create_pr_curve(input_dir, intro_type, how_to_score, thresholds)
+        elif func == "prcc":
+            for intro_type in intro_types:
+                create_pr_curve_chromosomes(input_dir, intro_type, how_to_score, thresholds)
+        if func == "prca":
+            for intro_type in intro_types:
+                create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds)
         elif func == "shtmp":
             for intro_type in intro_types:
                 create_scored_heatmap_collage(input_dir, intro_type, how_to_score, thresholds)
         elif func == "htmp":
-                create_heatmap_runner(input_dir)
+            create_heatmap_runner(input_dir)
+    print("Done.")
     return
 
 
 if __name__ == "__main__":
     main()
-
