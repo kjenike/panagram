@@ -28,12 +28,23 @@ def bitmap_to_bins(bitmap, binlen, omit_fixed_kmers=False):
     return paircount_bins
 
 
-def get_genome_similarities(genome, bitmap_step, bin_size, omit_fixed_kmers, trim_std=2):
+def row_trimmed_mean(row, trim_std):
+    mean = row.mean()
+    std = row.std()
+    if trim_std == -1:
+        # If trim_std is -1, return the untrimmed mean
+        return mean
+    # Trim the row to values within trim_std standard deviations from the mean
+    trimmed = row[(row >= mean - trim_std * std) & (row <= mean + trim_std * std)]
+    return trimmed.mean()
+
+
+def get_genome_similarities(genome, bitmap_step, bin_size, omit_fixed_kmers, trim_std):
     # For a given anchor, get its mean similarity to all other accessions across the genome
     # Note that this function calculates a trimmed mean for each accession
     # Setting trim_std to -1 will return the untrimmed mean
-    # Note that setting the trim_std to anything above 3 has very little effect
-    # on the final results, as most values are within 3 standard deviations of the mean
+    # Note that setting the trim_std to anything above 2 has very little effect
+    # on the final results, as most values are within 2 standard deviations of the mean
     chromosomes = genome.sizes.keys()
 
     # Collect all bin values for each accession across all chromosomes
@@ -49,17 +60,7 @@ def get_genome_similarities(genome, bitmap_step, bin_size, omit_fixed_kmers, tri
     all_bins_df = pd.concat(all_bins, axis=1)
 
     # For each accession (row), calculate the trimmed mean across all bins
-    def row_trimmed_mean(row):
-        mean = row.mean()
-        std = row.std()
-        if trim_std == -1:
-            # If trim_std is -1, return the untrimmed mean
-            return mean
-        # Trim the row to values within trim_std standard deviations from the mean
-        trimmed = row[(row >= mean - trim_std * std) & (row <= mean + trim_std * std)]
-        return trimmed.mean()
-
-    trimmed_means = all_bins_df.apply(row_trimmed_mean, axis=1)
+    trimmed_means = all_bins_df.apply(row_trimmed_mean, trim_std=trim_std, axis=1)
     return trimmed_means
 
 
@@ -80,10 +81,18 @@ def percentile_contrast_stretch(row, lower=2, upper=98):
     return stretched.clip(0, 1)
 
 
-def preprocess_pair(pair, genome_similarities, similarity_normalization_mean, smoothing_filter, smoothing_filter_size, contrast_stretching, trim_std=3):
+def preprocess_pair(
+    pair,
+    genome_similarities,
+    similarity_normalization_mean,
+    smoothing_filter,
+    smoothing_filter_size,
+    contrast_stretching,
+    trim_std=3,
+):
     pair = pair.copy()
     if genome_similarities is not None:
-        if not similarity_normalization_mean:
+        if similarity_normalization_mean == -1:
             # if no target mean is provided, use the max average kmer sim. as target mean
             similarity_normalization_mean = genome_similarities[genome_similarities != 1].max()
         delta = similarity_normalization_mean - genome_similarities
@@ -94,7 +103,9 @@ def preprocess_pair(pair, genome_similarities, similarity_normalization_mean, sm
         pair = pair.apply(percentile_contrast_stretch, axis=1)
 
     if smoothing_filter:
-        pair = pair.apply(smooth_row, axis=1, filter_type=smoothing_filter, filter_size=smoothing_filter_size)
+        pair = pair.apply(
+            smooth_row, axis=1, filter_type=smoothing_filter, filter_size=smoothing_filter_size
+        )
 
     return pair
 
@@ -196,16 +207,10 @@ def visualize(pair, output_file, inverse=False, title=None):
             x=pair.columns,
             y=pair.index,
             aspect="auto",
-            title=title
+            title=title,
         )
     else:
-        fig = px.imshow(
-            pair,
-            x=pair.columns,
-            y=pair.index,
-            aspect="auto",
-            title=title
-        )
+        fig = px.imshow(pair, x=pair.columns, y=pair.index, aspect="auto", title=title)
     fig.update_layout(
         xaxis=dict(
             dtick=2000000,
@@ -286,13 +291,20 @@ def run_introgression_finder(
         # Step 3 - visualization
         # show user introgressions labeled on the original heatmap from panagram
         # invert values for figure so that introgressions = 0
-        pair_for_visualization.loc["Introgressions"] = (~(group_sims["introgression"].astype(bool))).astype(int)
+        pair_for_visualization.loc["Introgressions"] = (
+            ~(group_sims["introgression"].astype(bool))
+        ).astype(int)
         if render_vis:
             output_vis = output_dir / "heatmaps"
             output_vis.mkdir(parents=True, exist_ok=True)
             output_vis = output_vis / f"{anchor}_{chr_name}_{comp_group}_heatmap.png"
             title = f"{anchor}_{chr_name}_{comp_group}"
-            visualize(pair_for_visualization.drop(columns=["group"]), output_vis, inverse=True, title=title)
+            visualize(
+                pair_for_visualization.drop(columns=["group"]),
+                output_vis,
+                inverse=True,
+                title=title,
+            )
 
         # Step 4 - save introgressions to bed file
         output_bed = output_dir / f"{anchor}_{chr_name}_{comp_group}.bed"
@@ -309,7 +321,12 @@ def run_introgression_finder(
         if render_vis:
             output_vis = output_dir / f"{anchor}_{chr_name}_merged_heatmap.png"
             title = f"{anchor}_{chr_name}_merged"
-            visualize(pair_for_visualization.drop(columns=["group"]), output_vis, inverse=True, title=title)
+            visualize(
+                pair_for_visualization.drop(columns=["group"]),
+                output_vis,
+                inverse=True,
+                title=title,
+            )
 
         # save introgressions to bed file
         output_bed = output_dir / f"{anchor}_{chr_name}_merged.bed"
@@ -333,6 +350,12 @@ def main():
         type=float,
         help="target mean kmer similarity to normalize each genome to (set to -1 to use max average kmer sim. as target mean)",
     )
+    parser.add_argument(
+        "--trm",
+        type=float,
+        default=3.0,
+        help="Number of standard deviations for trimmed mean normalization (default: 3.0)",
+    )
     parser.add_argument("--sft", type=str, help="filter type for smoothing (mean or median)")
     parser.add_argument(
         "--ssz",
@@ -348,7 +371,9 @@ def main():
     parser.add_argument("--rmf", action="store_true", help="remove fixed kmers from bitmap")
     parser.add_argument("--vis", action="store_true", help="save pngs of visualized results")
     parser.add_argument("--isc", action="store_true", help="use anchor's group to self compare")
-    parser.add_argument("--urf", type=str, help="when calling in REF mode, use this accession's view")
+    parser.add_argument(
+        "--urf", type=str, help="when calling in REF mode, use this accession's view"
+    )
     parser.add_argument(
         "-a", nargs="+", help="name of anchor(s) to mark introgressions for (default: all)"
     )
@@ -366,12 +391,6 @@ def main():
     parser.add_argument("--idx", type=str, help="path to Panagram index folder", required=True)
     parser.add_argument("--tsv", type=str, help="path to acession group TSV file", required=True)
     parser.add_argument("--out", type=str, help="path to folder to save all outputs", required=True)
-    parser.add_argument(
-        "--trim-std",
-        type=float,
-        default=3.0,
-        help="Number of standard deviations for trimmed mean normalization (default: 3.0)",
-    )
     args = parser.parse_args()
 
     # input checking
@@ -399,7 +418,7 @@ def main():
     preprocessing_args["smoothing_filter"] = args.sft
     preprocessing_args["smoothing_filter_size"] = args.ssz
     preprocessing_args["contrast_stretching"] = args.cst
-    preprocessing_args["trim_std"] = args.trim_std
+    trim_std = args.trm
 
     # determine if we have a single anchor or multiple to run
     anchors = args.a
@@ -425,7 +444,9 @@ def main():
         ref_genome = index.genomes[reference]
         using_ref_space = True
         if args.gnm:
-            ref_genome_similarities = get_genome_similarities(ref_genome, bitmap_step, bin_size, omit_fixed_kmers)
+            ref_genome_similarities = get_genome_similarities(
+                ref_genome, bitmap_step, bin_size, omit_fixed_kmers, trim_std
+            )
 
     output_dir = Path(args.out)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -447,7 +468,9 @@ def main():
 
         genome_similarities = None
         if args.gnm:
-            genome_similarities = get_genome_similarities(genome, bitmap_step, bin_size, omit_fixed_kmers)
+            genome_similarities = get_genome_similarities(
+                genome, bitmap_step, bin_size, omit_fixed_kmers, trim_std
+            )
 
         chromosomes = args.c
         if chromosomes is None:

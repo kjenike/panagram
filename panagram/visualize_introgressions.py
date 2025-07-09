@@ -49,6 +49,7 @@ def create_heatmap(distances_file):
 
 def create_heatmap_runner(input_dir):
     distances_files = list(input_dir.glob("chr*.txt"))
+    distances_files = [file for file in distances_files if "max_species" not in file.name]
     for file in distances_files:
         print(f"Visualizing {file.name}")
         create_heatmap(file)
@@ -68,12 +69,17 @@ def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
 
         # create df of precisions and recalls across thresholds
         metrics = pd.read_csv(all_metrics_file, sep="\t", index_col=0)
-        precision = metrics["Precision"].mean()
-        recall = metrics["Recall"].mean()
-        results.append({"threshold": threshold, "precision": precision, "recall": recall})
+        tp = metrics["True Positive"].sum()
+        fp = metrics["False Positive"].sum()
+        fn = metrics["False Negative"].sum()
+        tn = metrics["True Negative"].sum()
+        results.append({"threshold": threshold, "TP": tp, "FP": fp, "FN": fn, "TN": tn})
 
     # plot results
     results_df = pd.DataFrame(results).fillna(0)
+    results_df["precision"] = results_df["TP"] / (results_df["TP"] + results_df["FP"]).fillna(0)
+    results_df["recall"] = results_df["TP"] / (results_df["TP"] + results_df["FN"]).fillna(0)
+
     fig = px.line(
         results_df,
         x="recall",

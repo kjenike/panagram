@@ -6,8 +6,8 @@ set -e
 base_output_dir="/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/introgressions"
 index_dir="/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4"
 tsv="/home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/group.tsv"
-call_flags="--vis --rmf --bin 500000 -p REF -g SLL --urf SL4 --gnm .8 --sft mean --cst"
-threshold=0.6
+call_flags="--vis --rmf --bin 500000 -a M82 -c chr4 -p REF --urf SL4 --gnm -1 --sft mean --ssz 4"
+threshold=0.7
 call_dir_stem=test
 postprocess_flags="-a fgap rmbn --bin 500000 --min 2 --gap 1 --ref SL4 --paf /home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/alignments"
 gdt_dir="/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper_subset_500kb"

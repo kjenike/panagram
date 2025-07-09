@@ -11,8 +11,8 @@ call_flags="--vis --rmf --bin 500000 -g SLL -p REF --urf SL4 --gnm -1 --sft mean
 thresholds=(0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95)
 call_dir_stem=pre_500kb_500kbgt
 postprocess_flags="-a fgap rmbn --bin 500000 --min 2 --gap 1 --ref SL4 --paf /home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4/alignments"
-gdt_dir="/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper_subset_500kb"
-score_flags="--vis -g SP SLC -a fgap rmbn --bin 500000 --min 2 --gap 1 --ref SL4"
+gdt_dir="/home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper_subset_20"
+score_flags="--vis -g SP SLC -a fgap rmbn --bin 500000 --min 2 --gap 1 --ref SL4 --thr 0"
 
 rm -rf "${base_output_dir:?}/${call_dir_stem}"
 for threshold in "${thresholds[@]}"; do
