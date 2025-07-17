@@ -1,0 +1,45 @@
+general:
+  output_dir_base: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4_la1589/introgressions
+  output_dir_stem: test
+  index_dir: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4_la1589
+  tsv: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4_la1589/group.tsv
+  bin: 500000
+  ref: SL4
+
+calling:
+  run: true
+  grp: SLL
+  anc: null
+  chr: null
+  cmp: REF
+  thr: 0.75
+  stp: 100
+  gnm: -1
+  trm: 3
+  sft: mean
+  ssz: 4
+  urf: true
+  rmf: true
+  cst: false
+  isc: false
+  vis: true
+
+postprocessing:
+  run: true
+  act: [fgap, rmbn]
+  min: 2
+  gap: 1
+  map: null
+  paf: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4_la1589/alignments
+
+scoring:
+  run: true
+  gdt_dir: /home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper_subset_20
+  act: [fgap, rmbn]
+  min: 2
+  gap: 1
+  how: bins
+  thr: 0
+  othr: 0.8
+  cmp: [SP, SLC]
+  vis: true
