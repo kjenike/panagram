@@ -141,7 +141,7 @@ def threshold_introgressions(pair, anchor, comp_group, threshold, row_mean_thres
                 group_sims["introgression"] = 0
                 return group_sims
 
-    # get mean kmer similarities per window for each group
+    # get mean/max kmer similarities per window for each group
     group_sims = pair_anchor_group.mean(axis=0).to_frame(name="anchor_sim")
     group_sims["comp_sim"] = pair_comp_group.mean(axis=0)
 
@@ -158,9 +158,10 @@ def threshold_introgressions(pair, anchor, comp_group, threshold, row_mean_thres
         group_sims["introgression"] = (group_sims.comp_sim < threshold).astype(int)
     else:
         # NOTE: might be worth ignoring the similarity to the anchor group and just look at sim to comp group and whether it crosses a threshold
-        group_sims["introgression"] = (
-            (group_sims.comp_sim >= group_sims.anchor_sim) & (group_sims.comp_sim >= 0.75)
-        ).astype(int)
+        # group_sims["introgression"] = (
+        #     (group_sims.comp_sim >= group_sims.anchor_sim) & (group_sims.comp_sim >= threshold)
+        # ).astype(int)
+        group_sims["introgression"] = (group_sims.comp_sim >= threshold).astype(int)
     return group_sims
 
 
@@ -198,22 +199,45 @@ def bins_to_bed(bins_df, bin_size, chr_name, comp_group):
     return introgressions
 
 
-def visualize(pair, output_file, inverse=False, title=None):
+def visualize(pair, output_file, inverse=False, title=None, groups=None):
     # take a look at what pair looks like after manipulation
+    # if groups is not None, sort by group; groups should be in the order that you want them to appear
+    if groups is not None:
+        ordered_names = groups.index.tolist()
+        intros = None
+        if "Introgressions" in pair.index:
+            intros = pair.loc["Introgressions"].copy()
+            pair = pair.drop("Introgressions")
+        pair = pair.reindex(index=ordered_names)
+        if intros is not None:
+            pair.loc["Introgressions"] = intros
+
     if inverse:
         fig = px.imshow(
             pair,
-            color_continuous_scale=px.colors.sequential.Greens[::-1],
+            color_continuous_scale=px.colors.sequential.Plasma[::-1],
             x=pair.columns,
             y=pair.index,
             aspect="auto",
-            title=title,
         )
     else:
         fig = px.imshow(pair, x=pair.columns, y=pair.index, aspect="auto", title=title)
     fig.update_layout(
         xaxis=dict(
             dtick=2000000,
+            title=dict(
+                text="Genomic Position",
+                font=dict(size=16, family="Helvetica Bold", color="black"),
+            ),
+        ),
+        yaxis=dict(
+            title="",  # Omit y-axis label
+        ),
+        title=dict(
+            text=title,
+            x=0.5,  # Center the title
+            xanchor="center",
+            font=dict(size=20, family="Helvetica Bold", color="black"),
         ),
     )
     fig.write_image(output_file)
@@ -298,12 +322,13 @@ def run_introgression_finder(
             output_vis = output_dir / "heatmaps"
             output_vis.mkdir(parents=True, exist_ok=True)
             output_vis = output_vis / f"{anchor}_{chr_name}_{comp_group}_heatmap.png"
-            title = f"{anchor}_{chr_name}_{comp_group}"
+            title = f"{anchor} {chr_name} Introgressions Called with {comp_group}"
             visualize(
                 pair_for_visualization.drop(columns=["group"]),
                 output_vis,
                 inverse=True,
                 title=title,
+                groups=groups,
             )
 
         # Step 4 - save introgressions to bed file
@@ -319,13 +344,14 @@ def run_introgression_finder(
         )
 
         if render_vis:
-            output_vis = output_dir / f"{anchor}_{chr_name}_merged_heatmap.png"
-            title = f"{anchor}_{chr_name}_merged"
+            output_vis = output_dir / "heatmaps"/ f"{anchor}_{chr_name}_merged_heatmap.png"
+            title = f"{anchor} {chr_name} Merged Introgressions"
             visualize(
                 pair_for_visualization.drop(columns=["group"]),
                 output_vis,
                 inverse=True,
                 title=title,
+                groups=groups,
             )
 
         # save introgressions to bed file
@@ -375,18 +401,18 @@ def main():
         "--urf", type=str, help="when calling in REF mode, use this accession's view"
     )
     parser.add_argument(
-        "-a", nargs="+", help="name of anchor(s) to mark introgressions for (default: all)"
+        "--anc", nargs="+", help="name of anchor(s) to mark introgressions for (default: all)"
     )
     parser.add_argument(
-        "-g",
+        "--grp",
         nargs="+",
-        help="if -a is not defined, groups in the tsv to mark introgressions for (default: none)",
+        help="if --anc is not defined, groups in the tsv to mark introgressions for (default: none)",
     )
     parser.add_argument(
-        "-c", nargs="+", help="chromosome(s) to mark introgressions for (default: all)"
+        "--chr", nargs="+", help="chromosome(s) to mark introgressions for (default: all)"
     )
     parser.add_argument(
-        "-p", nargs="+", help="group(s) to compare against anchor(s)", required=True
+        "--cmp", nargs="+", help="group(s) to compare against anchor(s)", required=True
     )
     parser.add_argument("--idx", type=str, help="path to Panagram index folder", required=True)
     parser.add_argument("--tsv", type=str, help="path to acession group TSV file", required=True)
@@ -421,14 +447,14 @@ def main():
     trim_std = args.trm
 
     # determine if we have a single anchor or multiple to run
-    anchors = args.a
+    anchors = args.anc
     if anchors is None:
-        if args.g is None:
-            raise ValueError("No anchor selected. Use either -a or -g to specify anchors.")
+        if args.grp is None:
+            raise ValueError("No anchor selected. Use either -anc or -grp to specify anchors.")
         # get multiple anchors
-        anchors = list(groups[groups.group.isin(args.g)].index)
+        anchors = list(groups[groups.group.isin(args.grp)].index)
 
-    comp_groups = args.p
+    comp_groups = args.cmp
     # ensure every element is only in there once
     comp_groups = list(set(comp_groups))
 
@@ -472,7 +498,7 @@ def main():
                 genome, bitmap_step, bin_size, omit_fixed_kmers, trim_std
             )
 
-        chromosomes = args.c
+        chromosomes = args.chr
         if chromosomes is None:
             chromosomes = genome.sizes.keys()
 

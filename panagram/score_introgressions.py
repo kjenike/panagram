@@ -370,12 +370,12 @@ def main():
         help="min. overlap threshold for an overlap to be considered a TP/TN",
     )
     parser.add_argument(
-        "-g",
+        "--cmp",
         nargs="+",
         help="for REF/merged introgression types, list all comp groups",
     )
     parser.add_argument(
-        "-a",
+        "--act",
         nargs="+",
         help="action(s) to perform on introgression file: fgap, fcen, rmbn",
     )
@@ -395,11 +395,11 @@ def main():
     index = Index(index_dir)
     ref_genome = index.genomes[ref_accession]
 
-    actions = args.a
+    actions = args.act
     if actions is not None:
         for action in actions:
             if action not in ["fgap", "fcen", "rmbn"]:
-                raise ValueError(f"Unrecognized action {action}. Check -a flag for valid actions.")
+                raise ValueError(f"Unrecognized action {action}. Check --act flag for valid actions.")
 
     # figure out if user provided a file or folder
     bed_files = Path(args.pre)
@@ -423,7 +423,7 @@ def main():
     chrs.sort()
     intro_types.sort()
 
-    intro_groups = args.g
+    intro_groups = args.cmp
     if ("REF" in intro_types or "merged" in intro_types) and (intro_groups is None):
         raise ValueError("-g is required to process REF/merged bed files.")
 

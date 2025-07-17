@@ -306,7 +306,7 @@ def postprocess_introgressions():
     parser.add_argument("--idx", type=str, help="path to Panagram index folder", required=True)
     parser.add_argument("--out", type=str, help="path to folder to save all outputs", required=True)
     parser.add_argument(
-        "-a",
+        "--act",
         nargs="+",
         help="action(s) to perform on introgression file: lift, fgap, fcen, rmbn",
         required=True,
@@ -343,10 +343,10 @@ def postprocess_introgressions():
     )
     args = parser.parse_args()
 
-    actions = args.a
+    actions = args.act
     for action in actions:
         if action not in ["lift", "fgap", "fcen", "rmbn"]:
-            raise ValueError(f"Unrecognized action {action}. Check -a flag for valid actions.")
+            raise ValueError(f"Unrecognized action {action}. Check --act flag for valid actions.")
 
     index_dir = Path(args.idx)
     if not index_dir.is_dir():

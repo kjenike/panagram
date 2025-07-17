@@ -84,8 +84,8 @@ def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
         results_df,
         x="recall",
         y="precision",
-        markers=True,
-        text="threshold",
+        # markers=True,
+        # text="threshold",
         title="Precision-Recall Curve",
     )
     fig.update_traces(textposition="top center")
