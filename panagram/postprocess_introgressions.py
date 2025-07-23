@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from panagram.index import Index
 from call_introgressions import bins_to_bed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
 def read_fasta_generator(fp):
@@ -341,6 +342,7 @@ def postprocess_introgressions():
         help="maximum number of bins to fill between introgressions for fgap",
         default=1,
     )
+    print("Postprocessing introgressions...", flush=True)
     args = parser.parse_args()
 
     actions = args.act
@@ -358,9 +360,46 @@ def postprocess_introgressions():
     if bed_files.is_file():
         bed_files = [bed_files]
     elif bed_files.is_dir():
-        bed_files = bed_files.glob("*.bed")
+        bed_files = list(bed_files.glob("*.bed"))
     else:
         raise ValueError("Bed file/folder not found. Check --bed path.")
+
+    # perform liftover per-accession, so we can use the same results for all files
+    if "lift" in actions:
+        if args.ref is None:
+            raise ValueError("--ref must be specified for liftover.")
+        reference_accession = args.ref
+        reference_genome = index.genomes[reference_accession]
+        reference_file = index_dir / reference_genome.fasta
+        if not reference_file.is_file():
+            raise ValueError("Reference file not found. Check --ref path.")
+
+        # run minimap in parallel for each accession if paf files are not already provided
+        if args.paf is None:
+            # Get unique bed_accessions from bed_files
+            unique_accessions = set()
+            for bed_file in bed_files:
+                bed_accession = bed_file.name.split("_")[0]
+                unique_accessions.add(bed_accession)
+
+            paf_dir = index_dir / "alignments"
+            paf_dir.mkdir(parents=True, exist_ok=True)
+            minimap_flags = args.map.split(" ")
+
+            with ProcessPoolExecutor() as executor:
+                futures = []
+                for accession in unique_accessions:
+                    bed_genome = index.genomes[accession]
+                    query_file = index_dir / bed_genome.fasta
+                    paf_file = paf_dir / f"{accession}_{reference_accession}.paf"
+                    futures.append(executor.submit(
+                        align_to_reference, reference_file, query_file, minimap_flags, paf_file
+                    ))
+
+                for future in as_completed(futures):
+                    future.result()
+        else:
+            paf_dir = Path(args.paf)
 
     output_dir = Path(args.out)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -383,30 +422,13 @@ def postprocess_introgressions():
 
             if action == "lift":
                 # lift - perform liftover - requires ref; paf optional
-                if args.ref is None:
-                    raise ValueError("--ref must be specified for liftover.")
-                reference_accession = args.ref
-                reference_genome = index.genomes[reference_accession]
-                reference_file = index_dir / reference_genome.fasta
-                if not reference_file.is_file():
-                    raise ValueError("Reference file not found. Check --ref path.")
-
-                # run minimap if paf files are not already provided
-                if args.paf is None:
-                    # find FASTA file associated with bed file
-                    query_file = index_dir / bed_genome.fasta
-                    minimap_flags = args.map.split(" ")
-                    output_dir = index_dir / "alignments"
-                    output_dir.mkdir(parents=True, exist_ok=True)
-                    paf_file = output_dir / f"{bed_accession}_{reference_accession}.paf"
-                    align_to_reference(reference_file, query_file, minimap_flags, paf_file)
+                # find paf file with the same name of the bed file
+                if paf_dir.is_dir():
+                    paf_file = paf_dir / f"{bed_accession}_{reference_accession}.paf"
+                elif paf_dir.is_file():
+                    paf_file = paf_dir
                 else:
-                    paf_file = Path(args.paf)
-                    # find paf file with the same name of the bed file
-                    if paf_file.is_dir():
-                        paf_file = paf_file / f"{bed_accession}_{reference_accession}.paf"
-                    if not paf_file.is_file():
-                        raise ValueError("Cannot find paf file. Check --paf path.")
+                    raise ValueError("Cannot find paf file/folder. Check --paf path.")
 
                 # save bed file lifted over to reference coordinate space
                 liftover_to_reference(bed_file, paf_file, bed_output)

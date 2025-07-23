@@ -30,35 +30,72 @@ def self_dotplot(seq):
                 matrix[i, j] = 1
 
     plt.imshow(matrix, cmap="Greys", interpolation="none")
-    plt.savefig("./test.png")
+    plt.savefig("./test.svg")
     return
 
 
-def create_heatmap(distances_file):
+def create_heatmap(distances_file, groups=None):
     # visualize ground truth bins from get_distances.py by themselves
     distances_file = Path(distances_file)
-    output_file = distances_file.parent / (distances_file.stem + ".png")
+    output_file = distances_file.parent / (distances_file.stem + ".svg")
     distances = pd.read_csv(distances_file, sep="\t", index_col=0).fillna(0)
     distances = distances.sort_index()
+    distances.columns = distances.columns.astype(int)
+
+    if groups is not None:
+        ordered_names = groups.index.tolist()
+        # drop any names not in the distances index
+        ordered_names = [name for name in ordered_names if name in distances.index]
+        distances = distances.reindex(index=ordered_names)
 
     fig = px.imshow(distances, color_continuous_scale="Greens", aspect="auto", zmin=0, zmax=1)
-    fig.update_layout(yaxis=dict(tickmode="linear"), title=distances_file.stem)
+    fig.update_layout(
+        font=dict(family="Helvetica Bold", color="black"),
+        coloraxis_colorbar=dict(
+            title=dict(
+                text="Jaccard Similarity",
+                side="top",  # Title above the colorbar
+            ),
+            orientation="h",           # horizontal colorbar
+            x=0.3,                     # center the colorbar
+            xanchor="left",
+            y=1.08,                    # move above the plot
+            len=0.7,                   # shorten the colorbar
+            thickness=20,              # make it thicker
+        ),
+        title=dict(
+            text=distances_file.stem,
+            # x=0.5,  # Center the title
+            # xanchor="right",
+            font=dict(size=20),
+        ),
+        xaxis=dict(
+            dtick=2000000,
+            title=dict(
+                text="Genomic Position",
+                font=dict(size=16),
+            ),
+        ),
+        width=700,
+        height=500,
+        yaxis=dict(tickmode="linear", title=""),
+    )
     fig.write_image(output_file)
     return
 
 
-def create_heatmap_runner(input_dir):
+def create_heatmap_runner(input_dir, groups=None):
     distances_files = list(input_dir.glob("chr*.txt"))
     distances_files = [file for file in distances_files if "max_species" not in file.name]
     for file in distances_files:
         print(f"Visualizing {file.name}")
-        create_heatmap(file)
+        create_heatmap(file, groups=groups)
     return
 
 
-def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
+
+def calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds):
     scored_dir_name = f"scored_{how_to_score}"
-    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prc.png"
 
     # find the file we need
     results = []
@@ -77,26 +114,47 @@ def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
 
     # plot results
     results_df = pd.DataFrame(results).fillna(0)
-    results_df["precision"] = results_df["TP"] / (results_df["TP"] + results_df["FP"]).fillna(0)
-    results_df["recall"] = results_df["TP"] / (results_df["TP"] + results_df["FN"]).fillna(0)
+    results_df["precision"] = (results_df["TP"] / (results_df["TP"] + results_df["FP"])).fillna(0)
+    results_df["recall"] = (results_df["TP"] / (results_df["TP"] + results_df["FN"])).fillna(0)
 
+    # Anchor NaN points at (1,0) for plotting
+    for i in range(len(results_df)):
+        if results_df["recall"][i] == 0 and results_df["precision"][i] == 0:
+            results_df.at[i, "recall"] = 0
+            results_df.at[i, "precision"] = 1
+
+    auc_pr = np.trapz(results_df["precision"].values, results_df["recall"].values)
+    print(f"PR AUC {intro_type}:", auc_pr)
+    return results_df
+
+
+def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
+    results_df = calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds)
     fig = px.line(
         results_df,
         x="recall",
         y="precision",
-        # markers=True,
-        # text="threshold",
-        title="Precision-Recall Curve",
     )
     fig.update_traces(textposition="top center")
-    fig.update_layout(xaxis_title="Recall", yaxis_title="Precision")
+    fig.update_layout(
+        font=dict(family="Helvetica Bold", color="black"),
+        template="plotly_white",
+        xaxis_title=dict(text="Recall"),
+        yaxis_title=dict(text="Precision"),
+        xaxis=dict(range=[0, 1.01], ticks="outside", linecolor="black"),
+        yaxis=dict(range=[0, 1.01], ticks="outside", linecolor="black"),
+        width=500,
+        height=500,
+        margin=dict(l=10, r=10, t=10, b=10),  # tight layout
+    )
+    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prc.svg"
     fig.write_image(output_file)
     return
 
 
 def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
     scored_dir_name = f"scored_{how_to_score}"
-    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prca.png"
+    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prca.svg"
 
     # find the file we need
     results = []
@@ -145,19 +203,22 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
         x="Recall",
         y="Precision",
         color="Sample",
-        markers=True,
+        # markers=True,
         # text="Threshold",
-        title="Precision-Recall Curves per Sample",
+        # title="Precision-Recall Curves per Sample",
     )
     fig.update_traces(textposition="top center")
-    fig.update_layout(xaxis_title="Recall", yaxis_title="Precision")
+    fig.update_layout(
+        xaxis_title=dict(text="Recall", font=dict(family="Helvetica Bold", color="black")),
+        yaxis_title=dict(text="Precision", font=dict(family="Helvetica Bold", color="black")),
+    )
     fig.write_image(output_file)
     return
 
 
 def create_pr_curve_chromosomes(input_dir, intro_type, how_to_score, thresholds):
     scored_dir_name = f"scored_{how_to_score}"
-    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prcc.png"
+    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prcc.svg"
 
     # find the file we need
     results = []
@@ -243,9 +304,49 @@ def create_scored_heatmap_collage(input_dir, intro_type, how_to_score, threshold
     c.save()
     return
 
+# import svgwrite
+
+# def create_scored_heatmap_collage_svg(input_dir, intro_type, how_to_score, thresholds):
+#     scored_dir_name = f"scored_{how_to_score}"
+#     output_file = f"{input_dir}/{how_to_score}_{intro_type}_scored_heatmaps.svg"
+
+#     # image_batches: list of lists, each with 9 image paths
+#     image_batches = []
+#     for threshold in thresholds:
+#         threshold_path = input_dir / f"{input_dir.name}_{threshold}" / scored_dir_name / "heatmaps"
+#         threshold_heatmaps = list(threshold_path.glob(f"*_{intro_type}.svg"))
+#         threshold_heatmaps.sort()
+#         image_batches.append(threshold_heatmaps)
+
+#     # get heatmaps organized by chr instead of by threshold
+#     image_batches = list(zip(*image_batches))
+#     final_batches = []
+#     for lst in image_batches:
+#         final_batches.append(lst[:9])
+#         final_batches.append(lst[9:])
+
+#     # Setup grid
+#     grid_size = (3, 3)
+#     cell_w, cell_h = 500, 500  # adjust as needed
+#     tiled_w = cell_w * grid_size[0]
+#     tiled_h = cell_h * grid_size[1]
+
+#     # Only one page/collage per call; you can loop for multiple pages if needed
+#     for batch_idx, batch in enumerate(final_batches):
+#         dwg = svgwrite.Drawing(
+#             filename=output_file.replace(".svg", f"_{batch_idx+1}.svg"),
+#             size=(tiled_w, tiled_h),
+#             profile="full"
+#         )
+#         for idx, path in enumerate(batch):
+#             x = (idx % grid_size[0]) * cell_w
+#             y = (idx // grid_size[0]) * cell_h
+#             # Embed SVG as an image
+#             dwg.add(dwg.image(href=str(path), insert=(x, y), size=(cell_w, cell_h)))
+#         dwg.save()
+
 
 def main():
-    print("Visualizing results...")
     parser = argparse.ArgumentParser(description="Introgression visualization.")
     parser.add_argument(
         "-v",
@@ -260,10 +361,17 @@ def main():
         required=True,
     )
     parser.add_argument(
+        "--grp",
+        type=str,
+        help="path to groups file for heatmap visualization",
+        default=None,
+    )
+    parser.add_argument(
         "--how",
         type=str,
         help="whether bins or overlaps were used during scoring",
     )
+    print("Visualizing results...")
     args = parser.parse_args()
 
     input_dir = Path(args.dir)
@@ -281,24 +389,8 @@ def main():
             raise ValueError("--how must be either 'bins' or 'overlaps'.")
 
         thresholds = [
-            0.1,
-            0.15,
-            0.2,
-            0.25,
-            0.3,
-            0.35,
-            0.4,
-            0.45,
-            0.5,
-            0.55,
-            0.6,
-            0.65,
-            0.7,
-            0.75,
-            0.8,
-            0.85,
-            0.9,
-            0.95,
+            0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5,
+            0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95,
         ]
 
         # take the first threshold path and check for introgression types
@@ -325,7 +417,11 @@ def main():
             for intro_type in intro_types:
                 create_scored_heatmap_collage(input_dir, intro_type, how_to_score, thresholds)
         elif func == "htmp":
-            create_heatmap_runner(input_dir)
+            if args.grp is not None:
+                groups = pd.read_csv(args.grp, sep="\t", index_col=0)
+                create_heatmap_runner(input_dir, groups=groups)
+            else:
+                create_heatmap_runner(input_dir)
     print("Done.")
     return
 

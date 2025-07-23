@@ -81,6 +81,26 @@ def percentile_contrast_stretch(row, lower=2, upper=98):
     return stretched.clip(0, 1)
 
 
+def edge_tapered_row_normalization(pair, intensity=0.1):
+    """
+    Normalize each row of the DataFrame 'pair' more heavily at the beginning and end,
+    decreasing intensity towards the center using a Gaussian window.
+    """
+    n_cols = pair.shape[1]
+    x = np.linspace(-1, 1, n_cols)
+    window = np.exp(-4 * x**2)
+    center_boost = intensity * (window / window.max())  # high in center
+
+    norm_pair = pair.copy()
+    for idx, row in norm_pair.iterrows():
+        norm_pair.loc[idx] = row * (1 + center_boost)  # boost center more
+    norm_pair = norm_pair.clip(0, 1)
+    # increase intensity of all values to compensate for losses
+    norm_pair = norm_pair.where(norm_pair == 1, norm_pair - 0.2)
+    norm_pair = norm_pair.clip(0, 1)  # ensure values are between 0 and 1
+    return norm_pair
+
+
 def preprocess_pair(
     pair,
     genome_similarities,
@@ -88,7 +108,6 @@ def preprocess_pair(
     smoothing_filter,
     smoothing_filter_size,
     contrast_stretching,
-    trim_std=3,
 ):
     pair = pair.copy()
     if genome_similarities is not None:
@@ -100,7 +119,8 @@ def preprocess_pair(
         pair = pair.add(delta, axis=0).clip(0, 1)
 
     if contrast_stretching:
-        pair = pair.apply(percentile_contrast_stretch, axis=1)
+        pair = edge_tapered_row_normalization(pair)
+        # pair = pair.apply(percentile_contrast_stretch, axis=1)
 
     if smoothing_filter:
         pair = pair.apply(
@@ -125,25 +145,23 @@ def threshold_introgressions(pair, anchor, comp_group, threshold, row_mean_thres
     pair_comp_group = pair[pair["group"] == comp_group].drop(columns=["group"])
 
     # throw out all acessions with large global diffs w/ the anchor
-    if len(pair_anchor_group) > 1:
+    if len(pair_anchor_group) > 1 and anchor_group == comp_group:
         for acession, row in pair_anchor_group.iterrows():
             if row.mean() < row_mean_threshold:
                 pair_anchor_group = pair_anchor_group[pair_anchor_group.index != acession]
 
         if pair_anchor_group.empty:
-            # run anyway only if comparing to REF
-            if comp_group != "REF":
-                print(
-                    f"Warning: accession {anchor} is not similar to any of its group members. Cannot find any introgressions without REF."
-                )
-                group_sims = pair_anchor_group.mean(axis=0).to_frame(name="anchor_sim")
-                group_sims["comp_sim"] = pd.NA
-                group_sims["introgression"] = 0
-                return group_sims
+            print(
+                f"Warning: accession {anchor} is not similar to any of its group members. Cannot use --isc."
+            )
+            group_sims = pair_anchor_group.mean(axis=0).to_frame(name="anchor_sim")
+            group_sims["comp_sim"] = pd.NA
+            group_sims["introgression"] = 0
+            return group_sims
 
     # get mean/max kmer similarities per window for each group
     group_sims = pair_anchor_group.mean(axis=0).to_frame(name="anchor_sim")
-    group_sims["comp_sim"] = pair_comp_group.mean(axis=0)
+    group_sims["comp_sim"] = pair_comp_group.max(axis=0)
 
     # 4 ways to define an introgression:
     # 1. If anchor is in comp_group: introgression is where anchor has similarity lower than threshold to its group
@@ -157,11 +175,10 @@ def threshold_introgressions(pair, anchor, comp_group, threshold, row_mean_thres
         # comp_group should only consist of 1 REF
         group_sims["introgression"] = (group_sims.comp_sim < threshold).astype(int)
     else:
-        # NOTE: might be worth ignoring the similarity to the anchor group and just look at sim to comp group and whether it crosses a threshold
-        # group_sims["introgression"] = (
-        #     (group_sims.comp_sim >= group_sims.anchor_sim) & (group_sims.comp_sim >= threshold)
-        # ).astype(int)
-        group_sims["introgression"] = (group_sims.comp_sim >= threshold).astype(int)
+        group_sims["introgression"] = (group_sims.comp_sim >= (threshold)).astype(int)
+        pair_ref_group = pair[pair["group"] == "REF"].drop(columns=["group"])
+        group_sims["ref_sim"] = pair_ref_group.mean(axis=0)
+        group_sims["introgression"] = ((group_sims.ref_sim < threshold) & (group_sims.comp_sim > group_sims.comp_sim.min())).astype(int)
     return group_sims
 
 
@@ -221,13 +238,14 @@ def visualize(pair, output_file, inverse=False, title=None, groups=None):
             aspect="auto",
         )
     else:
-        fig = px.imshow(pair, x=pair.columns, y=pair.index, aspect="auto", title=title)
+        fig = px.imshow(pair, x=pair.columns, y=pair.index, aspect="auto", title=title, zmin=0, zmax=1)
     fig.update_layout(
+        font=dict(family="Helvetica Bold", color="black"),
         xaxis=dict(
             dtick=2000000,
             title=dict(
                 text="Genomic Position",
-                font=dict(size=16, family="Helvetica Bold", color="black"),
+                font=dict(size=16),
             ),
         ),
         yaxis=dict(
@@ -237,7 +255,7 @@ def visualize(pair, output_file, inverse=False, title=None, groups=None):
             text=title,
             x=0.5,  # Center the title
             xanchor="center",
-            font=dict(size=20, family="Helvetica Bold", color="black"),
+            font=dict(size=20),
         ),
     )
     fig.write_image(output_file)
@@ -321,7 +339,7 @@ def run_introgression_finder(
         if render_vis:
             output_vis = output_dir / "heatmaps"
             output_vis.mkdir(parents=True, exist_ok=True)
-            output_vis = output_vis / f"{anchor}_{chr_name}_{comp_group}_heatmap.png"
+            output_vis = output_vis / f"{anchor}_{chr_name}_{comp_group}_heatmap.svg"
             title = f"{anchor} {chr_name} Introgressions Called with {comp_group}"
             visualize(
                 pair_for_visualization.drop(columns=["group"]),
@@ -344,7 +362,7 @@ def run_introgression_finder(
         )
 
         if render_vis:
-            output_vis = output_dir / "heatmaps"/ f"{anchor}_{chr_name}_merged_heatmap.png"
+            output_vis = output_dir / "heatmaps" / f"{anchor}_{chr_name}_merged_heatmap.svg"
             title = f"{anchor} {chr_name} Merged Introgressions"
             visualize(
                 pair_for_visualization.drop(columns=["group"]),
@@ -395,7 +413,7 @@ def main():
         help="perform percentile-based contrast stretching; better highlights introgressions and normalizes kmer similarities",
     )
     parser.add_argument("--rmf", action="store_true", help="remove fixed kmers from bitmap")
-    parser.add_argument("--vis", action="store_true", help="save pngs of visualized results")
+    parser.add_argument("--vis", action="store_true", help="save svgs of visualized results")
     parser.add_argument("--isc", action="store_true", help="use anchor's group to self compare")
     parser.add_argument(
         "--urf", type=str, help="when calling in REF mode, use this accession's view"

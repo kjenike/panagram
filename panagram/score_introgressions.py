@@ -279,7 +279,7 @@ def create_scored_heatmap_overlaps(pred_df, gt_df, overlap_threshold, output_fil
     return
 
 
-def create_scored_heatmap(pred_df, gt_df, output_file):
+def create_scored_heatmap(pred_df, gt_df, output_file, groups=None):
     pred_df = pred_df.copy()
     # only visualize the accessions that are shared btwn both files
     shared_accessions = list(set(pred_df.index.values).intersection(set(gt_df.index.values)))
@@ -297,6 +297,12 @@ def create_scored_heatmap(pred_df, gt_df, output_file):
     # false neg
     pred_df[(pred_df == 0) & (gt_df == 1)] = 2
 
+    if groups is not None:
+        # reindex pred_df to match groups
+        ordered_names = groups.index.tolist()
+        ordered_names = [name for name in ordered_names if name in pred_df.index]
+        pred_df = pred_df.reindex(index=ordered_names)
+
     # visualize
     fig = px.imshow(
         pred_df,
@@ -308,6 +314,7 @@ def create_scored_heatmap(pred_df, gt_df, output_file):
         coloraxis_showscale=False, yaxis=dict(tickmode="linear"), title=output_file.stem
     )
     fig.write_image(output_file)
+    fig.write_image(output_file.with_suffix(".svg"))
 
     # save out pred df to make more visuals with if needed
     pred_df.to_csv(output_file.with_suffix(".csv"), sep="\t")
@@ -338,7 +345,8 @@ def main():
     parser.add_argument("--idx", type=str, help="path to Panagram index folder", required=True)
     parser.add_argument("--ref", type=str, help="name of reference in Panagram", required=True)
     parser.add_argument("--out", type=str, help="path to folder to save all outputs", required=True)
-    parser.add_argument("--vis", action="store_true", help="save pngs of visualized results")
+    parser.add_argument("--vis", action="store_true", help="save visualized results")
+    parser.add_argument("--grp", type=str, help="path to groups file for heatmap visualization", default=None)
     parser.add_argument(
         "--bin",
         type=int,
@@ -379,6 +387,7 @@ def main():
         nargs="+",
         help="action(s) to perform on introgression file: fgap, fcen, rmbn",
     )
+    print("Scoring introgressions...", flush=True)
     args = parser.parse_args()
 
     # input checking
@@ -399,7 +408,9 @@ def main():
     if actions is not None:
         for action in actions:
             if action not in ["fgap", "fcen", "rmbn"]:
-                raise ValueError(f"Unrecognized action {action}. Check --act flag for valid actions.")
+                raise ValueError(
+                    f"Unrecognized action {action}. Check --act flag for valid actions."
+                )
 
     # figure out if user provided a file or folder
     bed_files = Path(args.pre)
@@ -425,7 +436,7 @@ def main():
 
     intro_groups = args.cmp
     if ("REF" in intro_types or "merged" in intro_types) and (intro_groups is None):
-        raise ValueError("-g is required to process REF/merged bed files.")
+        raise ValueError("--cmp is required to process REF/merged bed files.")
 
     output_dir = Path(args.out)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -549,7 +560,11 @@ def main():
                 # visualize introgressions
                 if render_vis:
                     vis_output_file = vis_dir / f"{chr}_{intro_type}.png"
-                    create_scored_heatmap(pred_df, gt_df, vis_output_file)
+                    if args.grp is not None:
+                        groups = pd.read_csv(args.grp, sep="\t", index_col=0)
+                        create_scored_heatmap(pred_df, gt_df, vis_output_file, groups=groups)
+                    else:
+                        create_scored_heatmap(pred_df, gt_df, vis_output_file)
             else:
                 metrics = score_introgression_overlaps(pred_df, gt_df, overlap_threshold)
                 # visualize introgressions

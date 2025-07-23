@@ -5,6 +5,11 @@ import subprocess
 import time
 import yaml
 
+# TODO: fix config file saving to output directory
+# TODO: throw error if paf is not provided during sweep
+# TODO: exit if user does not want to delete existing output directory
+
+
 def parse_config(config_path):
     with config_path.open() as f:
         config = yaml.safe_load(f)
@@ -67,9 +72,9 @@ def parse_config(config_path):
             f"--idx {index_dir}",
             f"--tsv {tsv}",
             f"--grp {call_grp}" if call_grp else None,
-            f"--anc {call_anc}" if call_anc else None,
-            f"--chr {call_chr}" if call_chr else None,
-            f"--cmp {call_cmp}",
+            f"--anc {' '.join(call_anc)}" if call_anc else None,
+            f"--chr {' '.join(call_chr)}" if call_chr else None,
+            f"--cmp {' '.join(call_cmp)}",
             f"--bin {bin_size}",
             f"--stp {call_stp}",
             f"--gnm {call_gnm}" if call_gnm else None,
@@ -113,9 +118,11 @@ def parse_config(config_path):
             f"--gap {score_gap}" if score_gap else None,
             f"--ref {ref}",
             "--vis" if score_vis else None,
+            f"--grp {tsv}" if score_vis else None,
         ]
         score_flags = [f for f in score_flags if f]
     return call_flags, postprocess_flags, score_flags, output_dir, call_thr
+
 
 def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, output_dir, call_thr):
     # Create output directories
@@ -125,11 +132,17 @@ def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, outpu
     # Run pipeline
     if call_flags:
         call_flags += [f"--out {call_dir}", f"--thr {call_thr}"]
-        subprocess.run(f"python call_introgressions.py {' '.join(call_flags)}", shell=True, check=True)
+        subprocess.run(
+            f"python call_introgressions.py {' '.join(call_flags)}", shell=True, check=True
+        )
     if postprocess_flags:
         postprocess_dir = call_dir / "postprocessed"
         postprocess_flags += [f"--bed {call_dir}", f"--out {postprocess_dir}"]
-        subprocess.run(f"python postprocess_introgressions.py {' '.join(postprocess_flags)}", shell=True, check=True)
+        subprocess.run(
+            f"python postprocess_introgressions.py {' '.join(postprocess_flags)}",
+            shell=True,
+            check=True,
+        )
     if score_flags:
         how_to_score = None
         for flag in score_flags:
@@ -138,21 +151,22 @@ def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, outpu
                 break
         score_dir = call_dir / f"scored_{how_to_score}"
         score_flags += [f"--pre {postprocess_dir}", f"--out {score_dir}"]
-        subprocess.run(f"python score_introgressions.py {' '.join(score_flags)}", shell=True, check=True)
+        subprocess.run(
+            f"python score_introgressions.py {' '.join(score_flags)}", shell=True, check=True
+        )
     print("Introgressions analysis complete.")
     return
 
 
 def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_dir):
     # Warn user if output directory already exists; ask permission to delete
-    if output_dir.exists():
+    if output_dir.exists() and len(list(output_dir.iterdir())) > 1:
         response = input(f"Output directory {output_dir} already exists. Do you want to delete it? (y/n): ")
         if response.lower() == 'y':
             shutil.rmtree(output_dir)
             print(f"Deleted existing output directory: {output_dir}")
         else:
-            print("Exiting without running the sweep.")
-            return
+            print("Running sweep with existing output directory. Results may be overwritten.")
 
     thresholds = [
         0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5,
@@ -160,20 +174,20 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
     ]
 
     for thr in thresholds:
-        thr_call_flags = call_flags.copy()
-        thr_postprocess_flags = postprocess_flags.copy()
-        thr_score_flags = score_flags.copy()
+        thr_call_flags = call_flags.copy() if call_flags else None
+        thr_postprocess_flags = postprocess_flags.copy() if postprocess_flags else None
+        thr_score_flags = score_flags.copy() if score_flags else None
 
         call_dir = output_dir / f"{output_dir.name}_{thr}"
         call_dir.mkdir(parents=True, exist_ok=True)
 
         # Build the command to run the pipeline for this threshold
         cmd = []
+        postprocess_dir = call_dir / "postprocessed"
         if thr_call_flags:
             thr_call_flags += [f"--out {call_dir}", f"--thr {thr}"]
             cmd += [f"python call_introgressions.py {' '.join(thr_call_flags)}"]
         if thr_postprocess_flags:
-            postprocess_dir = call_dir / "postprocessed"
             thr_postprocess_flags += [f"--bed {call_dir}", f"--out {postprocess_dir}"]
             cmd += [f"python postprocess_introgressions.py {' '.join(thr_postprocess_flags)}"]
         if thr_score_flags:
@@ -208,10 +222,13 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
     print("All screens completed.")
 
     # Run visualization step after all thresholds are done
-    vis_cmd = f"python visualize_introgressions.py -v prc prcc prca shtmp --dir {output_dir} --how bins"
+    vis_cmd = (
+        f"python visualize_introgressions.py -v prc prcc prca shtmp --dir {output_dir} --how bins"
+    )
     subprocess.run(vis_cmd, shell=True, check=True)
     print("Sweep complete.")
     return
+
 
 if __name__ == "__main__":
     # Get config file path from command line argument
@@ -229,6 +246,8 @@ if __name__ == "__main__":
         if sys.argv[2] == "--sweep":
             run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_dir)
         else:
-            print("Unknown command. Use '--sweep' to run pipeline for various thresholds or no argument to run the pipeline with one threshold.")
+            print(
+                "Unknown command. Use '--sweep' to run pipeline for various thresholds or no argument to run the pipeline with one threshold."
+            )
     else:
         run_introgression_pipeline(call_flags, postprocess_flags, score_flags, output_dir, call_thr)
