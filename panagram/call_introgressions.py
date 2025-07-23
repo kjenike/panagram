@@ -178,7 +178,9 @@ def threshold_introgressions(pair, anchor, comp_group, threshold, row_mean_thres
         group_sims["introgression"] = (group_sims.comp_sim >= (threshold)).astype(int)
         pair_ref_group = pair[pair["group"] == "REF"].drop(columns=["group"])
         group_sims["ref_sim"] = pair_ref_group.mean(axis=0)
-        group_sims["introgression"] = ((group_sims.ref_sim < threshold) & (group_sims.comp_sim > group_sims.comp_sim.min())).astype(int)
+        group_sims["introgression"] = (
+            (group_sims.ref_sim < threshold) & (group_sims.comp_sim > group_sims.comp_sim.min())
+        ).astype(int)
     return group_sims
 
 
@@ -238,7 +240,9 @@ def visualize(pair, output_file, inverse=False, title=None, groups=None):
             aspect="auto",
         )
     else:
-        fig = px.imshow(pair, x=pair.columns, y=pair.index, aspect="auto", title=title, zmin=0, zmax=1)
+        fig = px.imshow(
+            pair, x=pair.columns, y=pair.index, aspect="auto", title=title, zmin=0, zmax=1
+        )
     fig.update_layout(
         font=dict(family="Helvetica Bold", color="black"),
         xaxis=dict(

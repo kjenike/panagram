@@ -392,9 +392,11 @@ def postprocess_introgressions():
                     bed_genome = index.genomes[accession]
                     query_file = index_dir / bed_genome.fasta
                     paf_file = paf_dir / f"{accession}_{reference_accession}.paf"
-                    futures.append(executor.submit(
-                        align_to_reference, reference_file, query_file, minimap_flags, paf_file
-                    ))
+                    futures.append(
+                        executor.submit(
+                            align_to_reference, reference_file, query_file, minimap_flags, paf_file
+                        )
+                    )
 
                 for future in as_completed(futures):
                     future.result()

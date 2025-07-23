@@ -346,7 +346,9 @@ def main():
     parser.add_argument("--ref", type=str, help="name of reference in Panagram", required=True)
     parser.add_argument("--out", type=str, help="path to folder to save all outputs", required=True)
     parser.add_argument("--vis", action="store_true", help="save visualized results")
-    parser.add_argument("--grp", type=str, help="path to groups file for heatmap visualization", default=None)
+    parser.add_argument(
+        "--grp", type=str, help="path to groups file for heatmap visualization", default=None
+    )
     parser.add_argument(
         "--bin",
         type=int,

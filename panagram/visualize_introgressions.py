@@ -56,12 +56,12 @@ def create_heatmap(distances_file, groups=None):
                 text="Jaccard Similarity",
                 side="top",  # Title above the colorbar
             ),
-            orientation="h",           # horizontal colorbar
-            x=0.3,                     # center the colorbar
+            orientation="h",  # horizontal colorbar
+            x=0.3,  # center the colorbar
             xanchor="left",
-            y=1.08,                    # move above the plot
-            len=0.7,                   # shorten the colorbar
-            thickness=20,              # make it thicker
+            y=1.08,  # move above the plot
+            len=0.7,  # shorten the colorbar
+            thickness=20,  # make it thicker
         ),
         title=dict(
             text=distances_file.stem,
@@ -91,7 +91,6 @@ def create_heatmap_runner(input_dir, groups=None):
         print(f"Visualizing {file.name}")
         create_heatmap(file, groups=groups)
     return
-
 
 
 def calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds):
@@ -304,6 +303,7 @@ def create_scored_heatmap_collage(input_dir, intro_type, how_to_score, threshold
     c.save()
     return
 
+
 # import svgwrite
 
 # def create_scored_heatmap_collage_svg(input_dir, intro_type, how_to_score, thresholds):
@@ -389,8 +389,24 @@ def main():
             raise ValueError("--how must be either 'bins' or 'overlaps'.")
 
         thresholds = [
-            0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5,
-            0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95,
+            0.1,
+            0.15,
+            0.2,
+            0.25,
+            0.3,
+            0.35,
+            0.4,
+            0.45,
+            0.5,
+            0.55,
+            0.6,
+            0.65,
+            0.7,
+            0.75,
+            0.8,
+            0.85,
+            0.9,
+            0.95,
         ]
 
         # take the first threshold path and check for introgression types

@@ -161,16 +161,34 @@ def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, outpu
 def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_dir):
     # Warn user if output directory already exists; ask permission to delete
     if output_dir.exists() and len(list(output_dir.iterdir())) > 1:
-        response = input(f"Output directory {output_dir} already exists. Do you want to delete it? (y/n): ")
-        if response.lower() == 'y':
+        response = input(
+            f"Output directory {output_dir} already exists. Do you want to delete it? (y/n): "
+        )
+        if response.lower() == "y":
             shutil.rmtree(output_dir)
             print(f"Deleted existing output directory: {output_dir}")
         else:
             print("Running sweep with existing output directory. Results may be overwritten.")
 
     thresholds = [
-        0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5,
-        0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.8,
+        0.85,
+        0.9,
+        0.95,
     ]
 
     for thr in thresholds:
