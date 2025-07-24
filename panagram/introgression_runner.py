@@ -99,6 +99,7 @@ def parse_config(config_path):
             f"--gap {post_gap}" if post_gap else None,
             f"--map {post_map}" if post_map else None,
             f"--paf {post_paf}" if post_paf else None,
+            f"--urf {ref}" if call_urf else None,
             f"--ref {ref}",
         ]
         postprocess_flags = [f for f in postprocess_flags if f]
@@ -168,6 +169,9 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
             shutil.rmtree(output_dir)
             print(f"Deleted existing output directory: {output_dir}")
         else:
+            # remove done.marker files if they exist
+            for marker in output_dir.rglob("done.marker"):
+                marker.unlink()
             print("Running sweep with existing output directory. Results may be overwritten.")
 
     thresholds = [

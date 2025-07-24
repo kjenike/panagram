@@ -314,6 +314,9 @@ def postprocess_introgressions():
     )
     parser.add_argument("--ref", type=str, help="name of reference in Panagram")
     parser.add_argument(
+        "--urf", type=str, help="specify if --urf flag was used in call_introgressions.py"
+    )
+    parser.add_argument(
         "--map",
         type=str,
         help="minimap flags to use",
@@ -366,6 +369,9 @@ def postprocess_introgressions():
 
     # perform liftover per-accession, so we can use the same results for all files
     if "lift" in actions:
+        if args.urf is not None:
+            raise ValueError("Cannot use --urf with liftover. Remove --urf flag.")
+
         if args.ref is None:
             raise ValueError("--ref must be specified for liftover.")
         reference_accession = args.ref
@@ -412,6 +418,8 @@ def postprocess_introgressions():
         bed_chr = bed_file.name.split("_")[1]
         bed_intro_type = bed_file.stem.split("_")[2]
         bed_genome = index.genomes[bed_accession]
+        if args.urf is not None:
+            bed_genome = index.genomes[args.urf]
         bed_output = output_dir / bed_file.name
 
         for action in actions:
