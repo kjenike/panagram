@@ -5,6 +5,7 @@ from scipy.ndimage import uniform_filter1d, median_filter
 import pandas as pd
 from panagram.index import Index
 import plotly.express as px
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
 def bitmap_to_bins(bitmap, binlen, omit_fixed_kmers=False):
@@ -115,6 +116,9 @@ def preprocess_pair(
             # if no target mean is provided, use the max average kmer sim. as target mean
             similarity_normalization_mean = genome_similarities[genome_similarities != 1].max()
         delta = similarity_normalization_mean - genome_similarities
+        # set delta to 0 for any accessions with means above the target mean
+        # delta[delta < 0] = 0
+
         # add delta to data and clip values that are out of bounds
         pair = pair.add(delta, axis=0).clip(0, 1)
 
@@ -126,7 +130,6 @@ def preprocess_pair(
         pair = pair.apply(
             smooth_row, axis=1, filter_type=smoothing_filter, filter_size=smoothing_filter_size
         )
-
     return pair
 
 
@@ -383,6 +386,57 @@ def run_introgression_finder(
     return
 
 
+def run_introgression_finder_worker(
+    anchor,
+    ref_genome_name,
+    chr_name,
+    comp_groups,
+    threshold,
+    bitmap_step,
+    bin_size,
+    omit_fixed_kmers,
+    using_ref_space,
+    preprocessing_args,
+    genome_similarities,
+    ref_genome_similarities,
+    render_vis,
+    output_dir,
+    index_dir,
+    group_tsv_path,
+):
+    """
+    Worker function for parallel chromosome processing.
+    Reconstructs objects inside the process to avoid pickling issues.
+    """
+
+    # Reconstruct index, genome, ref_genome, and groups inside the worker
+    index = Index(index_dir)
+    genome = index.genomes[anchor]
+    ref_genome = index.genomes[ref_genome_name] if ref_genome_name else None
+    groups = pd.read_csv(group_tsv_path, sep="\t", index_col=0)
+
+    # Call the main finder function
+    run_introgression_finder(
+        anchor,
+        genome,
+        ref_genome,
+        chr_name,
+        groups,
+        comp_groups,
+        threshold,
+        bitmap_step,
+        bin_size,
+        omit_fixed_kmers,
+        using_ref_space,
+        preprocessing_args,
+        genome_similarities,
+        ref_genome_similarities,
+        render_vis,
+        output_dir,
+    )
+    return
+
+
 def main():
     parser = argparse.ArgumentParser(description="Introgression highlighter tool.")
     parser.add_argument("--stp", type=int, default=100, help="bitmap kmer step size")
@@ -524,26 +578,34 @@ def main():
         if chromosomes is None:
             chromosomes = genome.sizes.keys()
 
-        for chr_name in chromosomes:
-            run_introgression_finder(
-                anchor,
-                genome,
-                ref_genome,
-                chr_name,
-                groups,
-                comp_groups,
-                threshold,
-                bitmap_step,
-                bin_size,
-                omit_fixed_kmers,
-                using_ref_space,
-                preprocessing_args,
-                genome_similarities,
-                ref_genome_similarities,
-                render_vis,
-                output_dir,
-            )
-
+        # Parallel execution for chromosomes
+        with ProcessPoolExecutor(max_workers=5) as executor:
+            futures = []
+            for chr_name in chromosomes:
+                futures.append(
+                    executor.submit(
+                        run_introgression_finder_worker,
+                        anchor,
+                        reference,  # ref_genome_name
+                        chr_name,
+                        loop_comp_groups,
+                        threshold,
+                        bitmap_step,
+                        bin_size,
+                        omit_fixed_kmers,
+                        using_ref_space,
+                        preprocessing_args,
+                        genome_similarities,
+                        ref_genome_similarities,
+                        render_vis,
+                        output_dir,
+                        index_dir,
+                        group_tsv,
+                    )
+                )
+            # Optionally wait for all to finish and raise exceptions if any
+            for future in as_completed(futures):
+                future.result()
     print("Done.")
     return
 
