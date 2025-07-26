@@ -202,6 +202,7 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
         x="Recall",
         y="Precision",
         color="Sample",
+        color_discrete_sequence=px.colors.qualitative.Light24,
         # markers=True,
         # text="Threshold",
         # title="Precision-Recall Curves per Sample",

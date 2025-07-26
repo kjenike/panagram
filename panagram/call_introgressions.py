@@ -90,6 +90,7 @@ def edge_tapered_row_normalization(pair, intensity=0.1):
     n_cols = pair.shape[1]
     x = np.linspace(-1, 1, n_cols)
     window = np.exp(-4 * x**2)
+
     center_boost = intensity * (window / window.max())  # high in center
 
     norm_pair = pair.copy()
@@ -111,6 +112,7 @@ def preprocess_pair(
     contrast_stretching,
 ):
     pair = pair.copy()
+    pair = pair.round(2)
     if genome_similarities is not None:
         if similarity_normalization_mean == -1:
             # if no target mean is provided, use the max average kmer sim. as target mean
@@ -120,7 +122,14 @@ def preprocess_pair(
         # delta[delta < 0] = 0
 
         # add delta to data and clip values that are out of bounds
-        pair = pair.add(delta, axis=0).clip(0, 1)
+        # pair = pair.add(delta, axis=0).clip(0, 1)
+
+        # Add delta to each row only where pair < 1
+        for idx in pair.index:
+            row = pair.loc[idx]
+            mask = row <= 0.98  # don't change bins that are already 1
+            row[mask] += delta[idx]
+            pair.loc[idx] = row.clip(0, 1)
 
     if contrast_stretching:
         pair = edge_tapered_row_normalization(pair)
