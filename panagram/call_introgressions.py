@@ -535,9 +535,13 @@ def main():
     anchors = args.anc
     if anchors is None:
         if args.grp is None:
-            raise ValueError("No anchor selected. Use either -anc or -grp to specify anchors.")
+            raise ValueError("No anchor selected. Use either --anc or --grp to specify anchors.")
         # get multiple anchors
         anchors = list(groups[groups.group.isin(args.grp)].index)
+    else:
+        # make sure anchors and groups are not both defined
+        if args.grp is not None:
+            raise ValueError("Cannot use both --anc and --grp. Use one or the other.")
 
     comp_groups = args.cmp
     # ensure every element is only in there once
@@ -551,7 +555,9 @@ def main():
     ref_genome_similarities = None
     if reference is not None:
         if "REF" not in comp_groups:
-            raise ValueError("REF must be included as a comparison group using -p if using --urf")
+            raise ValueError(
+                "REF must be included as a comparison group using --cmp if using --urf"
+            )
         ref_genome = index.genomes[reference]
         using_ref_space = True
         if args.gnm:
@@ -595,7 +601,7 @@ def main():
                     executor.submit(
                         run_introgression_finder_worker,
                         anchor,
-                        reference,  # ref_genome_name
+                        reference,
                         chr_name,
                         loop_comp_groups,
                         threshold,

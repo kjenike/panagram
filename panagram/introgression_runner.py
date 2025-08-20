@@ -5,10 +5,6 @@ import subprocess
 import time
 import yaml
 
-# TODO: fix config file saving to output directory
-# TODO: throw error if paf is not provided during sweep
-# TODO: exit if user does not want to delete existing output directory
-
 
 def parse_config(config_path):
     with config_path.open() as f:
@@ -20,11 +16,6 @@ def parse_config(config_path):
     scoring = config.get("scoring")
 
     output_dir = Path(general["output_dir_base"]) / general["output_dir_stem"]
-    output_dir.mkdir(parents=True, exist_ok=True)
-    # Copy the config file into the output directory
-    config_copy_path = output_dir / "intro_config.yaml"
-    shutil.copy(config_path, config_copy_path)
-
     index_dir = Path(general["index_dir"])
     tsv = Path(general["tsv"])
     bin_size = general["bin"]
@@ -160,19 +151,13 @@ def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, outpu
 
 
 def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_dir):
-    # Warn user if output directory already exists; ask permission to delete
-    if output_dir.exists() and len(list(output_dir.iterdir())) > 1:
-        response = input(
-            f"Output directory {output_dir} already exists. Do you want to delete it? (y/n): "
-        )
-        if response.lower() == "y":
-            shutil.rmtree(output_dir)
-            print(f"Deleted existing output directory: {output_dir}")
-        else:
-            # remove done.marker files if they exist
-            for marker in output_dir.rglob("done.marker"):
-                marker.unlink()
-            print("Running sweep with existing output directory. Results may be overwritten.")
+    # throw error if paf is not provided during sweep and the user is trying to perform liftover
+    # this is to prevent spawning multiple screens with duplicate minimap processes
+    if any(flag.startswith("--act") and "lift" in flag for flag in postprocess_flags):
+        if not any(flag.startswith("--paf") for flag in postprocess_flags):
+            raise ValueError(
+                "PAF file/folder must be provided when using liftover during a sweep. Try running the pipeline with a single threshold first to generate the PAF files, or run alignment manually and specify the PAF files."
+            )
 
     thresholds = [
         0.1,
@@ -263,6 +248,25 @@ if __name__ == "__main__":
         print(f"Config file {config_path} does not exist.")
         sys.exit(1)
     call_flags, postprocess_flags, score_flags, output_dir, call_thr = parse_config(config_path)
+
+    # Check if the output directory already exists
+    if output_dir.exists() and len(list(output_dir.iterdir())) > 1:
+        response = input(
+            f"Output directory {output_dir} already exists. Do you want to delete it? (y/n): "
+        )
+        if response.lower() == "y":
+            shutil.rmtree(output_dir)
+            print(f"Deleted existing output directory: {output_dir}")
+        else:
+            # remove done.marker files if they exist
+            for marker in output_dir.rglob("done.marker"):
+                marker.unlink()
+            print("Running pipeline with existing output directory. Results may be overwritten.")
+
+    # Copy the config file into the output directory
+    output_dir.mkdir(parents=True, exist_ok=True)
+    config_copy_path = output_dir / "intro_config.yaml"
+    shutil.copy(config_path, config_copy_path)
 
     if len(sys.argv) > 2:
         if sys.argv[2] == "--sweep":
