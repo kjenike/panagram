@@ -8,11 +8,26 @@ import plotly.express as px
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
-def bitmap_to_bins(bitmap, binlen, omit_fixed_kmers=False):
+def bitmap_to_bins(bitmap, binlen, omit_fixed_kmers=False, omit_non_hifi_kmers=True):
     # modded version of the same function found in the Index class
 
     # change index from chr position to the number of the bin the position falls in
+    # every column is the name of the accession
+    # every row is an anchor kmer's presence/absence in other accessions
     df = bitmap.set_index(bitmap.index // binlen)
+
+    if omit_non_hifi_kmers:
+        # omit unique kmers that are present in only 1 accession
+        # df = df.loc[~(df == 1).sum(axis=1).eq(1)]
+
+        # omit kmers that are not present in at least 1 HiFi accession
+        # hifi_columns = ["Solaetbc2060", "Solaetbc2063", "Solaetbc2066", "Solaetbc2072", "Saet3",
+        #                 "Solaetbc2073", "Solaetbc2074", "SolaetSID104435", "SolaetSID104440",]
+        # df = df.loc[df[hifi_columns].sum(axis=1) > 0]
+
+        # omit kmers that aren't present in the reference or the wild accessions
+        hifi_columns = ["Saet3", "Solang8", "Solins1"]
+        df = df.loc[df[hifi_columns].sum(axis=1) > 0]
 
     # remove fixed kmers shared by all members of the pangenome (i.e., rows that are all 1)
     if omit_fixed_kmers:
