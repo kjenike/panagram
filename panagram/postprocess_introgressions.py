@@ -314,9 +314,6 @@ def postprocess_introgressions():
     )
     parser.add_argument("--ref", type=str, help="name of reference in Panagram")
     parser.add_argument(
-        "--urf", type=str, help="specify if --urf flag was used in call_introgressions.py"
-    )
-    parser.add_argument(
         "--map",
         type=str,
         help="minimap flags to use",
@@ -369,9 +366,6 @@ def postprocess_introgressions():
 
     # perform liftover per-accession, so we can use the same results for all files
     if "lift" in actions:
-        if args.urf is not None:
-            raise ValueError("Cannot use --urf with liftover. Remove --urf flag.")
-
         if args.ref is None:
             raise ValueError("--ref must be specified for liftover.")
         reference_accession = args.ref
@@ -418,8 +412,10 @@ def postprocess_introgressions():
         bed_chr = bed_file.name.split("_")[1]
         bed_intro_type = bed_file.stem.split("_")[2]
         bed_genome = index.genomes[bed_accession]
-        if args.urf is not None:
-            bed_genome = index.genomes[args.urf]
+        if bed_intro_type == "REF":
+            if args.ref is None:
+                raise ValueError("--ref must be specified if REF files are present.")
+            bed_genome = index.genomes[args.ref]
         bed_output = output_dir / bed_file.name
 
         for action in actions:
@@ -427,11 +423,16 @@ def postprocess_introgressions():
             # note that liftover and rmbn can produce empty bed files, so we have to check after each action
             if bed_file_is_empty(bed_file):
                 # print(f"Warning: {bed_file.name} is empty. Outputting empty postprocessed bed file.")
+                if bed_intro_type == "REFA" and action == "lift":
+                    # if file's intro type is REFA, change intro type to REF
+                    bed_intro_type = "REF"
+                    # change output file name to reflect new intro type
+                    bed_output = output_dir / f"{bed_accession}_{bed_chr}_REF.bed"
                 bed_output.touch()
                 break
 
             if action == "lift":
-                # lift - perform liftover - requires ref; paf optional
+                # lift - perform liftover (if needed) - requires ref; paf optional
                 # find paf file with the same name of the bed file
                 if paf_dir.is_dir():
                     paf_file = paf_dir / f"{bed_accession}_{reference_accession}.paf"
@@ -440,9 +441,19 @@ def postprocess_introgressions():
                 else:
                     raise ValueError("Cannot find paf file/folder. Check --paf path.")
 
-                # save bed file lifted over to reference coordinate space
-                liftover_to_reference(bed_file, paf_file, bed_output)
-                bed_file = bed_output
+                if bed_intro_type == "REFA":
+                    # if file's intro type is REFA, liftover and change intro type to REF
+                    bed_intro_type = "REF"
+                    # change output file name to reflect new intro type
+                    bed_output = output_dir / f"{bed_accession}_{bed_chr}_REF.bed"
+                    liftover_to_reference(bed_file, paf_file, bed_output)
+                    bed_file = bed_output
+
+                if bed_intro_type != "REF":
+                    # save bed file lifted over to reference coordinate space
+                    liftover_to_reference(bed_file, paf_file, bed_output)
+                    bed_file = bed_output
+
                 # bed genome is now the reference since we are in reference space
                 bed_genome = reference_genome
 

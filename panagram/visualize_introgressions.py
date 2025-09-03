@@ -190,6 +190,11 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
         # Handle division by zero (e.g., no TP or FP)
         counts_across_all_chrs["Precision"] = counts_across_all_chrs["Precision"].fillna(0)
         counts_across_all_chrs["Recall"] = counts_across_all_chrs["Recall"].fillna(0)
+        # if both precision and recall are 0, set precision to 1 for plotting
+        counts_across_all_chrs.loc[
+            (counts_across_all_chrs["Precision"] == 0) & (counts_across_all_chrs["Recall"] == 0),
+            "Precision",
+        ] = 1
         counts_across_all_chrs["Threshold"] = threshold
         counts_across_all_chrs["Sample"] = counts_across_all_chrs.index
         results.append(counts_across_all_chrs[["Sample", "Threshold", "Precision", "Recall"]])

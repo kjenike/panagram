@@ -23,6 +23,8 @@ def parse_config(config_path):
 
     call_run = calling["run"]
     call_rmf = calling["rmf"]
+    call_rmu = calling["rmu"]
+    call_ogrp = calling["ogrp"]
     call_thr = calling["thr"]
     call_stp = calling["stp"]
     call_grp = calling["grp"]
@@ -72,7 +74,10 @@ def parse_config(config_path):
             f"--trm {call_trm}" if call_trm else None,
             f"--sft {call_sft}" if call_sft else None,
             f"--ssz {call_ssz}" if call_ssz else None,
-            f"--urf {ref}" if call_urf else None,
+            f"--urf" if call_urf else None,
+            f"--rmu {' '.join(call_rmu)}" if call_rmu else None,
+            f"--ogrp {' '.join(call_ogrp)}" if call_ogrp else None,
+            f"--ref {ref}",
             "--rmf" if call_rmf else None,
             "--cst" if call_cst else None,
             "--isc" if call_isc else None,
@@ -90,7 +95,6 @@ def parse_config(config_path):
             f"--gap {post_gap}" if post_gap else None,
             f"--map {post_map}" if post_map else None,
             f"--paf {post_paf}" if post_paf else None,
-            f"--urf {ref}" if call_urf else None,
             f"--ref {ref}",
         ]
         postprocess_flags = [f for f in postprocess_flags if f]
@@ -153,7 +157,9 @@ def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, outpu
 def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_dir):
     # throw error if paf is not provided during sweep and the user is trying to perform liftover
     # this is to prevent spawning multiple screens with duplicate minimap processes
-    if any(flag.startswith("--act") and "lift" in flag for flag in postprocess_flags):
+    if postprocess_flags and any(
+        flag.startswith("--act") and "lift" in flag for flag in postprocess_flags
+    ):
         if not any(flag.startswith("--paf") for flag in postprocess_flags):
             raise ValueError(
                 "PAF file/folder must be provided when using liftover during a sweep. Try running the pipeline with a single threshold first to generate the PAF files, or run alignment manually and specify the PAF files."

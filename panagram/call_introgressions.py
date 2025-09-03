@@ -8,7 +8,14 @@ import plotly.express as px
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
-def bitmap_to_bins(bitmap, binlen, omit_fixed_kmers=False, omit_non_hifi_kmers=True):
+def bitmap_to_bins(
+    bitmap,
+    binlen,
+    omit_fixed_kmers=False,
+    omit_unique_kmers=False,
+    ref_genome_name=None,
+    outgroup_accessions=None,
+):
     # modded version of the same function found in the Index class
 
     # change index from chr position to the number of the bin the position falls in
@@ -16,18 +23,14 @@ def bitmap_to_bins(bitmap, binlen, omit_fixed_kmers=False, omit_non_hifi_kmers=T
     # every row is an anchor kmer's presence/absence in other accessions
     df = bitmap.set_index(bitmap.index // binlen)
 
-    if omit_non_hifi_kmers:
-        # omit unique kmers that are present in only 1 accession
-        # df = df.loc[~(df == 1).sum(axis=1).eq(1)]
+    if omit_unique_kmers:
+        # omit kmers that aren't present in the reference or the out groups
+        kmers_to_keep_columns = outgroup_accessions
+        kmers_to_keep_columns.append(ref_genome_name)
 
-        # omit kmers that are not present in at least 1 HiFi accession
-        # hifi_columns = ["Solaetbc2060", "Solaetbc2063", "Solaetbc2066", "Solaetbc2072", "Saet3",
-        #                 "Solaetbc2073", "Solaetbc2074", "SolaetSID104435", "SolaetSID104440",]
+        # find kmers that aren't present in the reference or the wild accessions and set their reference column to 1
         # df = df.loc[df[hifi_columns].sum(axis=1) > 0]
-
-        # omit kmers that aren't present in the reference or the wild accessions
-        hifi_columns = ["Saet3", "Solang8", "Solins1"]
-        df = df.loc[df[hifi_columns].sum(axis=1) > 0]
+        df.loc[df[kmers_to_keep_columns].sum(axis=1) == 0, ref_genome_name] = 1
 
     # remove fixed kmers shared by all members of the pangenome (i.e., rows that are all 1)
     if omit_fixed_kmers:
@@ -55,7 +58,16 @@ def row_trimmed_mean(row, trim_std):
     return trimmed.mean()
 
 
-def get_genome_similarities(genome, bitmap_step, bin_size, omit_fixed_kmers, trim_std):
+def get_genome_similarities(
+    genome,
+    bitmap_step,
+    bin_size,
+    omit_fixed_kmers,
+    omit_unique_for,
+    ref_genome_name,
+    outgroup_accessions,
+    trim_std,
+):
     # For a given anchor, get its mean similarity to all other accessions across the genome
     # Note that this function calculates a trimmed mean for each accession
     # Setting trim_std to -1 will return the untrimmed mean
@@ -69,7 +81,14 @@ def get_genome_similarities(genome, bitmap_step, bin_size, omit_fixed_kmers, tri
     for chr_name in chromosomes:
         chr_size = genome.sizes[chr_name]
         chr_bitmap = genome.query(chr_name, 0, chr_size, step=bitmap_step)
-        pair = bitmap_to_bins(chr_bitmap, bin_size, omit_fixed_kmers)
+        pair = bitmap_to_bins(
+            chr_bitmap,
+            bin_size,
+            omit_fixed_kmers,
+            omit_unique_for,
+            ref_genome_name,
+            outgroup_accessions,
+        )
         all_bins.append(pair)
 
     # Concatenate all bins along columns (axis=1)
@@ -303,7 +322,6 @@ def run_introgression_finder(
     threshold,
     bitmap_step,
     bin_size,
-    omit_fixed_kmers,
     using_ref_space,
     preprocessing_args,
     genome_similarities,
@@ -311,12 +329,23 @@ def run_introgression_finder(
     render_vis,
     output_dir,
 ):
-
     # Step 1 - choose an anchor and re-create pairwise correlation matrix for it
     # get an entire chr's bitmap
     chr_size = genome.sizes[chr_name]
     chr_bitmap = genome.query(chr_name, 0, chr_size, step=bitmap_step)
-    pair = bitmap_to_bins(chr_bitmap, bin_size, omit_fixed_kmers)
+    omit_fixed_kmers = preprocessing_args.pop("omit_fixed_kmers")
+    omit_unique_kmers = preprocessing_args.pop("omit_unique_kmers")
+    ref_genome_name = preprocessing_args.pop("ref_genome_name")
+    outgroup_accessions = preprocessing_args.pop("outgroup_accessions")
+
+    pair = bitmap_to_bins(
+        chr_bitmap,
+        bin_size,
+        omit_fixed_kmers,
+        omit_unique_kmers,
+        ref_genome_name,
+        outgroup_accessions,
+    )
 
     # preprocess bitmap
     pair = preprocess_pair(pair, genome_similarities, **preprocessing_args)
@@ -332,6 +361,7 @@ def run_introgression_finder(
             # get reference bitmap
             ref_chr_size = ref_genome.sizes[chr_name]
             ref_chr_bitmap = ref_genome.query(chr_name, 0, ref_chr_size, step=bitmap_step)
+            # Note omit unique kmers doesn't make sense here since we are using REF's view
             ref_pair = bitmap_to_bins(ref_chr_bitmap, bin_size, omit_fixed_kmers)
 
             # preprocess ref_pair in the same way as pair
@@ -353,6 +383,9 @@ def run_introgression_finder(
                 pair, anchor, comp_group, threshold, row_mean_threshold
             )
             pair_for_visualization = pair
+            # change comp_group to REFA (REF in accession space) for vis and for liftover purposes
+            if comp_group == "REF":
+                comp_group = "REFA"
 
         # don't allow merged_sims to include results from REF when using_ref_space
         if len(comp_groups) > 1 and not ref_with_ref_space:
@@ -418,7 +451,6 @@ def run_introgression_finder_worker(
     threshold,
     bitmap_step,
     bin_size,
-    omit_fixed_kmers,
     using_ref_space,
     preprocessing_args,
     genome_similarities,
@@ -450,7 +482,6 @@ def run_introgression_finder_worker(
         threshold,
         bitmap_step,
         bin_size,
-        omit_fixed_kmers,
         using_ref_space,
         preprocessing_args,
         genome_similarities,
@@ -495,11 +526,14 @@ def main():
         help="perform percentile-based contrast stretching; better highlights introgressions and normalizes kmer similarities",
     )
     parser.add_argument("--rmf", action="store_true", help="remove fixed kmers from bitmap")
+    parser.add_argument("--rmu", nargs="+", help="remove unique kmers from given bitmaps")
+    parser.add_argument("--ogrp", nargs="+", help="group(s) to use as outgroup when using --rmu")
     parser.add_argument("--vis", action="store_true", help="save svgs of visualized results")
     parser.add_argument("--isc", action="store_true", help="use anchor's group to self compare")
     parser.add_argument(
-        "--urf", type=str, help="when calling in REF mode, use this accession's view"
+        "--urf", action="store_true", help="when using REF as comp group, use the reference's view"
     )
+    parser.add_argument("--ref", type=str, help="name of reference genome if using --rmu or --urf")
     parser.add_argument(
         "--anc", nargs="+", help="name of anchor(s) to mark introgressions for (default: all)"
     )
@@ -524,6 +558,8 @@ def main():
     bin_size = args.bin
     threshold = args.thr
     omit_fixed_kmers = args.rmf
+    omit_unique_for = args.rmu
+    outgroups = args.ogrp
     render_vis = args.vis
 
     group_tsv = Path(args.tsv)
@@ -536,6 +572,11 @@ def main():
     index = Index(index_dir)
     groups = pd.read_csv(group_tsv, sep="\t", index_col=0)
 
+    outgroup_accessions = []
+    if omit_unique_for is not None:
+        # get list of outgroup accessions
+        outgroup_accessions = groups[groups.group.isin(outgroups)].index.tolist()
+
     # get preprocessing arguments
     preprocessing_args = {}
     preprocessing_args["similarity_normalization_mean"] = args.gnm
@@ -544,6 +585,7 @@ def main():
     preprocessing_args["smoothing_filter"] = args.sft
     preprocessing_args["smoothing_filter_size"] = args.ssz
     preprocessing_args["contrast_stretching"] = args.cst
+    preprocessing_args["omit_fixed_kmers"] = omit_fixed_kmers
     trim_std = args.trm
 
     # determine if we have a single anchor or multiple to run
@@ -565,10 +607,10 @@ def main():
     # set up ref genome if using its view for intro calling
     ref_genome = None
     using_ref_space = False
-    reference = args.urf
+    reference = args.ref
 
     ref_genome_similarities = None
-    if reference is not None:
+    if args.urf:
         if "REF" not in comp_groups:
             raise ValueError(
                 "REF must be included as a comparison group using --cmp if using --urf"
@@ -577,8 +619,17 @@ def main():
         using_ref_space = True
         if args.gnm:
             ref_genome_similarities = get_genome_similarities(
-                ref_genome, bitmap_step, bin_size, omit_fixed_kmers, trim_std
+                ref_genome,
+                bitmap_step,
+                bin_size,
+                omit_fixed_kmers,
+                omit_unique_for=None,
+                ref_genome_name=None,
+                outgroup_accessions=None,
+                trim_std=trim_std,
             )
+    elif omit_unique_for is not None:
+        raise ValueError("Reference genome must be defined with --ref if using --rmu")
 
     output_dir = Path(args.out)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -596,12 +647,31 @@ def main():
             if anchor_group in loop_comp_groups:
                 loop_comp_groups.remove(anchor_group)
 
+        # determine whether or not omit_unique_kmers overrides using the reference view for this anchor
+        if omit_unique_for and (anchor in omit_unique_for):
+            loop_using_ref_space = False
+            preprocessing_args["omit_unique_kmers"] = True
+            preprocessing_args["ref_genome_name"] = args.ref
+            preprocessing_args["outgroup_accessions"] = outgroup_accessions
+        else:
+            loop_using_ref_space = using_ref_space
+            preprocessing_args["omit_unique_kmers"] = False
+            preprocessing_args["ref_genome_name"] = None
+            preprocessing_args["outgroup_accessions"] = None
+
         genome = index.genomes[anchor]
 
         genome_similarities = None
         if args.gnm:
             genome_similarities = get_genome_similarities(
-                genome, bitmap_step, bin_size, omit_fixed_kmers, trim_std
+                genome,
+                bitmap_step,
+                bin_size,
+                omit_fixed_kmers,
+                preprocessing_args["omit_unique_kmers"],
+                preprocessing_args["ref_genome_name"],
+                preprocessing_args["outgroup_accessions"],
+                trim_std,
             )
 
         chromosomes = args.chr
@@ -622,8 +692,7 @@ def main():
                         threshold,
                         bitmap_step,
                         bin_size,
-                        omit_fixed_kmers,
-                        using_ref_space,
+                        loop_using_ref_space,
                         preprocessing_args,
                         genome_similarities,
                         ref_genome_similarities,
