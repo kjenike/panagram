@@ -710,7 +710,67 @@ def test_apply_introgressions():
     return
 
 
+def test_apply_introgressions_with_insertion():
+    # Reference sequences
+    ref_seqs = {
+        "chr1": "AAAAAAAAAATTTTTTTTTTCCCCCCCCCC",  # length 30
+        "chr2": "GGGGGGGGGGAAAAAAAAAATTTTTTTTTT"
+    }
+
+    # Relative sequences with an insertion of length 5 at position 16 on chr1
+    insertion_pos = 16  # 0-based
+    insertion_seq = "NNNNN"
+    chr1 = ref_seqs["chr1"][:insertion_pos] + insertion_seq + ref_seqs["chr1"][insertion_pos:]
+    chr1 = chr1.lower()  # make it lowercase to distinguish
+    rel_seqs = {
+        "chr1": chr1,  # length 35
+        "chr2": "ggggggggggaaaaaaaaaatttttttttt"  # unchanged
+    }
+
+    # Build reverse mapper: maps ref index → rel index
+    reverse_mapper_chr1 = []
+    for i in range(len(ref_seqs["chr1"])):
+        if i < insertion_pos:
+            reverse_mapper_chr1.append(i)           # before insertion: same index
+        else:
+            reverse_mapper_chr1.append(i + len(insertion_seq))  # after insertion: shift by insertion length
+
+    reverse_mappers = {
+        "chr1": reverse_mapper_chr1,
+        "chr2": list(range(len(ref_seqs["chr2"])))  # unchanged
+    }
+    # All positions available (no deletions applied previously)
+    available_positions = {
+        "chr1": list(range(len(ref_seqs["chr1"]))),
+        "chr2": list(range(len(ref_seqs["chr2"])))
+    }
+
+    rng = np.random.default_rng(1)
+
+    # Apply introgressions
+    new_seqs, bed = apply_genome_wide_introgressions(
+        ref_seqs=ref_seqs,
+        rel_seqs=rel_seqs,
+        reverse_mappers=reverse_mappers,
+        available_positions=available_positions,
+        n_introgressions=3,  # just one for testing
+        size_min=3,
+        size_max=3,
+        rng=rng
+    )
+
+    # Print results
+    print("\nModified Sequences:")
+    for chrom in new_seqs:
+        print(chrom, ":", new_seqs[chrom], len(new_seqs[chrom]))
+
+    print("\nBED Entries:")
+    for b in bed:
+        print(b)
+
+
 if __name__ == "__main__":
     # test_apply_mutations()
     # test_apply_introgressions()
-    main()
+    test_apply_introgressions_with_insertion()
+    # main()
