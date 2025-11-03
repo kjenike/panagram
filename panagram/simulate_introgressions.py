@@ -33,18 +33,21 @@ def parse_fasta(path):
     return seqs
 
 
-def write_fasta(seqs, path):
+def write_fasta(seqs, path, wrap=60):
     """
-    Write sequences to a FASTA file.
+    Write sequences to a FASTA file with configurable line wrapping.
+
     Args:
         seqs (dict): keys are sequence names, values are sequences (str)
         path (str or Path): path to output FASTA file
+        wrap (int): number of bases per line (default: 60)
     """
-
     with open(path, "w") as f:
         for name, seq in seqs.items():
             f.write(f">{name}\n")
-            f.write(seq + "\n")
+            for i in range(0, len(seq), wrap):
+                f.write(seq[i:i+wrap] + "\n")
+    return
 
 
 def write_bed(bed_entries, bed_path):
@@ -95,23 +98,16 @@ def mutate_seq_with_introgressions(
     # choose introgressions on this chromosome from positions that are still valid
     start_positions = rng.choice(available_positions, size=n_introgressions, replace=False)
 
-    # sort them
-    start_positions.sort()
-
     # ensure spacing by adjusting positions
-    required_min = start_positions[0] + np.cumsum(np.concatenate(([0], introgression_lengths[:-1])))
-    start_positions = np.maximum(start_positions, required_min)
-    end_positions = start_positions + introgression_lengths
+    start_positions = position_spacer(start_positions.tolist(), introgression_lengths, length_chr)
+    end_positions = [start + length for start, length in start_positions]
+    start_positions = [start for start, length in start_positions] # unzip start positions from tuples
 
     current_index = 0
     for i in range(len(start_positions)):
 
         start_position = int(start_positions[i])
         end_position = int(end_positions[i])
-
-        # check if end position is within chromosome before mapping
-        if end_position > length_chr:
-            continue  # skip this introgression
 
         mapped_start = reverse_mapper[start_position]
         mapped_end = reverse_mapper[end_position]
@@ -132,9 +128,10 @@ def mutate_seq_with_introgressions(
         # apply introgression
         introgression = rel_seq[mapped_start:mapped_end]
         introgressed_seq.extend(introgression)
+        actual_length = len(introgression)
 
         # add an entry to bed
-        bed_entries.append((f"{chrom}\t{start_position}\t{end_position - 1}\tintrogression"))
+        bed_entries.append((f"{chrom}\t{start_position}\t{end_position - 1}\t{actual_length} bp introgression"))
 
     # add remaining sequence after last introgression
     introgressed_seq.extend(ref_seq[current_index:])
@@ -224,6 +221,38 @@ def generate_skewed_sizes(n, size_min, size_max, rng, a=0.05, b=1):
     return nums
 
 
+def position_spacer(positions, lengths, chr_size):
+    """Add space to positions to ensure no overlap given lengths and max size. Removes positions
+    that cannot fit within chromosome size.
+    Args:
+        positions (list of int): candidate positions
+        lengths (list of int): corresponding lengths
+        size_max (int): maximum size for spacing
+    Returns:
+        selected_positions (list of tuples): selected positions and lengths without overlap
+    """
+    selected_positions = []
+    current_end = -1
+    positions.sort()
+    for position, length in zip(positions, lengths):
+        if position + length > chr_size:
+            break  # skip other positions; we're at the end of the chromosome
+        if position > current_end:
+            selected_positions.append((position, length))
+            current_end = position + length
+        else:
+            # adjust position to ensure spacing
+            position = current_end + 1
+            if position + length > chr_size:
+                break  # skip other positions; we're at the end of the chromosome
+            else:
+                selected_positions.append((position, length))
+                current_end = position + length
+    if len(selected_positions) < len(positions):
+        print(f"Warning: could only fit {len(selected_positions)} / {len(positions)} mutations.", flush=True)
+    return selected_positions
+
+
 def generate_mutation_positions(
     mutation_type, n_positions, size_min, size_max, available_positions, rng
 ):
@@ -250,25 +279,9 @@ def generate_mutation_positions(
     if mutation_type == "deletion":
         # choose n_positions from available_positions with spacing of size_max
         deletion_positions = rng.choice(available_positions, size=n_positions, replace=False)
-
-        # sort them
-        deletion_positions.sort()
-
-        # ensure spacing by adjusting positions
-        required_min = deletion_positions[0] + np.cumsum(np.concatenate(([0], lengths[:-1])))
-        deletion_positions = np.maximum(deletion_positions, required_min)
-
-        # remove any deletions that don’t fully fit in chromosome
-        valid = deletion_positions + lengths <= len(available_positions)
-        if not np.all(valid):
-            deletion_positions = deletion_positions[valid]
-            print(f"Warning: could only fit {len(deletion_positions)} deletions.", flush=True)
-
-        # apply deletions and mark positions as unavailable for insertions/SNPs
-        deletion_positions = deletion_positions.tolist()
+        deletion_positions = position_spacer(deletion_positions.tolist(), lengths, len(available_positions))
         for i in range(len(deletion_positions)):
-            length = lengths[i]
-            pos = deletion_positions.pop()
+            pos, length = deletion_positions.pop()
             available_positions[pos:pos + length] = [-1]*length # mark for deletion
             mutation_positions.append((pos, length, mutation_type))
 
@@ -460,8 +473,8 @@ def main():
     parser.add_argument(
         "--rounds",
         type=int,
-        default=4,
-        help="Number of rounds to apply mutations to offspring. Will output offspring for each round (default: 4)",
+        default=5,
+        help="Number of rounds to apply mutations to offspring. Will output offspring for each round (default: 5)",
     )
 
     # introgressions (counts and size range)
@@ -577,16 +590,17 @@ def main():
     print("Writing wild relative FASTA...", flush=True)
     write_fasta(rel_seqs, output_folder / f"{reference.stem}_wildrelative.fasta")
 
-    with open(output_folder / f"{reference.stem}_wildrelative.mapper", "w") as mapf:
-        for chrom in ref_seqs:
-            mapper = reverse_mappers[chrom]
-            mapf.write(f">{chrom}_mapper\n")
-            mapf.write(" ".join(map(str, mapper)) + "\n")
-            mapf.write(f">{chrom}_available_positions\n")
-            mapf.write(" ".join(map(str, available_positions[chrom])) + "\n")
+    # write mapper and available positions for debugging
+    # with open(output_folder / f"{reference.stem}_wildrelative.mapper", "w") as mapf:
+    #     for chrom in ref_seqs:
+    #         mapper = reverse_mappers[chrom]
+    #         mapf.write(f">{chrom}_mapper\n")
+    #         mapf.write(" ".join(map(str, mapper)) + "\n")
+    #         mapf.write(f">{chrom}_available_positions\n")
+    #         mapf.write(" ".join(map(str, available_positions[chrom])) + "\n")
 
     # apply introgressions back to reference to create offspring
-    print("Applying introgressions to create generation 1 offspring...", flush=True)
+    print("Applying introgressions to create generation 0 offspring...", flush=True)
     offspring_seqs, introgressions = apply_genome_wide_introgressions(
         ref_seqs,
         rel_seqs,
@@ -599,178 +613,41 @@ def main():
     )
 
     # write offspring fasta
-    print("Writing gen. 1 introgressed offspring FASTA...", flush=True)
-    write_fasta(offspring_seqs, output_folder / f"{reference.stem}_gen1_offspring.fasta")
-    write_bed(introgressions, output_folder / f"{reference.stem}_gen1_introgressions.bed")
+    print(f"Writing mutation rate 0, generation 0 introgressed offspring FASTA...", flush=True)
+    write_fasta(offspring_seqs, output_folder / f"{reference.stem}_0_offspring.fasta")
+    write_bed(introgressions, output_folder / f"{reference.stem}_0_introgressions.bed")
+
+    sub_rate = args.mut_sub_rate
+    ins_rate = args.mut_ins_rate
+    del_rate = args.mut_del_rate
 
     parent_seqs = offspring_seqs
-    for gen in range(2, args.rounds + 1):
-        print(f"Simulating generation {gen}...", flush=True)
+    sub_rates = np.linspace(sub_rate, args.rel_sub_rate, args.rounds)
+    ins_rates = np.linspace(ins_rate, args.rel_ins_rate, args.rounds)
+    del_rates = np.linspace(del_rate, args.rel_del_rate, args.rounds)
+
+    for i in range(args.rounds):
+        print(f"Simulating mutation rate {sub_rates[i]:.2e}, generation {i+1} introgressed offspring...", flush=True)
 
         # apply mutations to offspring from previous generation
         offspring_seqs, _, _ = apply_genome_wide_mutations(
             parent_seqs,
-            sub_rate=args.mut_sub_rate,
-            ins_rate=args.mut_ins_rate,
-            del_rate=args.mut_del_rate,
+            sub_rate=sub_rates[i],
+            ins_rate=ins_rates[i],
+            del_rate=del_rates[i],
             ins_size_min=args.mut_ins_size_min,
             ins_size_max=args.mut_ins_size_max,
             del_size_min=args.mut_del_size_min,
             del_size_max=args.mut_del_size_max,
             rng=rng,
         )
+
         # save per-gen FASTA
-        write_fasta(offspring_seqs, output_folder / f"{reference.stem}_gen{gen}_offspring.fasta")
-        parent_seqs = offspring_seqs
+        write_fasta(offspring_seqs, output_folder / f"{reference.stem}_{i+1}_offspring.fasta")
 
     print("Simulation finished.")
     return
 
 
-# # Dummy generate_mutation_positions for testing
-# def generate_mutation_positions(mtype, n, size_min, size_max, available_positions, rng):
-#     if mtype == "insertion":
-#         return [(1, 2, "insertion")], available_positions
-#     elif mtype == "deletion":
-#         return [(3, 2, "deletion")], available_positions
-#     elif mtype == "snp":
-#         return [(0, 1, "snp")], available_positions
-#     return [], available_positions
-
-
-def test_apply_mutations():
-    # --- Use your function exactly as is, just override the behavior ---
-    rng = np.random.default_rng(1)
-    seq = "GATTACA"
-
-    mut_seq, reverse_map, remaining_positions = mutate_seq_with_indels_and_snps(
-        seq=seq,
-        sub_rate=1/7,   # Force 1 SNP
-        ins_rate=1/7,   # Force 1 insertion
-        del_rate=1/7,   # Force 1 deletion
-        ins_size_min=2,
-        ins_size_max=2,
-        del_size_min=2,
-        del_size_max=2,
-        rng=rng
-    )
-
-    print("Original: ", seq)
-    print("Mutated : ", mut_seq)
-    print("Reverse map:", reverse_map)
-    return
-
-
-def test_apply_introgressions():
-    # test introgressions
-    # Reference sequences
-    ref_seqs = {
-        "chr1": "AAAAAAAAAATTTTTTTTTTCCCCCCCCCC",  # length 30
-        "chr2": "GGGGGGGGGGAAAAAAAAAATTTTTTTTTT"
-    }
-
-    # Relative sequences (introgressed sequence will come from here)
-    rel_seqs = {
-        "chr1": "aaaaaaaaaattttttttttcccccccccc",
-        "chr2": "ggggggggggaaaaaaaaaatttttttttt"
-    }
-
-    # Reverse mapper (identity mapping — assume no deletions applied before)
-    reverse_mappers = {
-        "chr1": list(range(len(ref_seqs["chr1"]))),
-        "chr2": list(range(len(ref_seqs["chr2"])))
-    }
-
-    # All positions available (no deletions or insertions earlier)
-    available_positions = {
-        "chr1": list(range(len(ref_seqs["chr1"]))),
-        "chr2": list(range(len(ref_seqs["chr2"])))
-    }
-
-    rng = np.random.default_rng(1)
-
-    new_seqs, bed = apply_genome_wide_introgressions(
-        ref_seqs=ref_seqs,
-        rel_seqs=rel_seqs,
-        reverse_mappers=reverse_mappers,
-        available_positions=available_positions,
-        n_introgressions=3,
-        size_min=3,
-        size_max=3,
-        rng=rng
-    )
-
-    print("\nModified Sequences:")
-    for chrom in new_seqs:
-        print(chrom, ":", new_seqs[chrom], len(new_seqs[chrom]))
-
-    print("\nBED Entries:")
-    for b in bed:
-        print(b)
-    return
-
-
-def test_apply_introgressions_with_insertion():
-    # Reference sequences
-    ref_seqs = {
-        "chr1": "AAAAAAAAAATTTTTTTTTTCCCCCCCCCC",  # length 30
-        "chr2": "GGGGGGGGGGAAAAAAAAAATTTTTTTTTT"
-    }
-
-    # Relative sequences with an insertion of length 5 at position 16 on chr1
-    insertion_pos = 16  # 0-based
-    insertion_seq = "NNNNN"
-    chr1 = ref_seqs["chr1"][:insertion_pos] + insertion_seq + ref_seqs["chr1"][insertion_pos:]
-    chr1 = chr1.lower()  # make it lowercase to distinguish
-    rel_seqs = {
-        "chr1": chr1,  # length 35
-        "chr2": "ggggggggggaaaaaaaaaatttttttttt"  # unchanged
-    }
-
-    # Build reverse mapper: maps ref index → rel index
-    reverse_mapper_chr1 = []
-    for i in range(len(ref_seqs["chr1"])):
-        if i < insertion_pos:
-            reverse_mapper_chr1.append(i)           # before insertion: same index
-        else:
-            reverse_mapper_chr1.append(i + len(insertion_seq))  # after insertion: shift by insertion length
-
-    reverse_mappers = {
-        "chr1": reverse_mapper_chr1,
-        "chr2": list(range(len(ref_seqs["chr2"])))  # unchanged
-    }
-    # All positions available (no deletions applied previously)
-    available_positions = {
-        "chr1": list(range(len(ref_seqs["chr1"]))),
-        "chr2": list(range(len(ref_seqs["chr2"])))
-    }
-
-    rng = np.random.default_rng(1)
-
-    # Apply introgressions
-    new_seqs, bed = apply_genome_wide_introgressions(
-        ref_seqs=ref_seqs,
-        rel_seqs=rel_seqs,
-        reverse_mappers=reverse_mappers,
-        available_positions=available_positions,
-        n_introgressions=3,  # just one for testing
-        size_min=3,
-        size_max=3,
-        rng=rng
-    )
-
-    # Print results
-    print("\nModified Sequences:")
-    for chrom in new_seqs:
-        print(chrom, ":", new_seqs[chrom], len(new_seqs[chrom]))
-
-    print("\nBED Entries:")
-    for b in bed:
-        print(b)
-
-
 if __name__ == "__main__":
-    # test_apply_mutations()
-    # test_apply_introgressions()
-    test_apply_introgressions_with_insertion()
-    # main()
+    main()
