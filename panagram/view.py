@@ -14,6 +14,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import dash
 import time
+import base64
+from PIL import Image
 from Bio import Phylo
 from scipy import signal
 from dash import Dash, dcc, html, Input, Output, ctx, State, no_update
@@ -23,6 +25,8 @@ from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import pdist, squareform
 from .index import Index 
 from . import figs
+import dash_bootstrap_components as dbc
+
 
 def view(params):
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
@@ -52,15 +56,50 @@ def view(params):
             t=10  # top margin
         )
     )
+    image_path = '/home/kjenike1/scratch4-mschatz1/kjenike/PANAGRAM/panagram/panagram/assets/panagram.png'
+    pil_img = Image.open(image_path)
+    def b64_image(image_filename):
+        with open(image_filename, 'rb') as f:
+            image = f.read()
+        return 'data:image/png;base64,' + base64.b64encode(image).decode('utf-8')
 
     whole_genome_hists_fig   = figs.read_genome_comp(index,anchor_name) #TODO update on anchor change
+    whole_genome_hists_fig.update_layout(
+            hoverlabel=dict(
+                bgcolor="white",
+                font_size=35,
+                font_family="Balto"
+                ),
+            title=dict(
+                text="K-mer conservation per chromosome",
+                x=0.5
+                ),
+            font=dict(
+                size=25,
+                family="Balto"),
+            )
     all_genomes_dend_fig     = figs.make_all_genome_dend(index) 
+    all_genomes_dend_fig.update_layout(
+            hoverlabel=dict(
+                bgcolor="white",
+                font_size=35,
+                font_family="Balto"
+                ),
+            font=dict(
+                size=30,
+                family="Balto"))
     pangenome_comp_fig       = figs.read_pangenome_comp(index)  
+    pangenome_comp_fig.update_layout(
+            hoverlabel=dict(
+                bgcolor="white",
+                font_size=35,
+                font_family="Balto"
+                ))
 
     chrs = index.chrs.loc[anchor_name].index[0] #"chr1"
 
     config = {"toImageButtonOptions" : {"format" : "svg", "width" : None, "height" : None} , "scrollZoom": False}
-    tab_style = {"background-color": "lightgrey", "font-size": 36}
+    #tab_style = {"background-color": "lightgrey", "font-size": 36}
 
     #Annotation tab info 
     PANGENOME_TAB = [
@@ -91,23 +130,30 @@ def view(params):
     #def render_anchor_tab():
     #    return 
     ANCHOR_TAB = [
-            html.Div(children=[
-                    html.I("Anchor genome " + anchor_name, id="anchor_labels"),
-                    html.Br(),
+            #html.Div(children=[
+                    #html.I("Anchor genome " + anchor_name, id="anchor_labels"),
+                    
+                    #html.Br(),
                     #html.Label('Select a chromosome: '),
                     #dcc.Dropdown(chrs_list[anchor_name], chrs, style=dict(width='40%', height='110%', verticalAlign="middle", ), id="chr_select_dropdown"),
-                    html.Br(),
-                ], style={'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 'font-size':'24px', 'textAlign': 'left', "border":"2px grey solid", }),
-            html.Div(className="w3-third",children=[
-                dcc.Graph(id="gene_content", config=config), #gene_content_fig)
-            ],), 
-            html.Div(className="w3-third",children=[
-                dcc.Graph(id="genes_per_chr",
-                config=config)
+            #        html.Br(),
+            #    ], style={'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 'font-size':'24px', 'textAlign': 'left', "border":"2px grey solid", }),
+            html.Div(className="w3-threequarter",children=[
+                dcc.Graph(id="genome_umap", config=config, style={"font-size": 30, "height" : 900}) #, figure = avg_kmer_per_chr_fig
             ],),
-            html.Div(className="w3-third",children=[
-                dcc.Graph(id="avg_kmer_chr", config=config) #, figure = avg_kmer_per_chr_fig
+            html.Div(className="w3-quarter",children=[
+                dcc.Graph(id="genome_umap_hist", config=config, style={"font-size": 30, "height" : 900}) #, figure = avg_kmer_per_chr_fig
             ],),
+            #html.Div(className="w3-quarter",children=[
+            #    dcc.Graph(id="gene_content", config=config, style={"font-size": 30, "height" : 900}), #gene_content_fig)
+            #],), 
+            #html.Div(className="w3-quarter",children=[
+            #    dcc.Graph(id="genes_per_chr",
+            #    config=config)
+            #],),
+            #html.Div(className="w3-quarter",children=[
+            #    dcc.Graph(id="avg_kmer_chr", config=config) #, figure = avg_kmer_per_chr_fig
+            #],),
             html.Div(className="w3-threequarter",children=[
                 dcc.Graph(id="all_chromosomes", config=config, style={"height" : index[anchor_name].chr_count*250})
             ]),
@@ -123,42 +169,52 @@ def view(params):
     #    return [
     CHROMOSOME_TAB = [
         html.Div(children=[ #summary 
+            html.Div(className="w3-threequarter", children=[
+                    dcc.Graph(id="Umap",
+                        config=config,
+                        style={"height": 800, "font-size": 30}),
+                ]),
+            html.Div(className="w3-quarter", children=[
+                    dcc.Graph(id="Umap_genome_hist",
+                        config=config,
+                        style={"height": 800, "font-size": 30}),
+                ]),
             html.Div(className="w3-container", children=[
                     #left figure
-                    dcc.Graph(id="chromosome", config=config, style={"font-size": 20, "height" : 350})
+                    dcc.Graph(id="chromosome", config=config, style={"font-size": 30, "height" : 350})
             ])
         ]),
 
         html.Div(children=[ 
             html.Div(className="w3-container", children=[
                 dcc.Graph(id="primary", config=config, 
-                    style={"height": 1000,  "font-size": 20})
+                    style={"height": 1000,  "font-size": 30})
             ])
         ]),
 
         html.Div(children=[
             html.Div(className="w3-container", children=[
-                #html.Div(className="w3-third", children=[
-                #    dcc.Graph(id="Secondary", 
+                #html.Div(className="w3-half", children=[
+                #    dcc.Graph(id="Umap", 
                 #        config=config,
-                #        style={"height": 1000, "font-size": 20}),
+                #        style={"height": 900, "font-size": 20, "margin-right": "120px"}),
                 #]),
                 html.Div(className="w3-half", children=[
                     dcc.Graph(id="Genes", 
                         #figure=gene_content_plot, 
                         config=config,
-                        style={"font-size": 20, "height":750}),
+                        style={"font-size": 30, "height":800, "margin-left": "0px"}),
                 ]),
                 html.Div(className="w3-half", children=[
                     dcc.Graph(id="Third", 
                         #This is the histogram section
                         config=config,
-                        style={"font-size": 20, "height":750}),
+                        style={"font-size": 30, "height":800}),
                 ]),
             ])
         ])
     ]
-
+    '''
     ANNOTATION_TAB = html.Div(children=[
         html.Div(className="w3-container", children=[
 
@@ -199,58 +255,132 @@ def view(params):
                 ], style={'padding' : '1%', "height": 1250}),
             ])#"border":"2px grey solid"
         ])
-
+    '''
     app = dash.Dash(__name__,
-        external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css" ], #, dbc.themes.BOOTSTRAP],
-        url_base_pathname=params.url_base,
-        suppress_callback_exceptions=True
+            #external_stylesheets=[dbc.themes.CERULEAN],
+            external_stylesheets=["https://www.w3schools.com/w3css/4/w3.css" ], #, dbc.themes.BOOTSTRAP],
+            url_base_pathname=params.url_base,
+            suppress_callback_exceptions=True
     ) 
 
     app.layout = html.Div([
         #html.Div(id = 'parent', children = [
-        html.H1(id = 'H1', children = 'Panagram', style = {'textAlign':'center', "font-size": 64, 'padding' : '1%'}), 
+        
+        html.Div(
+            style={
+                'display': 'flex',        # Arrange children horizontally
+                'alignItems': 'center',   # Vertically center items
+                'padding': '1%',
+                'textAlign': 'left'
+            },
+            children=[
+                html.Img(
+                    src=pil_img,
+                    style={'height': '84px', 'marginRight': '20px'}
+                ),
+                html.H1(
+                    id='H1',
+                    children='Panagram',
+                    style={'fontSize': 84, 'margin': 0, 'color': '#440154','fontWeight': 'bold'}
+                )
+                ]),
         html.Div(children=[
-            html.Div(children = [
-            #html.Br(),
-                html.I("Panagram of " + str(index.ngenomes) + " genomes"),
-                html.Br(),
-                html.I("K-mer length: " + str(index.k),style={"display": "inline-block",}),
-                html.Br(),
-                #html.I("Number of bins: " + str(bins), style={'display': 'inline-block'}),
-                #html.Br(),
-                html.I("Step size: " + str(index.lowres_step), style={"display": "inline-block",}, id='step_size_out'),
-                #html.Br()
-                ], style={"display": "inline-block", 'padding-left': '1%'}),
-            html.Div(children = [
-                html.Label('Select a genome: '),
-                dcc.Dropdown(index.anchor_genomes, anchor_name, style=dict(width='110%', height='100%', verticalAlign="middle"), id="genome_select_dropdown"),
-                #html.Br(),#style=dict(width='100%', height='110%', verticalAlign="middle", )
-                html.Label('Select a chromosome: '),
-                dcc.Dropdown(index[anchor_name].chrs.index, "", style=dict(width='110%', height='100%', verticalAlign="middle", ), id="chr_select_dropdown"),
-
-                #html.Br(),
-            ], style={"display": "inline-block", 'padding-left' : '10%', 'vertical-align': 'text-bottom'}),
-            html.Div(children = [
-                html.I(anchor_name + "." + chrs + ":", id="chr_name"),
-                dcc.Input(id="Chrs_Info", debounce=True), #, placeholder=str(x_start_init) + "-" + str(x_stop_init)+ "          "
-                html.Br(),
-                html.I(id='regional_genes'), #"Genes in this region: " + str(local_genes), 
-                html.Br(),
-                html.Label('Pre-selected regions: '),
-                dcc.Dropdown(style=dict(width='100%', height='110%', verticalAlign="middle", ), id="pre_regions_dropdown"), #pre_bed_info[anchor_name], chrs + ":" + str(x_start_init) + "-" + str(x_stop_init) , 
-                
-            ], style={"display": "inline-block", 'padding-left' : '10%', 'vertical-align': 'text-bottom'}),
-
-        ], style = {'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 'font-size':'30px', "border":"2px grey solid"}),
-        #html.Div(className="loader-wrapper", children=[
-            dcc.Loading(id='loading-tabs', parent_className='loading_wrapper', type="default", className='dash-spinner', 
-                children=dcc.Tabs(id="tabs", value="pangenome", style={"font-size": 36}, children=[
-                    dcc.Tab(value="pangenome", label='Pangenome', style=  tab_style, children=PANGENOME_TAB),
-                    dcc.Tab(value="anchor", label='Anchor genome', style= tab_style, children=ANCHOR_TAB),
-                    dcc.Tab(value="chromosome", label='Chromosome', style=tab_style, children=CHROMOSOME_TAB), 
-                    dcc.Tab(value="annotation", label='Annotation', style=tab_style, children=ANNOTATION_TAB), 
-                ]), #style={'backgroundColor': 'transparent'}
+            html.Div(className="w3-row-padding",
+            children=[
+            html.Div(
+                [
+                    html.I(f"Panagram of {index.ngenomes} genomes"),
+                    html.Br(),
+                    html.I(f"K-mer length: {index.k}"),
+                    html.Br(),
+                    html.I(f"Step size: {index.lowres_step}", id='step_size_out'),
+                ],className="w3-third"),
+            html.Div(
+            [
+                html.Label('Select a genome:'),
+                dcc.Dropdown(
+                    options=[{'label': g, 'value': g} for g in index.anchor_genomes],
+                    value=anchor_name,
+                    id="genome_select_dropdown",
+                    style={"maxWidth": "300px"},
+                    clearable=False,
+                ),
+                html.Label('Select a chromosome:', style={"marginTop": "1rem"}),
+                dcc.Dropdown(
+                    options=[{'label': c, 'value': c} for c in index[anchor_name].chrs.index],
+                    value="",
+                    id="chr_select_dropdown",
+                    style={"maxWidth": "300px"},
+                    clearable=False,
+                ),
+            ],className="w3-third"
             ),
+            html.Div(
+                [
+                html.I(f"{anchor_name}.{chrs}:", id="chr_name"),
+                dcc.Input(id="Chrs_Info", debounce=True, style={"maxWidth": "300px", "marginBottom": "0.5rem"}),
+                html.I(id='regional_genes'),
+                html.Br(),
+                html.Label('Pre-selected regions:', style={"marginTop": "1rem"}),
+                dcc.Dropdown(
+                    id="pre_regions_dropdown",
+                    style={"maxWidth": "300px"},
+                    clearable=False,
+                ),
+                ],className="w3-third"
+            ),],
+            style={"marginTop": "1rem", "marginBottom": "1rem"},
+        )], style={
+            "fontSize": "30px",            # Bigger font size
+            "padding": "20px",             # Padding inside the box
+            "border": "1px solid #ccc",    # Light grey border
+            "borderRadius": "10px",        # Rounded corners
+            "boxShadow": "2px 2px 12px rgba(0,0,0,0.1)",  # Subtle shadow
+            "width": "98%",          # Optional max width for neatness
+            "boxSizing": "border-box",
+            "backgroundColor": "#eaf4fb",
+            "margin": "20px auto"          # Center horizontally with margin top/bottom
+        }),
+        #html.H1(id = 'H1', children = 'Panagram', style = {'textAlign':'left', "font-size": 64, 'padding' : '1%'}), 
+        #html.Div(children=[
+        #    html.Div(children = [
+        #        html.I("Panagram of " + str(index.ngenomes) + " genomes"),
+        #        html.Br(),
+        #        html.I("K-mer length: " + str(index.k),style={"display": "inline-block",}),
+        #        html.Br(),
+        #        html.I("Step size: " + str(index.lowres_step), style={"display": "inline-block",}, id='step_size_out'),
+        #        ], style={"display": "inline-block", 'padding-left': '1%'}),
+        #    html.Div(children = [
+        #        html.Label('Select a genome: '),
+        #        dcc.Dropdown(index.anchor_genomes, anchor_name, style=dict(width='110%', height='100%', verticalAlign="middle"), id="genome_select_dropdown"),
+        #        #html.Br(),#style=dict(width='100%', height='110%', verticalAlign="middle", )
+        #        html.Label('Select a chromosome: '),
+        #        dcc.Dropdown(index[anchor_name].chrs.index, "", style=dict(width='110%', height='100%', verticalAlign="middle", ), id="chr_select_dropdown"),
+        #    ], style={"display": "inline-block", 'padding-left' : '10%', 'vertical-align': 'text-bottom'}),
+        #    html.Div(children = [
+        #        html.I(anchor_name + "." + chrs + ":", id="chr_name"),
+        #        dcc.Input(id="Chrs_Info", debounce=True), #, placeholder=str(x_start_init) + "-" + str(x_stop_init)+ "          "
+        #        html.Br(),
+        #        html.I(id='regional_genes'), #"Genes in this region: " + str(local_genes), 
+        #        html.Br(),
+        #        html.Label('Pre-selected regions: '),
+        #        dcc.Dropdown(style=dict(width='100%', height='110%', verticalAlign="middle", ), id="pre_regions_dropdown"), #pre_bed_info[anchor_name], chrs + ":" + str(x_start_init) + "-" + str(x_stop_init) , 
+        #        
+        #    ], style={"display": "inline-block", 'padding-left' : '10%', 'vertical-align': 'text-bottom'}),
+        #], style = {'padding-top' : '1%', 'padding-left' : '1%', 'padding-bottom' : '1%', 'padding-right' : '1%', 'font-size':'30px', "border":"2px grey solid"}),
+        
+        #html.Div(className="loader-wrapper", children=[
+        dcc.Loading(id='loading-tabs', parent_className='loading_wrapper', type="default", className='dash-spinner', 
+                children=dcc.Tabs(id="tabs", value="pangenome", style={"font-size": 36}, children=[
+                    dcc.Tab(value="pangenome", label='Pangenome', #style=  tab_style, 
+                        children=PANGENOME_TAB, className='custom-tab', selected_className='custom-tab--selected'),
+                    dcc.Tab(value="anchor", label='Anchor genome', #style= tab_style, 
+                        children=ANCHOR_TAB, className='custom-tab', selected_className='custom-tab--selected'),
+                    dcc.Tab(value="chromosome", label='Chromosome', #style=tab_style, 
+                        children=CHROMOSOME_TAB, className='custom-tab', selected_className='custom-tab--selected'), 
+                    #dcc.Tab(value="annotation", label='Annotation', style=tab_style, children=ANNOTATION_TAB), 
+                ], className='custom-tabs'), #style={'backgroundColor': 'transparent'}
+        ),
         #], style={'backgroundColor': 'transparent'}), #style={"maxHeight": "300vh",}),
 
         html.Div(id="tab-content"),
@@ -261,7 +391,7 @@ def view(params):
         html.Div(params.end, id='end-coord-state',style={"display" : "none"} ),    
         html.Div(id='chr-genes-state',style={"display" : "none"} ),    
         #html.Div([],id='gene-names-state',style={"display" : "none"} ),
-    ])
+    ])#,])
 
     def annotation_tab_info(file_name):
         all_avgs = []
@@ -501,12 +631,12 @@ def view(params):
             if str(cl.name) == "None":
                 this_color = "grey"
                 color.append(this_color)
-                sizes.append(5)
+                sizes.append(0)
             else:
                 #this_color = "grey"
                 this_color = color_code[tmp_name]
                 color.append(this_color)
-                sizes.append(10)
+                sizes.append(0)
         #graph_title = "Pansol Phylgenetic Tree"#create_title(virus_name, nb_genome)
         intermediate_node_color = 'rgb(100,100,100)'
         axis = dict(showline=False,
@@ -556,16 +686,17 @@ def view(params):
                       #height=1500,
                       autosize=True,
                       showlegend=True,
-                      xaxis=dict(showline=True,
+                      xaxis=dict(showline=False,#True,
                                  zeroline=False,
-                                 showgrid=True,  # To visualize the vertical lines
+                                 showgrid=False,#True,  # To visualize the vertical lines
                                  ticklen=4,
-                                 showticklabels=True,
+                                 showticklabels=False,#True,
                                  title='Branch Length',
                                  autorange=False,
                                  #range=[0, 0.1]
                                  ),
                       yaxis=axis,
+                      #yaxis_title=None,
                       hovermode='closest',
                       shapes=line_shapes,
                       plot_bgcolor='rgb(250,250,250)',
@@ -591,13 +722,170 @@ def view(params):
         #        b=10,
         #        l=10,
         #        r=10))
-        return line_shapes,annotations,node,label_legend #fig,label_legend
+        return line_shapes,annotations,node,label_legend,kmer_num #fig,label_legend
+    
+    def get_umap_genome_hist(chrom,anchor_name):
+        umap_f = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/PUMPKINS/K51/anchor/"+anchor_name+"/"+chrom+".umap.txt"
+        color,cluster_size = [],[]
+        with open(umap_f,"r") as f:
+            line = f.readline()
+            while line:
+                tmp = line.strip().split("\t")
+                cluster_size.append(int(tmp[2])-int(tmp[1]))
+                #X.append(float(tmp[4]))
+                #Y.append(float(tmp[5]))
+                color.append(int(tmp[3]))
+                #chrom_stop.append(tmp[2])
+                #chrom_start.append(tmp[1])
+                line = f.readline()
+        f.close()
+        x,y,z=[],[],[]
+
+        for i in range(0,max(color)+1):
+            x.append(i)
+            z.append(i)
+            y.append(color.count(i)*cluster_size[0])
+
+        hist_fig = go.Figure([go.Bar(x=y, y=x, marker_color=z, orientation='h',marker={'colorscale': 'Portland',})])
+        hist_fig.update_xaxes(title_text="Base pairs per cluster")
+        hist_fig.update_xaxes(type="log")
+        #hist_fig.update_layout(
+        #    title={"text":"Base pairs per cluster",
+        #        "xanchor": "center",
+        #        "x":0.5,
+        #        "y":0.85,
+        #        "yanchor": "top"
+        #        })
+        hist_fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',  font=dict(size=25),
+                hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=35,
+                    font_family="Balto"
+                    ))
+        return hist_fig
+
+    def get_umap_from_file(chrom, anchor):
+        umap_f = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/PUMPKINS/K51/anchor/"+anchor+"/"+chrom+".umap.txt"
+        X,Y,color,chrom_stop,chrom_start = [],[],[],[],[]
+        with open(umap_f,"r") as f:
+            line = f.readline()
+            while line:
+                tmp = line.strip().split("\t")
+                X.append(float(tmp[4]))
+                Y.append(float(tmp[5]))
+                color.append(int(tmp[3]))
+                chrom_stop.append(tmp[2])
+                chrom_start.append(tmp[1])
+                line = f.readline()
+        f.close()
+        #fig = make_subplots(
+        #    rows=1, cols=1,)
+        #node = dict(type='scatter',
+        #            x=X, y=Y,
+        #            #xaxis="x",yaxis="y7",
+        #            mode='markers',
+        #            marker=dict(color=color,
+        #                colorscale="Portland",        
+        #                ),
+        #            #coloraxis="coloraxis3",
+        #            #colorscale="Viridis",
+        #            #text=text,  # vignet information of each node
+        #            #hoverinfo='',
+        #            showlegend=False
+        #        )
+        hover_text = [f"Cluster: {color[i]}<br>Chromosome: {chrom}:{chrom_start[i]}-{chrom_stop[i]}"for i in range(len(X))]#<br>X: {X[i]}<br>Y: {Y[i]}" for i in range(len(X))]
+        fig = go.Figure(data=go.Scatter(x=X, y=Y,
+            mode='markers',
+            #ids=color, #hoverinfo='text',
+            hovertext=hover_text,
+            marker=dict(color=color,
+                #colorscale="Portland",
+                coloraxis="coloraxis",
+                showscale=True,
+                size=16,
+                opacity=0.7
+                ),
+            #hovertemplate="Cluster:%{z}<br>X: %{x}<br>Y: %{y}",#'<br>x:%{x}<br>y:%{y}',
+            #font=dict(size=20),
+            showlegend=False
+            ))
+        pan_cax = {
+            "colorscale":"Portland",
+            "colorbar": {
+                "title":"DBSCAN Cluster","y":0,"len":1.05,"yanchor":"bottom","title_side":"right"}
+        }
+        #fig.update_layout(font=dict(size=20))
+        fig.update_layout(
+            title={"text":"Pangenome conservation UMAP (10kbp regions)",
+                "xanchor": "center",
+                "x":0.5,
+                "y":0.85,
+                "yanchor": "top"
+                },
+            coloraxis=pan_cax,
+            plot_bgcolor='rgba(0,0,0,0)',
+            #xaxis_title=sort_by[0] + " k-mer content rank",
+            #yaxis_title="% of k-mers",
+            #margin=dict(
+            #    t=20,
+            #    b=10,
+            #    l=10,
+            #    r=10),
+            hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=35,
+                    font_family="Balto"
+                    ),
+            font=dict(
+                size=25,
+            ),
+        )
+        fig.add_vline(x=0,line_color="black")
+        fig.add_hline(y=0,line_color="black")
+        fig.update_xaxes(showticklabels=False)
+        fig.update_yaxes(showticklabels=False)
+        #fig = go.Figure(data=[go.scatter(node)])#make_subplots()
+        return fig
+
+    def read_clusters(anchor,chrom):
+        cluster_file = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/PUMPKINS/K51/anchor/"+anchor+"/"+chrom+".umap.txt"
+        data = {"x":[],"y":[],"z":[]}
+        with open(cluster_file,"r") as f:
+            line = f.readline()
+            while line:
+                tmp = line.strip().split("\t")
+                data["x"].append(int(tmp[1]))
+                data["y"].append(1)
+                data["z"].append(int(tmp[3]))
+                data["x"].append(int(tmp[1]))
+                data["y"].append(2)
+                data["z"].append(int(tmp[3]))
+                line = f.readline()
+        f.close()
+        return data
+    def get_local_info_just_one(bar_sum_regional, anchor_name, chrs):
+        #fig = make_subplots(
+        #    rows=1, cols=1,
+        #    #specs=[[{"type": "bar", "colspan": 2}, None],
+        #    #   [{"type": "bar"}, {"type": "bar"}]],
+        #    subplot_titles=("Pan-k-mers in this region" ),
+        #    vertical_spacing=0.1,
+        #)
+        x = []
+        for i in range(1,index.ngenomes+1):
+            x.append(i)
+        #y_whole = list(index.bitfreq_chrs.loc[anchor_name,chrs].loc[1:])
+        y=[(i/sum(bar_sum_regional[1:])*100) for i in bar_sum_regional[1:]]
+        data = go.Bar(x=x, y=y, marker_color=colors, showlegend=False)
+        #fig.append_trace(go.Bar(x=x, y=y_whole, marker_color=colors, showlegend=False), row=1, col=2)
+        return data 
 
     def get_local_info(bar_sum_regional, anchor_name, chrs):
         fig = make_subplots(
-            rows=2, cols=2,
-            specs=[[{"type": "bar", "colspan": 2}, None],
-               [{"type": "bar"}, {"type": "bar"}]],
+            rows=1, cols=3,
+            #specs=[[{"type": "bar", "colspan": 2}, None],
+            #   [{"type": "bar"}, {"type": "bar"}]],
             subplot_titles=("Whole chromosome",  "This region", 
                 "Genes", ), 
             vertical_spacing=0.1,
@@ -615,27 +903,35 @@ def view(params):
         #.sum(axis=1)
         
         #fig.add_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(y, y_whole)], marker_color=colors, showlegend=False), row=2, col=1)
-        fig.append_trace(go.Bar(x=x, y=y, marker_color=colors, showlegend=False), row=2, col=1)
-        fig.append_trace(go.Bar(x=x, y=y_whole, marker_color=colors, showlegend=False), row=1, col=1)
+        fig.append_trace(go.Bar(x=x, y=y, marker_color=colors, showlegend=False), row=1, col=1)
+        fig.append_trace(go.Bar(x=x, y=y_whole, marker_color=colors, showlegend=False), row=1, col=2)
         #Genes
         #y=[(i/sum(gene_comp[1:])*100) for i in gene_comp[1:]]
         #fig.add_trace(go.Bar(x=x, y=y_whole, marker_color="#7400b8", showlegend=False), row=1, col=4)
         totals = 0
         gene_comp = index[anchor_name].bitfreq_genes.loc[chrs]*100
         
-        fig.append_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(gene_comp, y_whole)], marker_color=colors, showlegend=False), row=2, col=2)
+        fig.append_trace(go.Bar(x=x, y=[a_i - b_i for a_i, b_i in zip(gene_comp, y_whole)], marker_color=colors, showlegend=False), row=1, col=3)
         #fig.update_layout(xaxis_title_text="K-mers shared in X samples", yaxis_title_text='Frequency (log)')
-        fig.update_xaxes(title_text="# of genomes", row=2, col=1)
-        fig.update_yaxes(title_text="Difference from whole chromosome", row=2, col=1)
+        fig.update_xaxes(title_text="# of genomes", row=1, col=2)
+        fig.update_yaxes(title_text="Difference from whole chromosome", row=1, col=2)
+        fig.update_yaxes(title_text="Difference from whole chromosome", row=1, col=3)
         fig.update_yaxes(title_text="Percent of k-mers", row=1, col=1)
         fig.update_yaxes(type="log", row=1, col=1)
-        fig.update_yaxes(type="log", row=2, col=1)
-        fig.update_yaxes(type="log", row=2, col=2)
-        fig.update_layout(height=1000)
-        
+        fig.update_yaxes(type="log", row=1, col=2)
+        fig.update_yaxes(type="log", row=1, col=3)
+        #fig.update_layout(height=1000)
+        fig.update_annotations(font_size=25)
+        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)',
+                hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=35,
+                    font_family="Balto"
+                    ),
+                font=dict(size=25))
         return fig
 
-    def plot_interactive(anchor_name, chrom, start_coord, end_coord, step, bitmap, pancounts, paircounts, genes):
+    def plot_interactive(bar_sum_regional,anchor_name, chrom, start_coord, end_coord, step, bitmap, pancounts, paircounts, genes):
         t0 = time.perf_counter()
 
         genes["break"] = None
@@ -646,14 +942,45 @@ def view(params):
         tmp_lst = []
         fig = make_subplots(        
             rows=4, cols=2,
-            shared_xaxes=True,
+            shared_xaxes=True,#"columns",
+            #shared_yaxes=[False, False, False, True],
             shared_yaxes="rows",
             vertical_spacing=0.01,
             horizontal_spacing=0.01,
-            row_heights=[1,4,8,8],
-            column_widths=[1,5]
-            #subplot_titles=("Ref. Sequence Position","", "",  "Conserved K-mers","" )
+            row_heights=[2,3,8,8],
+            column_widths=[2,7],
+            specs=[[{},{}],
+                [{'rowspan':2},{}],
+                [{},{}],
+                [{},{}]],
+            #shared_yaxes=True,
+            subplot_titles=("","","Pan-k-mer summary in this region","", "","","","" )
         )
+        coord_row= 1
+        anno_row = 2
+        pan_row  = 3
+        pair_row = 4
+
+        #fig.update_yaxes(title_text="Difference from whole chromosome", row=1, col=2)
+        #Now we are adding a histogram to the first two rows of column 1. This will require a rowspan 
+        hist_data = get_local_info_just_one(bar_sum_regional,anchor_name, chrom)
+        fig.add_trace(hist_data, row=anno_row,col=1)
+        fig.update_yaxes(type="log", row=anno_row, col=1,title="Frequency (log)")
+        fig.update_xaxes(domain=[0,0.195], row=anno_row, col=1) #,title="Number of samples")
+        
+        #fig.update_traces(row=anno_row, col=1, 
+        #        xaxis=dict(domain=[0, 0.9]))
+        #fig.update_layout(
+        #    yaxis=dict(
+        #        type="log",
+        #        domain=[0, 1],       # full height
+        #        #anchor="x",
+        #    ),
+        #    xaxis=dict(
+        #        domain=[0, 0.9],     # restrict to 90% of width
+        #        #anchor="y"
+        #    ),#row=anno_row,col=1
+        ##)
         #start_coord = bitmap_counts
 
         #We are adjusting the start and stop positions to account for the skipping. 
@@ -663,7 +990,7 @@ def view(params):
         #end_coord = pancnts.index[-1] + pancnts.index.step
 
         b = bitmap.sample(n=min(len(bitmap),50000))
-        tree_shapes,tree_anno,tree_nodes,tree_order = create_tree(b)
+        tree_shapes,tree_anno,tree_nodes,tree_order,perc_shared = create_tree(b)
 
         if params.order is not None:
             order = params.order
@@ -687,88 +1014,90 @@ def view(params):
         t0 = t1
         
         anno_types = index.genomes[anchor_name].gff_anno_types
-        hasexon = "exon" in anno_types
+        print(anno_types)
+        if anno_types:
+            hasexon = "exon" in anno_types
 
-        c = np.arange(len(anno_types) + (not hasexon))
-        ann_colors = np.array(px.colors.qualitative.Prism)
-        ann_colors = ann_colors[c % len(ann_colors)]
+            c = np.arange(len(anno_types) + (not hasexon))
+            ann_colors = np.array(px.colors.qualitative.Prism)
+            ann_colors = ann_colors[c % len(ann_colors)]
 
-        linewidth = 1 if hasexon else 15
-        print("WIDHT", linewidth)
+            linewidth = 1 if hasexon else 15
+            print("WIDHT", linewidth)
 
-        fig.add_trace(go.Scattergl(
-            x=gene_bounds, 
-            xaxis="x2",#yaxis="y2",
-            y=np.full(len(gene_bounds),0), 
-            line=dict(color=ann_colors[0], width=linewidth), 
-            showlegend=False,
-            text=np.repeat(gene_names, 3), 
-            hovertemplate='<br>x:%{x}<br>m:%{text}', legendgroup="group2", 
-            name="gene"), row=2, col=2)
-        fig.update_layout(clickmode='event+select')
-
-        t1 = time.perf_counter()
-        print(f"\tGene Plot {t1 - t0:0.4f} seconds")
-        t0 = t1
-
-        #ann_colors = mcp.gen_color(cmap="turbo",n=len(index.genomes[anchor_name].gff_anno_types)-1)
-        #ann_colors = np.array(["#3b528b"]+ann_colors)
-
-        anno_names = ["gene"]
-
-        anno = index.query_anno(anchor_name, chrom, start_coord, end_coord)#.set_index("type_id").sort_index()
-        anno["break"] = np.nan
-        grp = anno.groupby("type_id")
-        for t, df in anno.groupby("type_id"):
-        #for i,t in enumerate(anno_types):
-        #    df = anno.loc[t]
-            xs = df[["start","end","break"]].to_numpy().flatten()
-            ys = np.full(len(xs),-t*2)
-            name = df["type"].iloc[0]
-
-            if name == "exon":
-                linewidth = 15
-            else:
-                anno_names.append(name)
-                linewidth = 1
-
-            fig.add_trace(go.Scattergl(x=xs, y=ys, 
+            fig.add_trace(go.Scattergl(
+                x=gene_bounds, 
                 xaxis="x2",#yaxis="y2",
-                line=dict(width=linewidth,color=ann_colors[t]), 
-                name=name, 
-                #hoverinfo='name',
-                hovertemplate='<br>x:%{x}<br>m:%{text}', 
-                text=np.repeat(df["name"],3),
+                y=np.full(len(gene_bounds),0), 
+                line=dict(color=ann_colors[0], width=linewidth), 
                 showlegend=False,
-                opacity=0.7,
-                marker={"symbol":"line-ns","line_color":ann_colors[t],"line_width":1,"size":2},
-                mode="lines+markers"
-            ), row=2, col=2)
+                text=np.repeat(gene_names, 3), 
+                hovertemplate='<br>x:%{x}<br>m:%{text}', legendgroup="group2", 
+                name="gene"), row=anno_row, col=2)
+            fig.update_layout(clickmode='event+select')
 
-        #ys = np.arange(-len(ann_colors),0)+1
-        #names = anno_types[::-1]+["gene"] #anno_names[::-1]
-        #if len(ys) > 10:
-        #    n = len(ys)//10
-        #    ys = ys[::n]
-        #    names = names[::n]
-        #print(ys)
-        #print(names)
+            t1 = time.perf_counter()
+            print(f"\tGene Plot {t1 - t0:0.4f} seconds")
+            t0 = t1
 
-        ticks = index.genomes[anchor_name].anno_type_ids.reset_index()
-        ticks.columns = ["name","idx"]
-        ticks.loc[0,"name"] = "gene"
-        ticks["y"] = -ticks["idx"]
+            #ann_colors = mcp.gen_color(cmap="turbo",n=len(index.genomes[anchor_name].gff_anno_types)-1)
+            #ann_colors = np.array(["#3b528b"]+ann_colors)
 
-        if len(ticks) > 5:
-            n = len(ticks)//5
-            ticks = ticks.iloc[::n]
+            anno_names = ["gene"]
 
-        fig.update_yaxes(
-            ticktext=ticks["name"],tickvals=ticks["y"],
-            range=[-len(ann_colors)-0.5,1.5], #title="Annotation",
-            showticklabels=True,
-            row=2, col=2
-        )
+            anno = index.query_anno(anchor_name, chrom, start_coord, end_coord)#.set_index("type_id").sort_index()
+            anno["break"] = np.nan
+            grp = anno.groupby("type_id")
+            for t, df in anno.groupby("type_id"):
+            #for i,t in enumerate(anno_types):
+            #    df = anno.loc[t]
+                xs = df[["start","end","break"]].to_numpy().flatten()
+                ys = np.full(len(xs),-t*2)
+                name = df["type"].iloc[0]
+
+                if name == "exon":
+                    linewidth = 15
+                else:
+                    anno_names.append(name)
+                    linewidth = 1
+
+                fig.add_trace(go.Scattergl(x=xs, y=ys, 
+                    xaxis="x2",#yaxis="y2",
+                    line=dict(width=linewidth,color=ann_colors[t]), 
+                    name=name, 
+                    #hoverinfo='name',
+                    hovertemplate='<br>x:%{x}<br>m:%{text}', 
+                    text=np.repeat(df["name"],3),
+                    showlegend=False,
+                    opacity=0.7,
+                    marker={"symbol":"line-ns","line_color":ann_colors[t],"line_width":1,"size":2},
+                    mode="lines+markers"
+                ), row=anno_row, col=2)
+
+            #ys = np.arange(-len(ann_colors),0)+1
+            #names = anno_types[::-1]+["gene"] #anno_names[::-1]
+            #if len(ys) > 10:
+            #    n = len(ys)//10
+            #    ys = ys[::n]
+            #    names = names[::n]
+            #print(ys)
+            #print(names)
+
+            ticks = index.genomes[anchor_name].anno_type_ids.reset_index()
+            ticks.columns = ["name","idx"]
+            ticks.loc[0,"name"] = "gene"
+            ticks["y"] = -ticks["idx"]
+
+            if len(ticks) > 5:
+                n = len(ticks)//5
+                ticks = ticks.iloc[::n]
+
+            fig.update_yaxes(
+                ticktext=ticks["name"],tickvals=ticks["y"],
+                range=[-len(ann_colors)-0.5,1.5], #title="Annotation",
+                showticklabels=True,
+                row=anno_row, col=2
+            )
 
         t1 = time.perf_counter()
         print(f"\tAnno Plot {t1 - t0:0.4f} seconds")
@@ -783,7 +1112,7 @@ def view(params):
                 showlegend=False,
                 marker=dict(color='grey'), 
                 marker_line=dict(color='grey')
-            ), row=3, col=2 )
+            ), row=pan_row, col=2 )
 
         t1 = time.perf_counter()
         print(f"\tConserved k-mers (grey) {t1 - t0:0.4f} seconds")
@@ -798,7 +1127,7 @@ def view(params):
                 colorscale="viridis",
                 colorbar_title="Pan-Count"
             ), showlegend=False,opacity=0
-        ),row=3,col=2)
+        ),row=pan_row,col=2)
         
         for i in pancounts.index[1:]:
             fig.add_trace(go.Bar(x=x, y=pancounts.loc[i], name=str(i),
@@ -810,49 +1139,59 @@ def view(params):
                     line_color=colors[i-1],
                 ),
                 showlegend=False,
-            ), row=3, col=2 )
+            ), row=pan_row, col=2 )
 
         fig.update_layout(barmode='stack', bargap=0.0)
-        fig.update_xaxes(showticklabels=False, row=3, col=2)
+        fig.update_xaxes(showticklabels=False, row=pan_row, col=2)
 
         fig.add_trace(go.Heatmap(
             z=paircounts, x=paircounts.columns, y=paircounts.index, 
             xaxis="x2",#yaxis="y6",
             coloraxis="coloraxis2"
-        ), row=4, col=2 )
+        ), row=pair_row, col=2 )
         #fig.update_yaxes(anchor="y6",row=4,col=1)
         #fig.update_shapes(yref="y7",row=4,col=1)
 
         print(tree_nodes)
         print(tree_shapes)
-        fig.add_trace(tree_nodes,row=4,col=1)
+        #Now we add the clustering 
+        fig.add_trace(tree_nodes,row=pair_row,col=1) #,sharey = ax1)
         fig.update_layout(annotations=tree_anno,shapes=tree_shapes)
+        fig.update_xaxes(showticklabels=False,row=pair_row,col=1)
+        fig.update_yaxes(showticklabels=False,row=pair_row,col=1)
         #fig.add_shapes(tree_shapes,row=4,col=1)
 
         t1 = time.perf_counter()
         print(f"\tConserved kmers, non-grey {t1 - t0:0.4f} seconds")
         t0 = t1
-
+        
+        #This is where we add the UMAP
+        #umap = get_umap_from_file(chrom)
+        #fig.add_trace(umap, row=2,col=1)
+        
         #Now we add the reference sequence:
         ticks = np.linspace(start_coord, end_coord+1, 10).round().astype(int)
-        yvals = np.ones(len(ticks))
+        yvals = np.ones(len(ticks)) * 3
         fig.add_trace(go.Scattergl(
             x=ticks, y=yvals, text=ticks.astype(str), 
             xaxis="x2",#yaxis="y2",
             textposition='top center', showlegend=False, 
             mode='lines+markers+text', line=dict(color="grey"), 
-            marker = dict(size=5, symbol='line-ns')), row=1, col=2)
+            marker = dict(size=5, symbol='line-ns')), row=coord_row, col=2)
 
         t1 = time.perf_counter()
         print(f"\tFinishing touches {t1 - t0:0.4f} seconds")
         t0 = t1
 
-        fig.update_yaxes(visible=False, range=[0.9,4], row=1, col=2)
+        fig.update_yaxes(visible=False, range=[0,5], row=coord_row, col=2)
 
-        fig.update_xaxes(visible=False, title_text="Sequence position", row=1, col=2)
-        fig.update_xaxes(title_text="Sequence position", row=4, col=2)
+        fig.update_xaxes(visible=False, title_text="Sequence position", row=coord_row, col=2)
+        fig.update_xaxes(title_text="Sequence position", row=pair_row, col=2)
+        clusters = read_clusters(anchor_name,chrom) 
+        fig.add_trace(go.Heatmap(clusters,colorscale="Portland",showscale=False), row=coord_row, col=2)
+        #fig.update_traces(showscale=False)
         #fig.update_yaxes(title_text="# of k-mers", range=[0,bin_size]  , row=3, col=1)
-        fig.update_yaxes(showticklabels=True, title_text="# of k-mers", range=[0,adjusted_bin_size]  , row=3, col=2)
+        fig.update_yaxes(showticklabels=True, title_text="# of k-mers", range=[0,adjusted_bin_size]  , row=pan_row, col=2)
 
         #TODO don't use template, manually set background to white
         pan_cax = {
@@ -865,20 +1204,165 @@ def view(params):
             "colorbar": {
                 "title":"Pairwise Conservation","y":0,"len":0.35,"yanchor":"bottom","title_side":"right"}
         }
-
-        fig.update_xaxes(range=[start_coord,end_coord],row=1,col=2)
-
+        #clust_cax = {
+        #    "colorscale":"Portland",
+        #    "colorbar": {
+        #        "title":"Clusters",
+        #        "y":0,
+        #        "len":0.35,
+        #        "yanchor":"bottom",
+        #        "title_side":"right"}
+        #}
+        fig.update_xaxes(range=[start_coord,end_coord],row=coord_row,col=2)
+        fig.update_annotations(font_size=25)
         fig.update_layout(
-            font=dict(size=16),
+            font=dict(size=20),
+            plot_bgcolor='rgba(0,0,0,0)',
             coloraxis=pan_cax,
             coloraxis2=pair_cax,
+            hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=35,
+                    font_family="Balto"
+                    ),
+        #    coloraxis3=clust_cax
         )
         
+        fig.update_layout(
+                {
+                    "yaxis": {"matches": None},
+                    "yaxis2": {"matches": None},
+                    "yaxis3": {"matches": None},
+                    "yaxis4": {"matches": None},
+                    
+                    "yaxis5": {"matches": None},
+                    "yaxis6": {"matches": None},
+                    "yaxis7": {"matches": None},
+                    "yaxis8": {"matches": "y6"},
+        #            "yaxis9": {"matches": "y6"},
+                    }
+                )
+        fig.update_layout(
+                {
+                    "xaxis": {"matches": None},
+                    #"xaxis2": {"matches": None},
+                    #"xaxis3": {"matches": None},
+                    "xaxis2": {"matches": None},
+                    "xaxis3": {"matches": None},
+                    "xaxis4": {"matches": "x2"},
+                    
+                    "xaxis5": {"matches": "x2"},
+                    "xaxis6": {"matches": "x2"},
+                    "xaxis7": {"matches": None},
+                    "xaxis8": {"matches": "x2"},
+                    }
+                )
+        #fig.update_traces(row=4, col=2, secondary_y=False ) #selector=dict(type='bar'))
+        #fig.layout['yaxis7'] = fig.layout['yaxis6']
+        #for trace in fig['data']:
+        #    if trace.name == 'Bottom Right Plot':
+        #        trace.yaxis = 'y6'
+        #fig['data'][-1]['yaxis'] = 'y6'
+        #for trace in fig['data']:
+        #    if trace.yaxis == 'y7':  # y7 = bottom-right
+        #        trace.yaxis = 'y6'   # y6 = bottom-left
+        #for trace in fig['data']:
+        #    if trace.yaxis == 'y2':  # This is the bottom-right plot (based on your output)
+        #        trace.yaxis = 'y6'
+        #fig.layout.pop('yaxis2', None)
+        #fig.update_layout(
+        #        yaxis2=dict(
+        #            matches='y6',          # Force y2 to match y6
+        #            overlaying='y6',       # Put it on the same physical axis
+        #            showticklabels=False   # Avoid duplicate ticks
+        #            ))
+        #for i, trace in enumerate(fig.data):
+        #    #print(i)
+        #    #print(trace.yaxis)
+        #    if i == 16:
+        #        trace.yaxis = 'y8'
+        #    elif i == 17:
+        #        trace.yaxis = 'y8'
+        #    elif i == 18:
+        #        trace.yaxis = 'y2'
+        #    elif i == 19:
+        #        trace.yaxis = 'y2'
+        #    else:
+        #        trace.yaxis = 'y6'
+        for i, trace in enumerate(fig.data):
+            print(f"Trace {i}: {trace.name if hasattr(trace, 'name') else 'No name'}, "
+                    f"x-axis: {trace.xaxis}, y-axis: {trace.yaxis}")
+        '''
+            for attr in dir(fig.layout):
+            #if attr.startswith("yaxis") and isinstance(getattr(fig.layout, attr), go.layout.YAxis):
+            if not attr.startswith("yaxis"):
+                continue
+
+            try:
+                axis = getattr(fig.layout, attr)
+            except AttributeError:
+                continue
+            if not isinstance(axis, go.layout.YAxis):
+                continue
+            
+            if attr.startswith("yaxis"):
+                #yaxis = getattr(fig.layout, attr)
+                axis = getattr(fig.layout, attr)
+                if not isinstance(axis, go.layout.YAxis):
+                    continue
+                axis_name = attr  # e.g., 'yaxis6'
+                axis_id = axis_name[5:] or '1'  # 'yaxis' → y1, 'yaxis6' → y6
+                axis_ref = f"y{axis_id}"
+                print(f"\n🔹 {axis_name} (trace ref: {axis_ref})")
+                print(f"Type: {getattr(axis, 'type', 'not specified')}")
+
+            # Case 1: Numerical axis with defined range
+            if getattr(axis, 'type', None) in (None, 'linear', 'log'):
+                print(f"Range: {getattr(axis, 'range', 'None')}")
+        
+                # Case 2: Categorical axis
+            else: #axis.type == 'category':
+                categories = set()
+
+                # Try from layout first
+                if getattr(axis, 'categoryarray', None):
+                    categories.update(yaxis.categoryarray)
+                elif getattr(axis, 'ticktext', None):
+                    categories.update(axis.ticktext)
+
+                # Then collect from traces using this axis
+                for trace in fig.data:
+                    if trace.yaxis == axis_ref:
+                        if isinstance(trace.y, (list, tuple)):
+                            categories.update(trace.y)
+
+                print("Categories:", sorted(categories))
+        '''
+        #for i in range(2,8):
+        #    yaxis_key = "yaxis"+str(i)
+        #    yaxis = getattr(fig.layout, yaxis_key, None)#fig.layout.get("yaxis"+str(i))
+        #    if yaxis and yaxis.range:
+        #        print(f"{i} range: {yaxis.range}")
+        #    elif trace.yaxis == 'y6' and isinstance(trace.y, (list, tuple)):
+        #    else:
+        #        print(f"{i} has no range explicitly set.")
+            #for trace in fig.data:
+        #    if trace.yaxis in ('y2', 'y7'):  # these are usually assigned to row=4,col=2
+        #        trace.yaxis = 'y6'
+        #for i, trace in enumerate(fig.data):
+        #    print(f"Trace {i}: {trace.name}, uses y-axis: {trace.yaxis}")
+        print(fig.layout['yaxis6'].domain)
+
+        #for i, trace in enumerate(fig['data']):
+        #    print(f"Trace {i}: {trace.name}, uses y-axis: {trace.yaxis}")
+        #for k in fig.layout:
+        #    if k.startswith("yaxis"):
+        #        print(f"{k} → {fig.layout[k]}")
         t1 = time.perf_counter()
         print(f"\tTruly finishing touches {t1 - t0:0.4f} seconds")
         sys.stdout.flush()
         
-        return fig
+        return fig, perc_shared
 
     def make_gene_whole_chr_old(x, locs):
         z_genes = [0]*(len(x)+2)
@@ -920,80 +1404,127 @@ def view(params):
         if len(genes) > 0:
             bounds = genes["start"].to_numpy() #genes.loc[:, ["start"]].to_numpy()
             z_genes = make_gene_whole_chr(anchor_name, x, bounds)
-                
-        chr_fig = make_subplots(rows=3, cols=1, 
-            specs=[[{"type": "heatmap",}], [{"type": "heatmap",}], [{"type": "heatmap",}]],
+        
+        #Umap clusters
+        umap_data = read_clusters(anchor_name,this_chr)
+        chr_fig = make_subplots(rows=4, cols=1, 
+            specs=[[{"type": "heatmap",}],[{"type": "heatmap",}], [{"type": "heatmap",}], [{"type": "heatmap",}]],
             shared_xaxes=True,
-            subplot_titles=("K-mer and gene density accross whole chromosome", "",
+            subplot_titles=("Pan-k-mer clusters, k-mer density and gene density accross whole chromosome", "",
                 ""),
             vertical_spacing = 0.0,
+            #font=dict(
+            #    size=20,
+            #)
             #height=350,
         )
-
-        chr_fig.append_trace(go.Heatmap(x=x, z=z_9, y=y, type = 'heatmap', colorscale='magma_r', showlegend=False, showscale=False), row=1, col=1)
+        chr_fig.update_annotations(font_size=30)
+        chr_fig.append_trace(go.Heatmap(umap_data,colorscale="Portland",showscale=False, showlegend=False), row=1, col=1)
         chr_fig.append_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord, None, start_coord, end_coord, ], showlegend=False,
                        y=[0.5, 1.5, None, 0.5, 1.5, None, 1.45, 1.45 ],
                        mode='lines',
                        line_color='#1dd3b0', line_width=8), row=1, col=1)
 
-        chr_fig.append_trace(go.Heatmap(x=x, z=z_1, y=y, type = 'heatmap', colorscale='magma', showscale=False), row=2, col=1)
-        chr_fig.append_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord], showlegend=False,
-                       y=[0.5, 1.5, None, 0.5, 1.5],
+        chr_fig.append_trace(go.Heatmap(x=x, z=z_9, y=y, type = 'heatmap', colorscale='magma_r', showlegend=False, showscale=False), row=2, col=1)
+        chr_fig.append_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord, None, start_coord, end_coord, ], showlegend=False,
+                       y=[0.5, 1.5, None, 0.5, 1.5],#, None, 1.45, 1.45 ],
                        mode='lines',
                        line_color='#1dd3b0', line_width=8), row=2, col=1)
 
-        chr_fig.append_trace(go.Heatmap(x=x, z=z_genes, y=y, type = 'heatmap', colorscale='magma_r', showscale=False ), row=3, col=1)
+        chr_fig.append_trace(go.Heatmap(x=x, z=z_1, y=y, type = 'heatmap', colorscale='magma', showscale=False), row=3, col=1)
+        chr_fig.append_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord], showlegend=False,
+                       y=[0.5, 1.5, None, 0.5, 1.5],
+                       mode='lines',
+                       line_color='#1dd3b0', line_width=8), row=3, col=1)
+
+        chr_fig.append_trace(go.Heatmap(x=x, z=z_genes, y=y, type = 'heatmap', colorscale='magma_r', showscale=False ), row=4, col=1)
         chr_fig.append_trace(go.Scatter(x=[start_coord, start_coord, None, end_coord, end_coord, None, start_coord, end_coord,], showlegend=False, 
                        y=[0.5, 1.5, None, 0.5, 1.5, None, 0.55, 0.55],
                        mode='lines',
-                       line_color='#1dd3b0', line_width=8), row=3, col=1)
-        
+                       line_color='#1dd3b0', line_width=8), row=4, col=1)
+
         chr_fig.update_xaxes(fixedrange=True, range=[0,index.chrs.loc[anchor_name, this_chr]["size"]], row=1, col=1)
-        chr_fig.update_yaxes(title_text="Univ.",  range=[0.5,1.5], showticklabels=False, row=1, col=1)
+        chr_fig.update_yaxes(title_text="C.",  range=[0.5,1.5], showticklabels=False, row=1, col=1)
 
         chr_fig.update_xaxes(fixedrange=True, range=[0,index.chrs.loc[anchor_name, this_chr]["size"]], row=2, col=1)
-        chr_fig.update_yaxes(title_text="Uniq.", range=[0.5,1.5], showticklabels=False, row=2, col=1)
+        chr_fig.update_yaxes(title_text="U.",  range=[0.5,1.5], showticklabels=False, row=2, col=1)
 
-        chr_fig.update_xaxes(fixedrange=True, title_text="Sequence position", range=[0,index.chrs.loc[anchor_name, this_chr]["size"]], row=3, col=1)
+        chr_fig.update_xaxes(fixedrange=True, range=[0,index.chrs.loc[anchor_name, this_chr]["size"]], row=3, col=1)
+        chr_fig.update_yaxes(title_text="P.", range=[0.5,1.5], showticklabels=False, row=3, col=1)
 
-        chr_fig.update_yaxes(title_text="Genes", range=[0.5,1.5], showticklabels=False, row=3, col=1)
-        chr_fig.update_layout(clickmode='event+select', dragmode="select", selectdirection='h',height=350,margin=dict(b=10, l=10, r=10), font=dict(size=15))
-        
+        chr_fig.update_xaxes(fixedrange=True, title_text="Sequence position", range=[0,index.chrs.loc[anchor_name, this_chr]["size"]], row=4, col=1)
+
+        chr_fig.update_yaxes(title_text="G.", range=[0.5,1.5], showticklabels=False, row=4, col=1)
+        chr_fig.update_layout(clickmode='event+select', dragmode="select", selectdirection='h',height=350,margin=dict(b=10, l=10, r=10), font=dict(size=16))
+        chr_fig.update_layout(hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=35,
+                    font_family="Balto"
+                    ),)
         return chr_fig
 
     def plot_whole_genome(anchor_name):
         spec = []
         sub_titles = []
         h = index[anchor_name].chr_count*250
+        chr_names = list(index[anchor_name].chrs.index)
+        #print(chr_names)
         for chrom in range(index[anchor_name].chr_count): #i in range(0, num_chrs[anchor_name]):
             spec.append([{"type": "heatmap",}])
             spec.append([{"type": "heatmap",}])
             spec.append([{"type": "heatmap",}])
-            sub_titles.append(chrom)
+            spec.append([{"type": "heatmap",}])
+            sub_titles.append(chr_names[chrom])
+            sub_titles.append("")
             sub_titles.append("")
             sub_titles.append("")
         
-        wg_fig = make_subplots(rows=(3*index[anchor_name].chr_count), cols=1, 
+        wg_fig = make_subplots(rows=(4*index[anchor_name].chr_count), cols=1, 
             specs=spec, #[[{"type": "heatmap",}], [{"type": "heatmap",}], [{"type": "heatmap"}]],
             shared_xaxes=True,
             subplot_titles=sub_titles, #("K-mer and gene density accross whole chromosome", "", ""),
+            #y_title="TESTING",
             vertical_spacing = 0.0
             )
+        umap_data,zmax = anchor_umaps_per_chr(anchor_name)
         cntr = 1
         for chrom in index.chrs.loc[anchor_name].index:
             x = list(index.bitsum_bins.loc[(anchor_name, chrom)].index)
             if len(x)!=1:
-                wg_fig.append_trace(go.Heatmap(x=x, z=index.bitsum_bins.loc[(anchor_name,chrom),index.ngenomes], 
-                    y=[1]*(len(x)), type = 'heatmap', colorscale='magma_r', showlegend=False,showscale=False), row=((cntr*3)-2), col=1)
+                if chrom in umap_data.keys():
+                    wg_fig.append_trace(go.Heatmap(x=umap_data[chrom]["X"], z=umap_data[chrom]["Z"],
+                        y=[1]*(len(umap_data[chrom]["X"])), type = 'heatmap', 
+                        hovertemplate = "Coord: %{x}<br>Cluster: %{z}",
+                        colorscale='Portland', zmin=0, zmax=zmax,
+                        showlegend=False, showscale=False,),
+                        #layout=go.Layout(yaxis=dict(title=dict(text="LABELME"))),
+                        row=((cntr*4)-3), col=1)
+                    wg_fig.update_yaxes(title_text="Cluster", row=((cntr*4)-3), col=1)
+                z = index.bitsum_bins.loc[(anchor_name,chrom),index.ngenomes]
+                wg_fig.append_trace(go.Heatmap(x=x, z=index.bitsum_bins.loc[(anchor_name,chrom),index.ngenomes], hovertemplate = "Coord: %{x}<br>Universal: %{z}",
+                    y=[1]*(len(x)), type = 'heatmap', colorscale='magma_r', showlegend=False,showscale=False), row=((cntr*4)-2), col=1)
+                wg_fig.update_yaxes(title_text="Univ.", row=((cntr*4)-2), col=1)
                 wg_fig.append_trace(go.Heatmap(x=x, z=index.bitsum_bins.loc[(anchor_name,chrom), 1], 
-                    y=[1]*(len(x)), type = 'heatmap', colorscale='magma', showscale=False), row=((cntr*3)-1), col=1)
+                    y=[1]*(len(x)), type = 'heatmap', colorscale='magma', 
+                    hovertemplate = "Coord: %{x}<br>Private: %{z}", showscale=False), row=((cntr*4)-1), col=1)
+                wg_fig.update_yaxes(title_text="Priv.", row=((cntr*4)-1), col=1)
             
             if cntr == 1:
                 wg_fig.update_layout(xaxis={'side': 'top'}) 
             cntr += 1
         
-        wg_fig.update_layout(clickmode='event', plot_bgcolor='rgba(0,0,0,0)')
-        wg_fig.update_layout(height=h)
+        wg_fig.update_layout(clickmode='event', plot_bgcolor='rgba(0,0,0,0)', height=h,
+                hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=35,
+                    font_family="Balto"
+                    ),
+                font=dict(
+                    size=18,
+                    family="Balto"))
+        wg_fig.update_annotations(font_size=25)
+        wg_fig.update_yaxes(showticklabels=False)
+        #wg_fig.update_layout(height=h)
         return wg_fig
 
     def plot_gene_content(all_genes, anchor_name, chrom, start_coord, end_coord):
@@ -1059,23 +1590,26 @@ def view(params):
 
         fig.add_hline(y=uniq_avg, line_dash='dash', line_color='goldenrod')
         fig.add_hline(y=univ_avg, line_dash='dash', line_color='#440154')
+        fig.add_hline(y=0,line_color="black")
+        fig.add_vline(x=0,line_color="black")
         #fig.update_layout(height=500)
         fig.update_layout(
             title={"text":"k-mer content in individual genes",
                 "xanchor": "center",
                 "x":0.5,
-                "y":0.9,
+                "y":0.85,
                 "yanchor": "top"
                 },
             xaxis_title=sort_by[0] + " k-mer content rank",
             yaxis_title="% of k-mers",
-            margin=dict(
-                t=20,
-                b=10,
-                l=10,
-                r=10),
+            plot_bgcolor='rgba(0,0,0,0)',
+            #margin=dict(
+            #    t=20,
+            #    b=10,
+            #    l=10,
+            #    r=10),
             font=dict(
-                size=16,
+                size=20,
             ),
         )
         return fig
@@ -1152,6 +1686,115 @@ def view(params):
             ),])
 
         return fig
+    def anchor_umaps_per_chr(anchor_name):
+        data = {}
+        umap_f = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/PUMPKINS/K51/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
+        with open(umap_f,"r") as f:
+            line = f.readline()
+            zmax = 0
+            while line:
+                tmp = line.strip().split("\t")
+                this_chr = tmp[0]
+                if this_chr not in data.keys():
+                    data[this_chr] = {"X":[],"Y":[],"Z":[]}
+                data[this_chr]["X"].append(int(tmp[1]))
+                #data[this_chr]["Y"].append(float(tmp[5]))
+                this_z = int(tmp[3])
+                if this_z > zmax:
+                    zmax = this_z
+                data[this_chr]["Z"].append(this_z)
+                line = f.readline()
+            f.close()
+        return data,zmax
+
+    def make_genome_umap(anchor_name):
+        umap_f = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/PUMPKINS/K51/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
+        umap_x,umap_y,color,chroms,chrom_start,chrom_stop = [],[],[],[],[],[]
+        with open(umap_f,"r") as f:
+            line = f.readline()
+            while line:
+                tmp = line.strip().split("\t")
+                umap_x.append(float(tmp[4]))
+                umap_y.append(float(tmp[5]))
+                color.append(int(tmp[3]))
+                chroms.append(tmp[0])
+                chrom_start.append(tmp[1])
+                chrom_stop.append(tmp[2])
+                line = f.readline()
+        f.close()
+        umap_cax = {
+            "colorscale":"Portland",
+            "colorbar": {
+                "title":"DBSCAN Cluster","y":0,"len":1.0,"yanchor":"bottom","title_side":"right"}
+        }
+        hover_text = [f"Cluster: {color[i]}<br>Chromosome: {chroms[i]}:{chrom_start[i]}-{chrom_stop[i]}<br>X: {umap_x[i]}<br>Y: {umap_y[i]}" for i in range(len(umap_x))]
+        umap_fig = go.Figure(data=[(go.Scattergl(x=umap_x, y=umap_y, ids=color, hoverinfo='text',
+            hovertext=hover_text,#hovertemplate = "%{ids}: <br>Popularity: %{umap_x} </br> %{umap_y}",
+            mode='markers',
+            marker=dict(color=color,
+                #colorscale="Portland",
+                coloraxis="coloraxis",
+                showscale=True,
+                size=14,
+                opacity=0.7
+                ),))])
+        umap_fig.update_layout(plot_bgcolor='rgba(0,0,0,0)',  font=dict(size=25),coloraxis=umap_cax,)
+        umap_fig.update_layout(
+                title=dict(
+                    text="Pangenome conservation UMAP (10kbp regions)",
+                    y=0.9,
+                    x=0.5,
+                    xanchor="center",
+                    yanchor="top",
+                    font=dict(size=35)
+                    ),
+                hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=35,
+                    font_family="Balto"
+                    ))
+        umap_fig.add_vline(x=0,line_color="black")
+        umap_fig.add_hline(y=0,line_color="black")
+        
+        return umap_fig
+
+    def make_genome_umap_hist(anchor_name):
+        umap_f = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/PUMPKINS/K51/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
+        color,cluster_size = [],[]
+        with open(umap_f,"r") as f:
+            line = f.readline()
+            while line:
+                tmp = line.strip().split("\t")
+                color.append(int(tmp[3]))
+                cluster_size.append(int(tmp[2])-int(tmp[1]))
+                line = f.readline()
+        f.close()
+        x,y,z=[],[],[]
+
+        for i in range(0,max(color)+1):
+            x.append(i)
+            z.append(i)
+            y.append(color.count(i)*cluster_size[0])
+
+        hist_fig = go.Figure([go.Bar(x=y, y=x, marker_color=z,orientation='h',marker={'colorscale': 'Portland',})])
+        hist_fig.update_xaxes(title_text="Base pairs per cluster")
+        hist_fig.update_xaxes(type="log")
+        #hist_fig.update_layout(
+        #    title={"text":"Base pairs per cluster",
+        #        "xanchor": "center",
+        #        "x":0.5,
+        #        "y":0.85,
+        #        "yanchor": "top"
+        #        })
+        hist_fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',  font=dict(size=25),
+                hoverlabel=dict(
+                    bgcolor="white",
+                    font_size=35,
+                    font_family="Balto"
+                    ))
+        
+        return hist_fig
 
     def make_genes_per_chr_fig(anchor_name):
         #fig = go.Figure(data=[(rows=1, cols=1)
@@ -1192,6 +1835,76 @@ def view(params):
                     )
                 ])
             ),])
+        return fig
+    def plot_perc_shared(perc_shared, perc_shared_file):
+        df = pd.read_csv(perc_shared_file,header=None,index_col=0)#np.loadtxt(perc_shared_file, delimiter=",")
+        #print(data.loc["Pandan_hap1"][2])
+        #print(perc_shared)
+        df = df.sort_values(by=[2])
+        print(df)
+        names, data, colors = [], [], []
+
+        #for k in perc_shared.keys():
+        for row in df.iterrows():
+            k = row[0]
+            names.append(k)
+            tmp = perc_shared[k]-df.loc[k][2]
+            if tmp > 0:
+                colors.append("#00b4d8")
+            elif tmp == 0:
+                colors.append("grey")
+            else:
+                colors.append("#c1121f")
+            data.append(tmp)
+        perc_shared_fig = go.Figure([go.Bar(x=names,y=data,marker_color=colors)])
+        #perc_shared_fig = go.Figure([go.Bar(x=list(perc_shared.keys()),y=list(perc_shared.values()))])
+        perc_shared_fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', font=dict(size=25),
+                hoverlabel=dict(
+                    font_size=35,
+                    font_family="Balto"
+                ),)
+        perc_shared_fig.update_yaxes(title_text="% shared globally - % shared in this region",)
+        return perc_shared_fig
+
+    def make_anchor_tab_legends(anchor_name):
+        fig = make_subplots(rows=1, cols=1)
+        fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', font=dict(size=20) )
+        '''
+        a = np.array([[1, 0]])
+        fig = go.Figure(
+            data=[
+                go.Heatmap(
+                    
+                    z=a,
+                    colorscale="Portland",
+                    showscale=True,
+                    zmin=a.min(),
+                    zmax=a.max(),
+                    #colorbar=dict(x=0),
+                ),
+                #go.Heatmap(
+                #    z=np.zeros_like(a), # ensure there are enough points to cover the whole image
+                #    colorscale="Picnic_r",  # any colorscale that has white at 0
+                #    showscale=False,
+                #    zmid=0,
+                #),
+            ],
+        )
+        fig.update_layout(
+            #width=75, # 75 seems to work empirically, you may have to adjust the width
+            height=5,
+            xaxis_showgrid=False,
+            yaxis_showgrid=False,
+            xaxis_zeroline=False,
+            yaxis_zeroline=False,
+            xaxis_visible=False,
+            yaxis_visible=False,
+            margin=dict(l=0, r=0, b=0, t=0), # zeroing the margins gives a tighter figure, and is also important to make the other numbers work out
+        )
+        fig.update_traces(colorbar_orientation='h', selector=dict(type='heatmap'))
+        '''
+        fig.update_xaxes(visible=False)
+        fig.update_yaxes(visible=False)
         return fig
 
     def make_gene_per_genome_fig(anchor_name):
@@ -1256,13 +1969,13 @@ def view(params):
         #Output('chromosome','figure'),
         #Output('gene-names-state','children'),
         #Annotation output 
-        Output('annotation_tab_clickdata_Name', 'children'),
-        Output('annotation_tab_clickdata_X', 'children'),
-        Output('annotation_tab_clickdata_Y', 'children'),
-        Output('annotation_tab_clickdata_Color', 'children'),
-        Output('annotation_tab_clickdata_Attr', 'children'),
+        #Output('annotation_tab_clickdata_Name', 'children'),
+        #Output('annotation_tab_clickdata_X', 'children'),
+        #Output('annotation_tab_clickdata_Y', 'children'),
+        #Output('annotation_tab_clickdata_Color', 'children'),
+        #Output('annotation_tab_clickdata_Attr', 'children'),
 
-        Input('annotation_conservation', 'clickData'),
+        #Input('annotation_conservation', 'clickData'),
         Input('genome_select_dropdown', 'value'),     #pangenome, anchor, chromosome
         Input('chr_select_dropdown', 'value'),   #anchor, chromosome
         Input('all_chromosomes','relayoutData'), #anchor -> chromosome
@@ -1283,7 +1996,7 @@ def view(params):
         State('chr-genes-state', 'children'),
         #State('chromosome','figure'),
     )
-    def nav_callback(anno_clickdata, anchor_dropdown, chr_dropdown, anctab_chrs_relayout, chrtab_primary_click, chrtab_primary_relayout, chrtab_chr_select, chrtab_gene_click, user_chr_coords, pre_selected_region, anchor, chrom, start_coord, end_coord, chr_genes):
+    def nav_callback(anchor_dropdown, chr_dropdown, anctab_chrs_relayout, chrtab_primary_click, chrtab_primary_relayout, chrtab_chr_select, chrtab_gene_click, user_chr_coords, pre_selected_region, anchor, chrom, start_coord, end_coord, chr_genes):
         triggered_id = ctx.triggered_id
 
         n_skips = 100
@@ -1373,7 +2086,7 @@ def view(params):
                 end_coord = int(chrtab_primary_relayout['xaxis2.range[1]'])
         
         #Annotation tab triggered when gene is selected in annotation plot 
-        elif triggered_id == 'annotation_conservation':
+        '''elif triggered_id == 'annotation_conservation':
             this_gene_info = annotation_tab_df.loc[annotation_tab_df['Name'] == str(anno_clickdata['points'][0]['hovertext'])]
             print(this_gene_info['chr'].iloc[0])
             print(this_gene_info['start'].iloc[0])
@@ -1386,7 +2099,7 @@ def view(params):
             start_coord = this_gene_info['start'].iloc[0]
             end_coord = this_gene_info['end'].iloc[0]
             tmp_attr = "Attributes: " + str(annotation_tab_df.loc[annotation_tab_df['Name'] == str(anno_clickdata['points'][0]['hovertext']), 'attr'].iloc[0])
-
+        '''
         if start_coord is None or end_coord is None:
             start_out = end_out = no_update
             start_coord = start_init
@@ -1411,7 +2124,7 @@ def view(params):
             chrtab_chr_select,
             update_output_div(chrom, start_coord, end_coord, anchor), 
             update_out_chr(chrom, anchor), 
-            tmp_name, tmp_x, tmp_y, tmp_color, tmp_attr
+            #tmp_name, tmp_x, tmp_y, tmp_color, tmp_attr
         )
 
 
@@ -1458,16 +2171,18 @@ def view(params):
         if triggered_id == "tabs":
             return all_genomes_dend_fig, pangenome_comp_fig, make_genome_count_plot(anchor_name), plot_avgs(anchor_name), make_genome_size_plot(anchor_name)      
         if triggered_id != "selected-anchor-state":
-            return (no_update,)*5 
+            return (no_update,)*5 #KJ changed to 6 from 5 
         return all_genomes_dend_fig, pangenome_comp_fig, make_genome_count_plot(anchor_name), plot_avgs(anchor_name), make_genome_size_plot(anchor_name)#, anchor_name
 
     @app.callback(
         Output('all_chromosomes', 'figure'),          #anchor
-        Output('gene_content', 'figure'),             #anchor
-        Output('genes_per_chr', 'figure'),            #anchor
-        Output('avg_kmer_chr', 'figure'),             #anchor
+        #Output('gene_content', 'figure'),             #anchor
+        #Output('genes_per_chr', 'figure'),            #anchor
+        #Output('avg_kmer_chr', 'figure'),             #anchor
+        Output('genome_umap', 'figure'), #UMAP
+        Output('genome_umap_hist', 'figure'), #umap hist
         Output('chr_select_dropdown', 'options'),     #anchor
-        Output('anchor_labels', 'children'),          #anchor
+        #Output('anchor_labels', 'children'),          #anchor
         #Output('selected-chrom-state', 'children'),  #anchor
 
         Input('tabs', 'value'),
@@ -1475,17 +2190,21 @@ def view(params):
     )
     def anchor_callback(tab, anchor_name):
         if tab == "anchor":
-            figs = (plot_whole_genome(anchor_name), make_gene_per_genome_fig(anchor_name), make_genes_per_chr_fig(anchor_name), make_avg_kmer_fig(anchor_name),)
+            figs = (plot_whole_genome(anchor_name), #make_anchor_tab_legends(anchor_name),#make_gene_per_genome_fig(anchor_name), 
+                    #make_genes_per_chr_fig(anchor_name), make_avg_kmer_fig(anchor_name),
+                    make_genome_umap(anchor_name), make_genome_umap_hist(anchor_name))
         else:
-            figs = ({},)*4
+            figs = ({},)*3 #Changed May 21 2025
         triggered_id = ctx.triggered_id
-        return figs + (update_chromosome_list(anchor_name), anchor_name)
+        return figs + (update_chromosome_list(anchor_name),) #, anchor_name)
         
     @app.callback(
         Output('chromosome','figure'),               #chromosome
         Output('primary','figure'),                  #chromosome
         Output('Third', 'figure'),                   #chromosome
         Output('Genes', 'figure'),                   #chromosome
+        Output('Umap', 'figure'),                    #chromosome tab 
+        Output('Umap_genome_hist','figure'),
         Output('regional_genes', 'children'),        #chromosome
 
         Input('tabs', 'value'),                  #all
@@ -1501,7 +2220,7 @@ def view(params):
         #tic = time.perf_counter()
         if tab != "chromosome":
             #return ({},)*5 + (no_update,)#+ (no_update,)*4
-            return (no_update,)*5
+            return (no_update,)*7 #KJ changed from 5 to 6
 
         triggered_id = ctx.triggered_id
 
@@ -1552,8 +2271,8 @@ def view(params):
         t1 = time.perf_counter()
         print(f"transform bitmap {t1 - t0:0.4f} seconds")
         toc_tmp_1 = t1
-
-        fig1 = plot_interactive(
+        bar_sum_regional = pan.sum(axis=1)
+        fig1, perc_shared = plot_interactive(bar_sum_regional,
             anchor_name, chrom, start_coord, end_coord, n_skips,
             bitmap,pan,pair,
             all_genes.query("local"),
@@ -1561,6 +2280,11 @@ def view(params):
         toc_tmp_2 = time.perf_counter()
         print(f"main fig in {toc_tmp_2 - toc_tmp_1:0.4f} seconds")
         
+        #perc_shared_fig = plot_perc_shared(perc_shared)
+        fig2 = plot_perc_shared(perc_shared,"/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/PUMPKINS/K51/anchor/"+anchor_name+"/perc_shared."+anchor_name+".txt")
+        #UMAP figure 
+        umap_fig = get_umap_from_file(chrom,anchor_name)
+        umap_genome_hist = get_umap_genome_hist(chrom,anchor_name)
         #sys.stderr.write("Quering genes 9\n")
         #sys.stderr.write(anchor_name+"\t"+chrom+"\t"+str(start_coord) + "\t"+str(end_coord)+"\n")
         #sys.stderr.flush()
@@ -1578,8 +2302,8 @@ def view(params):
         toc_tmp_32 = time.perf_counter()
         print(f"chr fig in {toc_tmp_32 - toc_tmp_31:0.4f} seconds")
 
-        bar_sum_regional = pan.sum(axis=1) #bitmap_counts.value_counts().reindex(index.bitsum_index, fill_value=0)
-        fig2 = get_local_info(bar_sum_regional, anchor_name, chrom)  
+        #bar_sum_regional = pan.sum(axis=1) #bitmap_counts.value_counts().reindex(index.bitsum_index, fill_value=0)
+        #fig2 = get_local_info(bar_sum_regional, anchor_name, chrom)  
         toc_tmp_33 = time.perf_counter()
         print(f"fig 2 plot in {toc_tmp_33 - toc_tmp_32:0.4f} seconds")
         
@@ -1617,6 +2341,7 @@ def view(params):
         return (
             chr_fig, 
             fig1, fig2, fig4,  
+            umap_fig, umap_genome_hist,
             update_gene_locals(local_genes, chrom, start_coord, end_coord, anchor_name)
         )
 
@@ -1647,4 +2372,4 @@ def view(params):
         return_me = [{'label': i, 'value': i} for i in index.chrs.loc[anchor_name].index]
         return return_me 
 
-    app.run_server(host=params.host, port=params.port, debug=not params.ndebug)
+    app.run(host=params.host, port=params.port, debug=not params.ndebug)
