@@ -14,26 +14,6 @@ from reportlab.lib.utils import ImageReader
 import io
 
 
-def self_dotplot(seq):
-    import matplotlib.pyplot as plt
-
-    # look at a 10kb piece of a sequence
-    middle = int(len(seq) / 2)
-    seq = seq[middle - 5000 : middle + 5000]
-    length = len(seq)
-
-    matrix = np.zeros((length, length))
-
-    for i in range(length):
-        for j in range(length):
-            if seq[i] == seq[j]:
-                matrix[i, j] = 1
-
-    plt.imshow(matrix, cmap="Greys", interpolation="none")
-    plt.savefig("./test.svg")
-    return
-
-
 def create_heatmap(distances_file, groups=None):
     # visualize ground truth bins from get_distances.py by themselves
     distances_file = Path(distances_file)
@@ -111,24 +91,61 @@ def calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds):
         tn = metrics["True Negative"].sum()
         results.append({"threshold": threshold, "TP": tp, "FP": fp, "FN": fn, "TN": tn})
 
-    # plot results
     results_df = pd.DataFrame(results).fillna(0)
     results_df["precision"] = (results_df["TP"] / (results_df["TP"] + results_df["FP"])).fillna(0)
     results_df["recall"] = (results_df["TP"] / (results_df["TP"] + results_df["FN"])).fillna(0)
+    results_df["MCC"] = (
+        (results_df["TP"] * results_df["TN"] - results_df["FP"] * results_df["FN"])
+        / np.sqrt(
+            (results_df["TP"] + results_df["FP"])
+            * (results_df["TP"] + results_df["FN"])
+            * (results_df["TN"] + results_df["FP"])
+            * (results_df["TN"] + results_df["FN"])
+        )
+    ).fillna(0)
 
     # Anchor NaN points at (1,0) for plotting
-    for i in range(len(results_df)):
-        if results_df["recall"][i] == 0 and results_df["precision"][i] == 0:
-            results_df.at[i, "recall"] = 0
-            results_df.at[i, "precision"] = 1
+    # for i in range(len(results_df)):
+    #     if results_df["recall"][i] == 0 and results_df["precision"][i] == 0:
+    #         results_df.at[i, "recall"] = 0
+    #         results_df.at[i, "precision"] = 1
 
     auc_pr = np.trapz(results_df["precision"].values, results_df["recall"].values)
     print(f"PR AUC {intro_type}:", auc_pr)
+    print(f"Max MCC {intro_type}:", results_df["MCC"].max())
     return results_df
+
+
+def create_mcc_curve(input_dir, intro_type, how_to_score, thresholds):
+    results_df = calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds)
+    fig = px.line(
+        results_df,
+        x="threshold",
+        y="MCC",
+    )
+
+    fig.update_traces(textposition="top center")
+    fig.update_layout(
+        font=dict(family="Helvetica Bold", color="black"),
+        template="plotly_white",
+        xaxis_title=dict(text="Threshold"),
+        yaxis_title=dict(text="Matthews Correlation Coefficient (MCC)"),
+        xaxis=dict(range=[0, 1.01], ticks="outside", linecolor="black"),
+        yaxis=dict(range=[0, 1.01], ticks="outside", linecolor="black"),
+        width=500,
+        height=500,
+        margin=dict(l=10, r=10, t=10, b=10),  # tight layout
+    )
+    output_file = f"{input_dir}/{how_to_score}_{intro_type}_mcc.svg"
+    fig.write_image(output_file)
+    return
 
 
 def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
     results_df = calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds)
+    results_df = results_df[~((results_df["recall"] == 0) & (results_df["precision"] == 1))]
+    results_df = results_df[~((results_df["recall"] == 0) & (results_df["precision"] == 0))]
+
     fig = px.line(
         results_df,
         x="recall",
@@ -200,6 +217,29 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
         results.append(counts_across_all_chrs[["Sample", "Threshold", "Precision", "Recall"]])
 
     results = pd.concat(results, ignore_index=True)
+    # TODO: change back after testing
+    # results["Sample Type"] = [
+    #     "HiFi",
+    #     "HiFi",
+    #     "HiFi",
+    #     "HiFi",
+    #     "HiFi",
+    #     "HiFi",
+    #     "HiFi",
+    #     "ONT",
+    #     "ONT",
+    #     "ONT",
+    #     "ONT",
+    #     "ONT",
+    #     "ONT",
+    #     "ONT",
+    #     "ONT",
+    #     "HiFi",
+    #     "HiFi",
+    #     "HiFi",
+    # ]*len(thresholds)
+
+    # results = results[~((results["Recall"] == 0) & (results["Precision"] == 1))]
 
     # Plot PR curves: one line per sample
     fig = px.line(
@@ -207,6 +247,9 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
         x="Recall",
         y="Precision",
         color="Sample",
+        # color_discrete_sequence=results["Sample Type"].map(
+        #     {"HiFi": "#000000", "ONT": "#636EFA"}
+        # ),
         color_discrete_sequence=px.colors.qualitative.Light24,
         # markers=True,
         # text="Threshold",
@@ -214,8 +257,15 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
     )
     fig.update_traces(textposition="top center")
     fig.update_layout(
-        xaxis_title=dict(text="Recall", font=dict(family="Helvetica Bold", color="black")),
-        yaxis_title=dict(text="Precision", font=dict(family="Helvetica Bold", color="black")),
+        font=dict(family="Helvetica Bold", color="black"),
+        template="plotly_white",
+        xaxis_title=dict(text="Recall"),
+        yaxis_title=dict(text="Precision"),
+        xaxis=dict(range=[0.8, 1.01], ticks="outside", linecolor="black"),
+        yaxis=dict(range=[0.8, 1.01], ticks="outside", linecolor="black"),
+        width=700,
+        height=500,
+        margin=dict(l=10, r=10, t=10, b=10),  # tight layout
     )
     fig.write_image(output_file)
     return
@@ -310,48 +360,6 @@ def create_scored_heatmap_collage(input_dir, intro_type, how_to_score, threshold
     return
 
 
-# import svgwrite
-
-# def create_scored_heatmap_collage_svg(input_dir, intro_type, how_to_score, thresholds):
-#     scored_dir_name = f"scored_{how_to_score}"
-#     output_file = f"{input_dir}/{how_to_score}_{intro_type}_scored_heatmaps.svg"
-
-#     # image_batches: list of lists, each with 9 image paths
-#     image_batches = []
-#     for threshold in thresholds:
-#         threshold_path = input_dir / f"{input_dir.name}_{threshold}" / scored_dir_name / "heatmaps"
-#         threshold_heatmaps = list(threshold_path.glob(f"*_{intro_type}.svg"))
-#         threshold_heatmaps.sort()
-#         image_batches.append(threshold_heatmaps)
-
-#     # get heatmaps organized by chr instead of by threshold
-#     image_batches = list(zip(*image_batches))
-#     final_batches = []
-#     for lst in image_batches:
-#         final_batches.append(lst[:9])
-#         final_batches.append(lst[9:])
-
-#     # Setup grid
-#     grid_size = (3, 3)
-#     cell_w, cell_h = 500, 500  # adjust as needed
-#     tiled_w = cell_w * grid_size[0]
-#     tiled_h = cell_h * grid_size[1]
-
-#     # Only one page/collage per call; you can loop for multiple pages if needed
-#     for batch_idx, batch in enumerate(final_batches):
-#         dwg = svgwrite.Drawing(
-#             filename=output_file.replace(".svg", f"_{batch_idx+1}.svg"),
-#             size=(tiled_w, tiled_h),
-#             profile="full"
-#         )
-#         for idx, path in enumerate(batch):
-#             x = (idx % grid_size[0]) * cell_w
-#             y = (idx // grid_size[0]) * cell_h
-#             # Embed SVG as an image
-#             dwg.add(dwg.image(href=str(path), insert=(x, y), size=(cell_w, cell_h)))
-#         dwg.save()
-
-
 def main():
     parser = argparse.ArgumentParser(description="Introgression visualization.")
     parser.add_argument(
@@ -386,7 +394,7 @@ def main():
 
     vis_functions = args.v
     for func in vis_functions:
-        if func not in ["htmp", "shtmp", "prc", "prcc", "prca"]:
+        if func not in ["htmp", "shtmp", "prc", "prcc", "prca", "mcc"]:
             raise ValueError("Unknown visualization function specified. Check args.v.")
 
     if any(func in vis_functions for func in ("shtmp", "prc", "prcc", "prca")):
@@ -432,12 +440,15 @@ def main():
         elif func == "prcc":
             for intro_type in intro_types:
                 create_pr_curve_chromosomes(input_dir, intro_type, how_to_score, thresholds)
-        if func == "prca":
+        elif func == "prca":
             for intro_type in intro_types:
                 create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds)
         elif func == "shtmp":
             for intro_type in intro_types:
                 create_scored_heatmap_collage(input_dir, intro_type, how_to_score, thresholds)
+        elif func == "mcc":
+            for intro_type in intro_types:
+                create_mcc_curve(input_dir, intro_type, how_to_score, thresholds)
         elif func == "htmp":
             if args.grp is not None:
                 groups = pd.read_csv(args.grp, sep="\t", index_col=0)
