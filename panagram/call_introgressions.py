@@ -32,9 +32,9 @@ def fill_snps(row, gap_size):
     # Which gaps match the desired size
     match = np.where(gaps == gap_size)[0]
     for idx in match:
-            gap_start = starts[idx] + 1
-            gap_end = ends[idx]
-            arr[gap_start:gap_end] = 1
+        gap_start = starts[idx] + 1
+        gap_end = ends[idx]
+        arr[gap_start:gap_end] = 1
 
     # handle edge case where gap is at the beginning
     if arr[:gap_size].sum() == 0:
@@ -626,7 +626,6 @@ def main():
             raise ValueError("Reference genome must be provided using --ref when using --rmu.")
         # get list of outgroup accessions
         outgroup_accessions = groups[groups.group.isin(outgroups)].index.tolist()
-
 
     # get preprocessing arguments
     preprocessing_args = {}

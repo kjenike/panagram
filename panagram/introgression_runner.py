@@ -235,9 +235,7 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
     print("All screens completed.")
 
     # Run visualization step after all thresholds are done
-    vis_cmd = (
-        f"python visualize_introgressions.py -v prc prcc prca mcc shtmp --dir {output_dir} --how bins"
-    )
+    vis_cmd = f"python visualize_introgressions.py -v prc prcc prca mcc shtmp --dir {output_dir} --how bins"
     subprocess.run(vis_cmd, shell=True, check=True)
     print("Sweep complete.")
     return
