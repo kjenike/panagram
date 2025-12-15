@@ -12,7 +12,8 @@ def merge_bed_files(bed_files, bin_size, chr_length):
     # append bed files together as rows in a df to match the style of the df returned by read_text_file
     merged_df = None
     for bed_file in bed_files:
-        bed_accession = bed_file.name.split("_")[0]
+        parts = bed_file.stem.split("_")
+        bed_accession = "_".join(parts[:-2])
 
         # make sure empty bed files get an empty row
         if post.bed_file_is_empty(bed_file):
@@ -306,12 +307,22 @@ def create_scored_heatmap(pred_df, gt_df, output_file, groups=None):
     # visualize
     fig = px.imshow(
         pred_df,
-        color_continuous_scale=["red", "yellow", "gray", "green"],
+        color_continuous_scale=["#EE6677", "#CCBB44", "#BBBBBB", "#228833"],
         range_color=[2, 5],
         aspect="auto",
     )
     fig.update_layout(
-        coloraxis_showscale=False, yaxis=dict(tickmode="linear"), title=output_file.stem
+        font=dict(family="Helvetica Bold", color="black"),
+        coloraxis_showscale=False,
+        yaxis=dict(tickmode="linear", title=""),
+        title=output_file.stem,
+        xaxis=dict(
+            dtick=4000000,
+            title=dict(
+                text="Genomic Position",
+                font=dict(size=16),
+            ),
+        ),
     )
     fig.write_image(output_file)
     fig.write_image(output_file.with_suffix(".svg"))
@@ -427,8 +438,9 @@ def main():
     chrs = set()
     intro_types = set()
     for bed_file in bed_files:
-        bed_chr = bed_file.name.split("_")[1]
-        bed_intro_type = bed_file.stem.split("_")[2]
+        parts = bed_file.stem.split("_")
+        bed_intro_type = parts[-1]
+        bed_chr = parts[-2]
         chrs.add(bed_chr)
         intro_types.add(bed_intro_type)
     chrs = list(chrs)

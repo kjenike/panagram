@@ -155,14 +155,20 @@ def merge_centromere_regions(bed_df, fasta_df, bin_size):
     return bed_df
 
 
-def align_to_reference(
+def align_assemblies(
     reference_file,
     query_file,
     minimap_flags,
     output_file,
+    direction="query_to_reference",
 ):
     # Call minimap2 command - requires minimap2 to be in path
-    minimap_command = ["minimap2"] + minimap_flags + [reference_file, query_file]
+    if direction == "query_to_reference":
+        minimap_command = ["minimap2"] + minimap_flags + [reference_file, query_file]
+    elif direction == "reference_to_query":
+        minimap_command = ["minimap2"] + minimap_flags + [query_file, reference_file]
+    else:
+        raise ValueError("Direction must be 'query_to_reference' or 'reference_to_query'")
 
     # Run the command
     try:
@@ -181,7 +187,7 @@ def align_to_reference(
     return
 
 
-def liftover_to_reference(
+def liftover_coordinates(
     bed_file,
     paf_file,
     output_file,
@@ -226,8 +232,14 @@ def bed_to_bins(bed_df, bin_size, chr_length):
     intro_df = get_intro_df_template(bin_size, chr_length)
 
     # convert coordinates to bin labels
-    bed_df["Start Bin"] = (bed_df["Start"] // bin_size) * bin_size  # round down to nearest bin
-    bed_df["End Bin"] = ((bed_df["End"] // bin_size) * bin_size) + bin_size  # round up
+    # round to nearest bin - reduces number of extra bins marked as introgressions
+    bed_df["Start Bin"] = ((bed_df["Start"] / bin_size).round() * bin_size).astype(int)
+    bed_df["End Bin"] = ((bed_df["End"] / bin_size).round() * bin_size).astype(int)
+
+    # alternative rounding methods - tend to create extra bins:
+    # bed_df["Start Bin"] = (bed_df["Start"] // bin_size) * bin_size  # round down to nearest bin
+    # bed_df["End Bin"] = ((bed_df["End"] // bin_size) * bin_size) + bin_size  # round up
+
     # get all column labels between start and end bin
     bed_df["Bin Labels"] = bed_df.apply(
         lambda row: list(range(row["Start Bin"], row["End Bin"], bin_size)), axis=1
@@ -317,7 +329,7 @@ def postprocess_introgressions():
         "--map",
         type=str,
         help="minimap flags to use",
-        default="-x asm20 -c -t 3",
+        default="-x asm20 -c -t 3",  # preset for cross-species full-genome alignment
     )
     parser.add_argument(
         "--paf",
@@ -394,7 +406,7 @@ def postprocess_introgressions():
                     paf_file = paf_dir / f"{accession}_{reference_accession}.paf"
                     futures.append(
                         executor.submit(
-                            align_to_reference, reference_file, query_file, minimap_flags, paf_file
+                            align_assemblies, reference_file, query_file, minimap_flags, paf_file
                         )
                     )
 
@@ -407,10 +419,10 @@ def postprocess_introgressions():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for bed_file in bed_files:
-        # information is inferred using the bed file name
-        bed_accession = bed_file.name.split("_")[0]
-        bed_chr = bed_file.name.split("_")[1]
-        bed_intro_type = bed_file.stem.split("_")[2]
+        parts = bed_file.stem.split("_")
+        bed_intro_type = parts[-1]
+        bed_chr = parts[-2]
+        bed_accession = "_".join(parts[:-2])
         bed_genome = index.genomes[bed_accession]
         if bed_intro_type == "REF":
             if args.ref is None:
@@ -446,12 +458,12 @@ def postprocess_introgressions():
                     bed_intro_type = "REF"
                     # change output file name to reflect new intro type
                     bed_output = output_dir / f"{bed_accession}_{bed_chr}_REF.bed"
-                    liftover_to_reference(bed_file, paf_file, bed_output)
+                    liftover_coordinates(bed_file, paf_file, bed_output)
                     bed_file = bed_output
 
                 if bed_intro_type != "REF":
                     # save bed file lifted over to reference coordinate space
-                    liftover_to_reference(bed_file, paf_file, bed_output)
+                    liftover_coordinates(bed_file, paf_file, bed_output)
                     bed_file = bed_output
 
                 # bed genome is now the reference since we are in reference space
