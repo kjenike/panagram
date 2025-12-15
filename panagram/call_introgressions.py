@@ -8,6 +8,44 @@ import plotly.express as px
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
+def fill_snps(row, gap_size):
+    row_name = row.name
+    # convert row to numpy array
+    arr = row.values
+
+    # find the indices of the 1s
+    ones = np.where(arr == 1)[0]
+
+    starts = ones[:-1]
+    ends = ones[1:]
+
+    # Gap lengths
+    gaps = ends - starts - 1
+
+    # Count unique gap sizes
+    unique_gaps, counts = np.unique(gaps, return_counts=True)
+    gap_stats = pd.Series(counts, index=unique_gaps)
+
+    # Save summary statistics
+    # gap_stats.to_csv(f"./gap_stats_{row_name}.csv")
+
+    # Which gaps match the desired size
+    match = np.where(gaps == gap_size)[0]
+    for idx in match:
+            gap_start = starts[idx] + 1
+            gap_end = ends[idx]
+            arr[gap_start:gap_end] = 1
+
+    # handle edge case where gap is at the beginning
+    if arr[:gap_size].sum() == 0:
+        arr[:gap_size] = 1
+
+    # handle edge case where gap is at the end
+    if arr[-gap_size:].sum() == 0:
+        arr[-gap_size:] = 1
+    return row
+
+
 def bitmap_to_bins(
     bitmap,
     binlen,
@@ -23,13 +61,19 @@ def bitmap_to_bins(
     # every row is an anchor kmer's presence/absence in other accessions
     df = bitmap.set_index(bitmap.index // binlen)
 
+    # TODO: too slow to query bitmaps with small step sizes; use gnm and rmu instead
+    # if step_size = 1, we can search for/omit SNPs
+    # SNPs are indicated by runs of 0s of length = kmer_size within a column
+    # runs smaller than k could be from small indels
+    # k=31
+    # df = df.apply(fill_snps, gap_size=k, axis=0)
+
     if omit_unique_kmers:
         # omit kmers that aren't present in the reference or the out groups
         kmers_to_keep_columns = outgroup_accessions
         kmers_to_keep_columns.append(ref_genome_name)
 
         # find kmers that aren't present in the reference or the wild accessions and set their reference column to 1
-        # df = df.loc[df[hifi_columns].sum(axis=1) > 0]
         df.loc[df[kmers_to_keep_columns].sum(axis=1) == 0, ref_genome_name] = 1
 
     # remove fixed kmers shared by all members of the pangenome (i.e., rows that are all 1)
@@ -284,6 +328,8 @@ def visualize(pair, output_file, inverse=False, title=None, groups=None):
             x=pair.columns,
             y=pair.index,
             aspect="auto",
+            zmin=0,
+            zmax=1,
         )
     else:
         fig = px.imshow(
@@ -307,6 +353,9 @@ def visualize(pair, output_file, inverse=False, title=None, groups=None):
             xanchor="center",
             font=dict(size=20),
         ),
+        # #size
+        # width=1000,
+        # height=10000,
     )
     fig.write_image(output_file)
     return
@@ -464,7 +513,6 @@ def run_introgression_finder_worker(
     Worker function for parallel chromosome processing.
     Reconstructs objects inside the process to avoid pickling issues.
     """
-
     # Reconstruct index, genome, ref_genome, and groups inside the worker
     index = Index(index_dir)
     genome = index.genomes[anchor]
@@ -574,8 +622,11 @@ def main():
 
     outgroup_accessions = []
     if omit_unique_for is not None:
+        if args.ref is None:
+            raise ValueError("Reference genome must be provided using --ref when using --rmu.")
         # get list of outgroup accessions
         outgroup_accessions = groups[groups.group.isin(outgroups)].index.tolist()
+
 
     # get preprocessing arguments
     preprocessing_args = {}
@@ -628,8 +679,6 @@ def main():
                 outgroup_accessions=None,
                 trim_std=trim_std,
             )
-    elif omit_unique_for is not None:
-        raise ValueError("Reference genome must be defined with --ref if using --rmu")
 
     output_dir = Path(args.out)
     output_dir.mkdir(parents=True, exist_ok=True)
