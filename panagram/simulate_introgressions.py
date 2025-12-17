@@ -46,7 +46,7 @@ def write_fasta(seqs, path, wrap=60):
         for name, seq in seqs.items():
             f.write(f">{name}\n")
             for i in range(0, len(seq), wrap):
-                f.write(seq[i:i+wrap] + "\n")
+                f.write(seq[i : i + wrap] + "\n")
     return
 
 
@@ -59,7 +59,6 @@ def write_bed(bed_entries, bed_path):
 
     # inclusive coordinates of introgressions
     with open(bed_path, "w") as bed:
-        bed.write("#chrom\tstart\tend\tnotes\n")
         for entry in bed_entries:
             bed.write(entry + "\n")
     return
@@ -73,7 +72,7 @@ def mutate_seq_with_introgressions(
     available_positions,
     n_introgressions,
     introgression_lengths,
-    rng=None,
+    rng,
 ):
     """Apply introgressions by copying segments from rel_seq into ref_seq. Introgression sizes are
     sampled from a skewed distribution between size_min and size_max (inclusive).
@@ -101,7 +100,9 @@ def mutate_seq_with_introgressions(
     # ensure spacing by adjusting positions
     start_positions = position_spacer(start_positions.tolist(), introgression_lengths, length_chr)
     end_positions = [start + length for start, length in start_positions]
-    start_positions = [start for start, length in start_positions] # unzip start positions from tuples
+    start_positions = [
+        start for start, length in start_positions
+    ]  # unzip start positions from tuples
 
     current_index = 0
     for i in range(len(start_positions)):
@@ -131,7 +132,9 @@ def mutate_seq_with_introgressions(
         actual_length = len(introgression)
 
         # add an entry to bed
-        bed_entries.append((f"{chrom}\t{start_position}\t{end_position - 1}\t{actual_length} bp introgression"))
+        bed_entries.append(
+            (f"{chrom}\t{start_position}\t{end_position - 1}\t{actual_length} bp introgression")
+        )
 
     # add remaining sequence after last introgression
     introgressed_seq.extend(ref_seq[current_index:])
@@ -146,7 +149,7 @@ def apply_genome_wide_introgressions(
     n_introgressions,
     size_min,
     size_max,
-    rng=None,
+    rng,
 ):
     """Apply introgressions across all chromosomes and save corresponding BED entries.
     Args:
@@ -167,7 +170,6 @@ def apply_genome_wide_introgressions(
     new_seqs = {}
     chroms = list(ref_seqs.keys())
     # generate all introgression lengths ahead of time; gives a better distribution of sizes
-    # TODO: make a parameter to control this behavior
     # uniformly sample introgression sizes
     intro_lengths = rng.integers(size_min, size_max + 1, size=n_introgressions).tolist()
     # intro_lengths = generate_skewed_sizes(n_introgressions, size_min, size_max, rng)
@@ -201,7 +203,8 @@ def apply_genome_wide_introgressions(
 
 
 def generate_skewed_sizes(n, size_min, size_max, rng, a=0.05, b=1):
-    """Generate n sizes from a beta distribution skewed towards smaller sizes.
+    """Generate n sizes from a beta distribution skewed towards smaller sizes. Used for sampling
+    indel sizes.
     Args:
         n (int): number of sizes to generate
         size_min (int): minimum size
@@ -214,11 +217,69 @@ def generate_skewed_sizes(n, size_min, size_max, rng, a=0.05, b=1):
     """
 
     # generate sizes from beta distribution skewed towards smaller sizes
-    # used for introgression and indel sizes
     vals = beta.rvs(a, b, size=n, random_state=rng)
     nums = size_min + vals * (size_max - size_min)
     nums = [int(round(x)) for x in nums]
     return nums
+
+
+def create_random_trenches(weights, rng, block_size=1_000_000, drop_fraction=0.3):
+    """
+    Apply random trenches to the weights by reducing their values in certain blocks.
+    Args:
+        weights (np.ndarray): array of weights to modify
+        block_size (int): size of the blocks to consider for dropping weights
+        drop_fraction (float): probability of dropping weights in a block
+        rng (np.random.Generator): random number generator
+    Returns:
+        np.ndarray: modified weights with trenches applied
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    n = len(weights)
+    num_blocks = n // block_size
+
+    for i in range(num_blocks):
+        if rng.random() < drop_fraction:
+            start = i * block_size
+            end = start + block_size
+            weights[start:end] *= 0.8
+
+    return weights / weights.sum()
+
+
+def generate_edge_tapered_weights(n, rng, edge_fraction=0.3, edge_power=5):
+    """
+    Generate n weights with a trench shape: high at edges, low in middle. To be used for sampling
+    indel positions with higher probability at edges of the chromosome. Adds random noise to increase
+    variability.
+    Args:
+        n (int): number of weights to generate
+        edge_fraction (float): proportion of positions considered "edges"
+        edge_power (float): how steep the edge taper is
+        rng (np.random.Generator): random number generator
+    Returns:
+        np.ndarray: array of weights with trench shape
+    """
+    x = np.linspace(0, 1, n)
+
+    # distance from nearest edge
+    d = np.minimum(x, 1 - x)
+
+    # define how far both edges extend
+    edge_cut = edge_fraction / 2
+    edge_taper = 1 - (d / edge_cut) ** edge_power
+    edge_taper = np.clip(edge_taper, 0.5, None)  # limit minimum taper to avoid zero weights
+
+    # edges: high, middle: constant low, smooth transitions controlled by edge_taper
+    weights = np.where(d < edge_cut, edge_taper, 0.5)
+    weights = weights / weights.sum()
+
+    # add some random trenches to increase variability
+    weights = create_random_trenches(weights, rng=rng)
+
+    return weights
 
 
 def position_spacer(positions, lengths, chr_size):
@@ -227,7 +288,7 @@ def position_spacer(positions, lengths, chr_size):
     Args:
         positions (list of int): candidate positions
         lengths (list of int): corresponding lengths
-        size_max (int): maximum size for spacing
+        chr_size (int): size of chromosome to avoid overflow
     Returns:
         selected_positions (list of tuples): selected positions and lengths without overlap
     """
@@ -249,12 +310,15 @@ def position_spacer(positions, lengths, chr_size):
                 selected_positions.append((position, length))
                 current_end = position + length
     if len(selected_positions) < len(positions):
-        print(f"Warning: could only fit {len(selected_positions)} / {len(positions)} mutations.", flush=True)
+        print(
+            f"Warning: could only fit {len(selected_positions)} / {len(positions)} mutations.",
+            flush=True,
+        )
     return selected_positions
 
 
 def generate_mutation_positions(
-    mutation_type, n_positions, size_min, size_max, available_positions, rng
+    mutation_type, n_positions, size_min, size_max, position_weights, rng
 ):
     """
     Generate random positions and lengths for mutations of a given type without overlap or replacement.
@@ -263,11 +327,11 @@ def generate_mutation_positions(
         n_positions (int): number of mutation positions to generate
         size_min (int): minimum size of mutation
         size_max (int): maximum size of mutation
-        available_positions (list of int): list of available positions to choose from
+        position_weights (array of float): corresponding weights for available positions
         rng (np.random.Generator): random number generator
     Returns:
         mutation_positions (list of tuples): list of (position, length, mutation_type)
-        available_positions (list of int): updated list of available positions after mutations
+        position_weights (array of float): updated list of available weights after mutations
     """
 
     # create random positions for each mutation type without overlap or replacement
@@ -278,27 +342,33 @@ def generate_mutation_positions(
 
     if mutation_type == "deletion":
         # choose n_positions from available_positions with spacing of size_max
-        deletion_positions = rng.choice(available_positions, size=n_positions, replace=False)
-        deletion_positions = position_spacer(deletion_positions.tolist(), lengths, len(available_positions))
-        for i in range(len(deletion_positions)):
+        chr_size = len(position_weights)
+        deletion_positions = rng.choice(
+            chr_size, size=n_positions, replace=False, p=position_weights
+        )
+        deletion_positions = position_spacer(deletion_positions.tolist(), lengths, chr_size)
+        for _ in range(len(deletion_positions)):
             pos, length = deletion_positions.pop()
-            available_positions[pos:pos + length] = [-1]*length # mark for deletion
+            position_weights[pos : pos + length] = [0] * length  # ensure weights are zeroed out
             mutation_positions.append((pos, length, mutation_type))
-
-        # clean up available_positions to remove marked positions
-        arr = np.asarray(available_positions)
-        available_positions = arr[arr != -1].tolist() # have to convert to list to get rid of dtype issues
 
     else:
         # insertions and SNPs can go anywhere in remaining available positions
-        for length in lengths:
-            if not available_positions:
-                print("Warning: no more available positions for insertions/SNPs.", flush=True)
-                break
-            pos = available_positions.pop()
+        num_available_positions = np.count_nonzero(position_weights)
+        if n_positions > num_available_positions:
+            n_positions = num_available_positions
+            print("Warning: no more available positions for insertions/SNPs.", flush=True)
+        chr_size = len(position_weights)
+        position_indices = rng.choice(chr_size, size=n_positions, replace=False, p=position_weights)
+
+        for pos, length in zip(position_indices, lengths):
+            position_weights[pos] = 0  # mark position as used
             mutation_positions.append((pos, length, mutation_type))
 
-    return mutation_positions, available_positions
+    # renormalize weights
+    if position_weights.sum() > 0:
+        position_weights = position_weights / position_weights.sum()
+    return mutation_positions, position_weights
 
 
 def mutate_seq_with_indels_and_snps(
@@ -333,33 +403,30 @@ def mutate_seq_with_indels_and_snps(
 
     # generate deletions first since they have spacing requirements; shuffling done inside function
     # DO NOT shuffle available positions before deletions - they need to be in order for updating
-    available_positions = list(range(L))
+    position_weights = generate_edge_tapered_weights(L, rng)
 
     if n_del > 0:
-        del_positions, available_positions = generate_mutation_positions(
-            "deletion", n_del, del_size_min, del_size_max, available_positions, rng
+        del_positions, position_weights = generate_mutation_positions(
+            "deletion", n_del, del_size_min, del_size_max, position_weights, rng
         )
     else:
         del_positions = []
-    # shuffle remaining available positions for insertions and SNPs
-    rng.shuffle(available_positions)
     if n_ins > 0:
-        ins_positions, available_positions = generate_mutation_positions(
-            "insertion", n_ins, ins_size_min, ins_size_max, available_positions, rng
+        ins_positions, position_weights = generate_mutation_positions(
+            "insertion", n_ins, ins_size_min, ins_size_max, position_weights, rng
         )
     else:
         ins_positions = []
     if n_sub > 0:
-        sub_positions, available_positions = generate_mutation_positions(
-            "snp", n_sub, 1, 2, available_positions, rng
+        sub_positions, position_weights = generate_mutation_positions(
+            "snp", n_sub, 1, 2, position_weights, rng
         )
     else:
         sub_positions = []
     all_mutations = ins_positions + del_positions + sub_positions
     all_mutations.sort()
 
-    # TODO: change back to upper/lower case if needed
-    bases = ["a", "c", "g", "t"]
+    bases = ["A", "C", "G", "T"]
     current_index = 0
     offset = 0
     new_seq = []
@@ -370,7 +437,7 @@ def mutate_seq_with_indels_and_snps(
         if mtype == "insertion":
             # append everything up to and including pos
             # insertion is AFTER pos
-            new_seq.extend(seq[current_index:pos + 1])
+            new_seq.extend(seq[current_index : pos + 1])
             offset_indicies = range(current_index + offset, pos + 1 + offset)
             reverse_mapper.extend(offset_indicies)
 
@@ -394,7 +461,7 @@ def mutate_seq_with_indels_and_snps(
             offset -= length
 
             # pad reverse_mapper for deleted indices
-            reverse_mapper.extend([-1]*length)
+            reverse_mapper.extend([-1] * length)
 
         if mtype == "snp":
             # append everything up to pos
@@ -415,6 +482,9 @@ def mutate_seq_with_indels_and_snps(
     new_seq.extend(seq[current_index:])
     offset_indicies = range(current_index + offset, L + offset)
     reverse_mapper.extend(offset_indicies)
+
+    # available positions are those that were not mutated (i.e., weights > 0)
+    available_positions = np.nonzero(position_weights)[0].tolist()
 
     return "".join(new_seq), reverse_mapper, available_positions
 
@@ -444,16 +514,18 @@ def apply_genome_wide_mutations(
     available_positions = {}
     for chrom, seq in seqs.items():
         print(f"Mutating chromosome {chrom}...", flush=True)
-        new_seqs[chrom], mappers[chrom], available_positions[chrom] = mutate_seq_with_indels_and_snps(
-            seq,
-            sub_rate,
-            ins_rate,
-            del_rate,
-            ins_size_min,
-            ins_size_max,
-            del_size_min,
-            del_size_max,
-            rng,
+        new_seqs[chrom], mappers[chrom], available_positions[chrom] = (
+            mutate_seq_with_indels_and_snps(
+                seq,
+                sub_rate,
+                ins_rate,
+                del_rate,
+                ins_size_min,
+                ins_size_max,
+                del_size_min,
+                del_size_max,
+                rng,
+            )
         )
     return new_seqs, mappers, available_positions
 
@@ -529,20 +601,20 @@ def main():
     parser.add_argument(
         "--mut-sub-rate",
         type=float,
-        default=3.3e-4,
-        help="Offspring per-base substitution rate (default: 3.3e-4)",
+        default=1e-2,
+        help="Offspring per-base substitution rate",
     )
     parser.add_argument(
         "--mut-ins-rate",
         type=float,
-        default=3.3e-4,
-        help="Offspring per-base insertion rate (default: 3.3e-4)",
+        default=1e-2,
+        help="Offspring per-base insertion rate",
     )
     parser.add_argument(
         "--mut-del-rate",
         type=float,
-        default=3.3e-4,
-        help="Offspring per-base deletion rate (default: 3.3e-4)",
+        default=1e-2,
+        help="Offspring per-base deletion rate",
     )
     parser.add_argument(
         "--mut-ins-size-min", type=int, default=1, help="Offspring insertion size min (bp)"
@@ -617,17 +689,16 @@ def main():
     write_fasta(offspring_seqs, output_folder / f"{reference.stem}_0_offspring.fasta")
     write_bed(introgressions, output_folder / f"{reference.stem}_0_introgressions.bed")
 
-    sub_rate = args.mut_sub_rate
-    ins_rate = args.mut_ins_rate
-    del_rate = args.mut_del_rate
-
     parent_seqs = offspring_seqs
-    sub_rates = np.linspace(sub_rate, args.rel_sub_rate, args.rounds)
-    ins_rates = np.linspace(ins_rate, args.rel_ins_rate, args.rounds)
-    del_rates = np.linspace(del_rate, args.rel_del_rate, args.rounds)
+    sub_rates = np.linspace(1e-3, args.mut_sub_rate, args.rounds)
+    ins_rates = np.linspace(1e-3, args.mut_ins_rate, args.rounds)
+    del_rates = np.linspace(1e-3, args.mut_del_rate, args.rounds)
 
     for i in range(args.rounds):
-        print(f"Simulating mutation rate {sub_rates[i]:.2e}, generation {i+1} introgressed offspring...", flush=True)
+        print(
+            f"Simulating mutation rate {(sub_rates[i] + ins_rates[i] + del_rates[i]):.2e}, generation {i+1} introgressed offspring...",
+            flush=True,
+        )
 
         # apply mutations to offspring from previous generation
         offspring_seqs, _, _ = apply_genome_wide_mutations(

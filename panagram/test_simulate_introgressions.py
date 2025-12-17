@@ -1,5 +1,5 @@
 import numpy as np
-import panagram.panagram.simulate_introgressions as sim
+import simulate_introgressions as sim
 
 TEST_REF_FASTA = "./test/Athal_chr4_only.fasta"
 
@@ -13,28 +13,28 @@ def test_generate_positions():
     ref_seq = ref_seqs["chr4"]
 
     L = len(ref_seq)
-    sub_rate=0
-    ins_rate=3.3e-3
-    del_rate=3.3e-3
-    del_size_min=1
-    del_size_max=500
-
+    sub_rate = 0
+    ins_rate = 3.3e-3
+    del_rate = 3.3e-3
+    del_size_min = 1
+    del_size_max = 500
 
     # mutation counts
     n_del = int(L * del_rate)
 
-    available_positions = list(range(L))
+    position_weights = sim.generate_edge_tapered_weights(L, rng)
     if n_del > 0:
-        del_positions, available_positions = sim.generate_mutation_positions(
-            "deletion", n_del, del_size_min, del_size_max, available_positions, rng
+        del_positions, position_weights = sim.generate_mutation_positions(
+            "deletion", n_del, del_size_min, del_size_max, position_weights, rng
         )
 
     # check that deletions do not overlap
     occupied = np.zeros(L, dtype=bool)
     for pos, length, _ in del_positions:
-        assert not np.any(occupied[pos:pos + length])
-        occupied[pos:pos + length] = True
+        assert not np.any(occupied[pos : pos + length])
+        occupied[pos : pos + length] = True
 
+    available_positions = np.nonzero(position_weights)[0].tolist()
     # check that available positions do not include deleted positions
     for pos in available_positions:
         assert not occupied[pos]
@@ -143,8 +143,14 @@ def test_introgression():
 
         try:
             while ref_pos < len(ref_seq):
-                current_introgression = introgressions[current_introgression_index] if current_introgression_index < len(introgressions) else None
-                current_introgression_start = current_introgression[0] if current_introgression else None
+                current_introgression = (
+                    introgressions[current_introgression_index]
+                    if current_introgression_index < len(introgressions)
+                    else None
+                )
+                current_introgression_start = (
+                    current_introgression[0] if current_introgression else None
+                )
                 if not current_introgression or ref_pos < current_introgression_start:
                     # position is not introgressed, should match reference
                     assert introgressed_seq[offspring_pos] == ref_seq[ref_pos]
@@ -158,7 +164,9 @@ def test_introgression():
                         assert introgressed_seq[offspring_pos] == rel_seqs[rel_pos]
                         rel_pos += 1
                         offspring_pos += 1
-                    ref_pos = current_introgression[1] + 1 # move ref_pos to end of introgression + 1 since end is inclusive
+                    ref_pos = (
+                        current_introgression[1] + 1
+                    )  # move ref_pos to end of introgression + 1 since end is inclusive
                     current_introgression_index += 1
         except Exception as e:
             # print a couple of positions for debugging
@@ -171,6 +179,7 @@ def test_introgression():
 
     return
 
+
 # Legacy tests
 def old_test_apply_mutations():
     # --- Use your function exactly as is, just override the behavior ---
@@ -179,14 +188,14 @@ def old_test_apply_mutations():
 
     mut_seq, reverse_map, remaining_positions = sim.mutate_seq_with_indels_and_snps(
         seq=seq,
-        sub_rate=1/7,   # Force 1 SNP
-        ins_rate=1/7,   # Force 1 insertion
-        del_rate=1/7,   # Force 1 deletion
+        sub_rate=1 / 7,  # Force 1 SNP
+        ins_rate=1 / 7,  # Force 1 insertion
+        del_rate=1 / 7,  # Force 1 deletion
         ins_size_min=2,
         ins_size_max=2,
         del_size_min=2,
         del_size_max=2,
-        rng=rng
+        rng=rng,
     )
 
     print("Original: ", seq)
@@ -200,25 +209,22 @@ def old_test_apply_introgressions():
     # Reference sequences
     ref_seqs = {
         "chr1": "AAAAAAAAAATTTTTTTTTTCCCCCCCCCC",  # length 30
-        "chr2": "GGGGGGGGGGAAAAAAAAAATTTTTTTTTT"
+        "chr2": "GGGGGGGGGGAAAAAAAAAATTTTTTTTTT",
     }
 
     # Relative sequences (introgressed sequence will come from here)
-    rel_seqs = {
-        "chr1": "aaaaaaaaaattttttttttcccccccccc",
-        "chr2": "ggggggggggaaaaaaaaaatttttttttt"
-    }
+    rel_seqs = {"chr1": "aaaaaaaaaattttttttttcccccccccc", "chr2": "ggggggggggaaaaaaaaaatttttttttt"}
 
     # Reverse mapper (identity mapping — assume no deletions applied before)
     reverse_mappers = {
         "chr1": list(range(len(ref_seqs["chr1"]))),
-        "chr2": list(range(len(ref_seqs["chr2"])))
+        "chr2": list(range(len(ref_seqs["chr2"]))),
     }
 
     # All positions available (no deletions or insertions earlier)
     available_positions = {
         "chr1": list(range(len(ref_seqs["chr1"]))),
-        "chr2": list(range(len(ref_seqs["chr2"])))
+        "chr2": list(range(len(ref_seqs["chr2"]))),
     }
 
     rng = np.random.default_rng(1)
@@ -231,7 +237,7 @@ def old_test_apply_introgressions():
         n_introgressions=3,
         size_min=3,
         size_max=3,
-        rng=rng
+        rng=rng,
     )
 
     print("\nModified Sequences:")
@@ -248,7 +254,7 @@ def old_test_apply_introgressions_with_insertion():
     # Reference sequences
     ref_seqs = {
         "chr1": "AAAAAAAAAATTTTTTTTTTCCCCCCCCCC",  # length 30
-        "chr2": "GGGGGGGGGGAAAAAAAAAATTTTTTTTTT"
+        "chr2": "GGGGGGGGGGAAAAAAAAAATTTTTTTTTT",
     }
 
     # Relative sequences with an insertion of length 5 at position 16 on chr1
@@ -256,27 +262,26 @@ def old_test_apply_introgressions_with_insertion():
     insertion_seq = "NNNNN"
     chr1 = ref_seqs["chr1"][:insertion_pos] + insertion_seq + ref_seqs["chr1"][insertion_pos:]
     chr1 = chr1.lower()  # make it lowercase to distinguish
-    rel_seqs = {
-        "chr1": chr1,  # length 35
-        "chr2": "ggggggggggaaaaaaaaaatttttttttt"  # unchanged
-    }
+    rel_seqs = {"chr1": chr1, "chr2": "ggggggggggaaaaaaaaaatttttttttt"}  # length 35  # unchanged
 
     # Build reverse mapper: maps ref index → rel index
     reverse_mapper_chr1 = []
     for i in range(len(ref_seqs["chr1"])):
         if i < insertion_pos:
-            reverse_mapper_chr1.append(i)           # before insertion: same index
+            reverse_mapper_chr1.append(i)  # before insertion: same index
         else:
-            reverse_mapper_chr1.append(i + len(insertion_seq))  # after insertion: shift by insertion length
+            reverse_mapper_chr1.append(
+                i + len(insertion_seq)
+            )  # after insertion: shift by insertion length
 
     reverse_mappers = {
         "chr1": reverse_mapper_chr1,
-        "chr2": list(range(len(ref_seqs["chr2"])))  # unchanged
+        "chr2": list(range(len(ref_seqs["chr2"]))),  # unchanged
     }
     # All positions available (no deletions applied previously)
     available_positions = {
         "chr1": list(range(len(ref_seqs["chr1"]))),
-        "chr2": list(range(len(ref_seqs["chr2"])))
+        "chr2": list(range(len(ref_seqs["chr2"]))),
     }
 
     rng = np.random.default_rng(1)
@@ -290,7 +295,7 @@ def old_test_apply_introgressions_with_insertion():
         n_introgressions=3,
         size_min=3,
         size_max=3,
-        rng=rng
+        rng=rng,
     )
 
     # Print results
