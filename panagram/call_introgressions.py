@@ -9,7 +9,16 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
 def fill_snps(row, gap_size):
-    row_name = row.name
+    """Fill SNPs (gaps of zeros == gap_size) in a row of a DataFrame.
+
+    Args:
+        row (pd.Series): the row of the DataFrame to fill SNPs in
+        gap_size (int): the size of the gaps to fill
+
+    Returns:
+        np.ndarray: the modified row with SNPs filled
+    """
+
     # convert row to numpy array
     arr = row.values
 
@@ -22,11 +31,10 @@ def fill_snps(row, gap_size):
     # Gap lengths
     gaps = ends - starts - 1
 
-    # Count unique gap sizes
-    unique_gaps, counts = np.unique(gaps, return_counts=True)
-    gap_stats = pd.Series(counts, index=unique_gaps)
-
     # Save summary statistics
+    # unique_gaps, counts = np.unique(gaps, return_counts=True)
+    # gap_stats = pd.Series(counts, index=unique_gaps)
+    # row_name = row.name
     # gap_stats.to_csv(f"./gap_stats_{row_name}.csv")
 
     # Which gaps match the desired size
@@ -43,7 +51,8 @@ def fill_snps(row, gap_size):
     # handle edge case where gap is at the end
     if arr[-gap_size:].sum() == 0:
         arr[-gap_size:] = 1
-    return row
+
+    return arr
 
 
 def bitmap_to_bins(
@@ -54,19 +63,32 @@ def bitmap_to_bins(
     ref_genome_name=None,
     outgroup_accessions=None,
 ):
-    # modded version of the same function found in the Index class
+    """Modded version of the same function found in the Index class. Converts a bitmap to binned
+    kmer similarities on a scale of 0 to 1.
+
+    Args:
+        bitmap (pd.DataFrame): the bitmap to convert
+        binlen (int): the length of the bins to create
+        omit_fixed_kmers (bool, optional): whether to omit fixed kmers, defaults to False
+        omit_unique_kmers (bool, optional): whether to omit unique kmers (those not present in neither a reference nor outgroup), defaults to False
+        ref_genome_name (str, optional): the name of the reference genome, defaults to None
+    outgroup_accessions (list, optional): the accessions of the introgression donor genomes, defaults to None
+
+    Returns:
+        pd.DataFrame: the binned kmer similarities
+    """
 
     # change index from chr position to the number of the bin the position falls in
     # every column is the name of the accession
     # every row is an anchor kmer's presence/absence in other accessions
-    df = bitmap.set_index(bitmap.index // binlen)
+    bitmap_with_bin_idx = bitmap.set_index(bitmap.index // binlen)
 
-    # TODO: too slow to query bitmaps with small step sizes; use gnm and rmu instead
+    # NOTE: too slow to query bitmaps with small step sizes; use gnm and rmu instead
     # if step_size = 1, we can search for/omit SNPs
     # SNPs are indicated by runs of 0s of length = kmer_size within a column
     # runs smaller than k could be from small indels
     # k=31
-    # df = df.apply(fill_snps, gap_size=k, axis=0)
+    # bitmap_with_bin_idx = bitmap_with_bin_idx.apply(fill_snps, gap_size=k, axis=0)
 
     if omit_unique_kmers:
         # omit kmers that aren't present in the reference or the out groups
@@ -74,24 +96,36 @@ def bitmap_to_bins(
         kmers_to_keep_columns.append(ref_genome_name)
 
         # find kmers that aren't present in the reference or the wild accessions and set their reference column to 1
-        df.loc[df[kmers_to_keep_columns].sum(axis=1) == 0, ref_genome_name] = 1
+        bitmap_with_bin_idx.loc[bitmap_with_bin_idx[kmers_to_keep_columns].sum(axis=1) == 0, ref_genome_name] = 1
 
     # remove fixed kmers shared by all members of the pangenome (i.e., rows that are all 1)
     if omit_fixed_kmers:
-        df = df.loc[~(df == 1).all(axis=1)]
+        bitmap_with_bin_idx = bitmap_with_bin_idx.loc[~(bitmap_with_bin_idx == 1).all(axis=1)]
 
     # get the sum of how many kmers equal 1 in each bin
-    paircount_bins = df.groupby(level=0).sum()
+    binned_bitmap = bitmap_with_bin_idx.groupby(level=0).sum()
 
     # fix the index's bin number to be the bin's chr position and transpose
-    paircount_bins = paircount_bins.set_index(paircount_bins.index * binlen).T
+    binned_bitmap = binned_bitmap.set_index(binned_bitmap.index * binlen).T
 
     # divide each kmer sum in each column by the max # of kmers in the bin (some bins are uneven)
-    paircount_bins = paircount_bins.div(paircount_bins.max(axis=0), axis=1)
-    return paircount_bins
+    binned_bitmap = binned_bitmap.div(binned_bitmap.max(axis=0), axis=1)
+    return binned_bitmap
 
 
 def row_trimmed_mean(row, trim_std):
+    """Calculate the trimmed mean of a row. Note that setting the trim_std to anything above 2 has
+    very little effect on the final results, as most values are within 2 standard deviations of
+    the mean.
+
+    Args:
+        row (pd.Series): the row to calculate the trimmed mean for
+        trim_std (float): the number of standard deviations to trim; if -1, return the untrimmed mean
+
+    Returns:
+        float: the trimmed mean of the row
+    """
+
     mean = row.mean()
     std = row.std()
     if trim_std == -1:
@@ -112,11 +146,24 @@ def get_genome_similarities(
     outgroup_accessions,
     trim_std,
 ):
-    # For a given anchor, get its mean similarity to all other accessions across the genome
-    # Note that this function calculates a trimmed mean for each accession
-    # Setting trim_std to -1 will return the untrimmed mean
-    # Note that setting the trim_std to anything above 2 has very little effect
-    # on the final results, as most values are within 2 standard deviations of the mean
+    """For a given anchor, get its mean similarity to all other accessions across the genome. Note
+    that this function calculates a trimmed mean for each accession. Setting trim_std to -1 will
+    return the untrimmed mean.
+
+    Args:
+        genome (panagram.index.Genome): the genome to anchor on and calculate similarities for
+        bitmap_step (int): step size for sampling kmers in the bitmap (e.g., every 100th kmer)
+        bin_size (int): size of the bins to create
+        omit_fixed_kmers (bool): whether to omit fixed kmers
+        omit_unique_for (list): list of accessions to omit unique kmers for
+        ref_genome_name (str): name of the reference genome
+        outgroup_accessions (list): list of outgroup accessions
+        trim_std (float): number of standard deviations to trim; if -1, return the untrimmed mean
+
+    Returns:
+        pd.Series: mean similarity to all other accessions
+    """
+
     chromosomes = genome.sizes.keys()
 
     # Collect all bin values for each accession across all chromosomes
@@ -125,7 +172,7 @@ def get_genome_similarities(
     for chr_name in chromosomes:
         chr_size = genome.sizes[chr_name]
         chr_bitmap = genome.query(chr_name, 0, chr_size, step=bitmap_step)
-        pair = bitmap_to_bins(
+        binned_bitmap = bitmap_to_bins(
             chr_bitmap,
             bin_size,
             omit_fixed_kmers,
@@ -133,7 +180,7 @@ def get_genome_similarities(
             ref_genome_name,
             outgroup_accessions,
         )
-        all_bins.append(pair)
+        all_bins.append(binned_bitmap)
 
     # Concatenate all bins along columns (axis=1)
     all_bins_df = pd.concat(all_bins, axis=1)
@@ -144,6 +191,17 @@ def get_genome_similarities(
 
 
 def smooth_row(row, filter_type, filter_size):
+    """Smooth the row using the specified filter.
+
+    Args:
+        row (pd.Series): the row to smooth
+        filter_type (str): the type of filter to use ('mean' or 'median')
+        filter_size (int): the size of the filter (number of bins)
+
+    Returns:
+        pd.Series: the smoothed row
+    """
+
     if filter_type == "mean":
         smoothed = uniform_filter1d(row.values, size=filter_size)
     elif filter_type == "median":
@@ -152,6 +210,17 @@ def smooth_row(row, filter_type, filter_size):
 
 
 def percentile_contrast_stretch(row, lower=2, upper=98):
+    """Apply percentile contrast stretching to the row to enhance contrast.
+
+    Args:
+        row (pd.Series): the row to stretch
+        lower (int, optional): the lower percentile to use, defaults to 2
+        upper (int, optional): the upper percentile to use, defaults to 98
+
+    Returns:
+        pd.Series: the contrast-stretched row
+    """
+
     p_low = np.percentile(row, lower)
     p_high = np.percentile(row, upper)
     if p_high == p_low:
@@ -160,131 +229,185 @@ def percentile_contrast_stretch(row, lower=2, upper=98):
     return stretched.clip(0, 1)
 
 
-def edge_tapered_row_normalization(pair, intensity=0.1):
+def edge_tapered_row_normalization(df, intensity=0.1):
     """
-    Normalize each row of the DataFrame 'pair' more heavily at the beginning and end,
+    Normalize each row of the DataFrame more heavily at the beginning and end,
     decreasing intensity towards the center using a Gaussian window.
+
+    Args:
+        df (pd.DataFrame): DataFrame to normalize
+        intensity (float, optional): intensity of the edge tapering effect, defaults to 0.1
+
+    Returns:
+        pd.DataFrame: normalized DataFrame with edge tapering
     """
-    n_cols = pair.shape[1]
+
+    n_cols = df.shape[1]
     x = np.linspace(-1, 1, n_cols)
     window = np.exp(-4 * x**2)
 
     center_boost = intensity * (window / window.max())  # high in center
 
-    norm_pair = pair.copy()
-    for idx, row in norm_pair.iterrows():
-        norm_pair.loc[idx] = row * (1 + center_boost)  # boost center more
-    norm_pair = norm_pair.clip(0, 1)
+    norm_df = df.copy()
+    for idx, row in norm_df.iterrows():
+        norm_df.loc[idx] = row * (1 + center_boost)  # boost center more
+    norm_df = norm_df.clip(0, 1)
     # increase intensity of all values to compensate for losses
-    norm_pair = norm_pair.where(norm_pair == 1, norm_pair - 0.2)
-    norm_pair = norm_pair.clip(0, 1)  # ensure values are between 0 and 1
-    return norm_pair
+    norm_df = norm_df.where(norm_df == 1, norm_df - 0.2)
+    norm_df = norm_df.clip(0, 1)  # ensure values are between 0 and 1
+    return norm_df
 
 
-def preprocess_pair(
-    pair,
+def preprocess_binned_bitmap(
+    binned_bitmap,
     genome_similarities,
     similarity_normalization_mean,
     smoothing_filter,
     smoothing_filter_size,
-    contrast_stretching,
+    edge_normalization,
 ):
-    pair = pair.copy()
-    pair = pair.round(2)
+    """Preprocess the binned bitmapto make introgression calling easier/more consistent between
+    accessions in a pangenome.
+
+    Args:
+        binned_bitmap (pd.DataFrame): binned k-mer similarities (rows are accessions, columns are genomic bins)
+        genome_similarities (pd.Series): Series containing genome similarities
+        similarity_normalization_mean (float): target mean for similarity normalization
+        smoothing_filter (str): type of smoothing filter to apply
+        smoothing_filter_size (int): size of the smoothing filter
+        edge_normalization (bool): whether to apply edge normalization
+    Returns:
+        pd.DataFrame: Preprocessed DataFrame
+    """
+
+    binned_bitmap = binned_bitmap.copy()
+    binned_bitmap = binned_bitmap.round(2)
     if genome_similarities is not None:
         if similarity_normalization_mean == -1:
             # if no target mean is provided, use the max average kmer sim. as target mean
             similarity_normalization_mean = genome_similarities[genome_similarities != 1].max()
         delta = similarity_normalization_mean - genome_similarities
-        # set delta to 0 for any accessions with means above the target mean
-        # delta[delta < 0] = 0
 
-        # add delta to data and clip values that are out of bounds
-        # pair = pair.add(delta, axis=0).clip(0, 1)
-
-        # Add delta to each row only where pair < 1
-        for idx in pair.index:
-            row = pair.loc[idx]
+        # Add delta to each row only where binned bitmap < 1
+        for idx in binned_bitmap.index:
+            row = binned_bitmap.loc[idx]
             mask = row <= 0.98  # don't change bins that are already 1
             row[mask] += delta[idx]
-            pair.loc[idx] = row.clip(0, 1)
+            binned_bitmap.loc[idx] = row.clip(0, 1)
 
-    if contrast_stretching:
-        pair = edge_tapered_row_normalization(pair)
-        # pair = pair.apply(percentile_contrast_stretch, axis=1)
+    # TODO: allow edge normalization to be parameterized
+    if edge_normalization:
+        binned_bitmap = edge_tapered_row_normalization(binned_bitmap)
 
     if smoothing_filter:
-        pair = pair.apply(
+        binned_bitmap = binned_bitmap.apply(
             smooth_row, axis=1, filter_type=smoothing_filter, filter_size=smoothing_filter_size
         )
-    return pair
+    return binned_bitmap
 
 
-def threshold_introgressions(pair, anchor, comp_group, threshold, row_mean_threshold=0.75):
-    # a version of threshold introgressions used when pair come's from the anchor's view
-    # used for threshold logic that requires multiple rows from pair (e.g., comparing similarity between the anchor's group and a comparison group)
+def threshold_introgressions(binned_bitmap, anchor, comp_group, threshold, row_mean_threshold=0.75):
+    """Threshold binned bitmap based on k-mer similarity. Used for threshold logic that requires
+    multiple rows from the bitmap (e.g., comparing similarity between the anchor's group and a
+    comparison group). All bins are labeled as introgressed (1) or not introgressed (0) based on the
+    following criteria:
+    1. If anchor is in comp_group: introgression is where anchor has similarity lower than threshold
+    to its group
+    2. If "REF" is the comp_group: introgression is where anchor has similarity lower than threshold
+    to REF group
+    3. If anchor isn't in comp_group: introgression is where anchor is more similar to comp_group
+    and >= threshold
+
+    Args:
+        binned_bitmap (pd.DataFrame): the binned k-mer similarities
+        anchor (str): the anchor accession
+        comp_group (str): the comparison group
+        threshold (float): the similarity threshold for introgression
+        row_mean_threshold (float, optional): the mean threshold for rows, defaults to 0.75
+
+    Returns:
+        pd.DataFrame: DataFrame with introgression calls
+    """
+
     # get the group the anchor belongs to
-    anchor_group = pair.loc[anchor, "group"]
+    anchor_group = binned_bitmap.loc[anchor, "group"]
 
     # define df with group info and kmer sims of anchor's group; drop anchor's self-similarity
-    pair_anchor_group = (
-        pair[pair["group"] == anchor_group].drop(columns=["group"]).drop(anchor, axis=0)
+    binned_bitmap_only_anchor_group = (
+        binned_bitmap[binned_bitmap["group"] == anchor_group].drop(columns=["group"]).drop(anchor, axis=0)
     )
 
     # define df with group info and kmer sim for comparison group
-    pair_comp_group = pair[pair["group"] == comp_group].drop(columns=["group"])
+    binned_bitmap_only_comp_group = binned_bitmap[binned_bitmap["group"] == comp_group].drop(columns=["group"])
 
     # throw out all acessions with large global diffs w/ the anchor
-    if len(pair_anchor_group) > 1 and anchor_group == comp_group:
-        for acession, row in pair_anchor_group.iterrows():
+    if len(binned_bitmap_only_anchor_group) > 1 and anchor_group == comp_group:
+        for accession, row in binned_bitmap_only_anchor_group.iterrows():
             if row.mean() < row_mean_threshold:
-                pair_anchor_group = pair_anchor_group[pair_anchor_group.index != acession]
+                binned_bitmap_only_anchor_group = binned_bitmap_only_anchor_group[binned_bitmap_only_anchor_group.index != accession]
 
-        if pair_anchor_group.empty:
+        if binned_bitmap_only_anchor_group.empty:
             print(
                 f"Warning: accession {anchor} is not similar to any of its group members. Cannot use --isc."
             )
-            group_sims = pair_anchor_group.mean(axis=0).to_frame(name="anchor_sim")
+            group_sims = binned_bitmap_only_anchor_group.mean(axis=0).to_frame(name="anchor_sim")
             group_sims["comp_sim"] = pd.NA
             group_sims["introgression"] = 0
             return group_sims
 
     # get mean/max kmer similarities per window for each group
-    group_sims = pair_anchor_group.mean(axis=0).to_frame(name="anchor_sim")
-    group_sims["comp_sim"] = pair_comp_group.max(axis=0)
+    group_sims = binned_bitmap_only_anchor_group.mean(axis=0).to_frame(name="anchor_sim")
+    group_sims["comp_sim"] = binned_bitmap_only_comp_group.max(axis=0)
 
-    # 4 ways to define an introgression:
-    # 1. If anchor is in comp_group: introgression is where anchor has similarity lower than threshold to its group
-    # 2. If "REF" is the comp_group: introgression is where anchor has similarity lower than threshold to REF group
-    # 3. If anchor isn't in comp_group: introgression is where anchor is more similar to comp_group and >= threshold
-    # 4. Average of all introgression calls for comp_group when comp_group is a list
-    # than its own group
-    if anchor_group == comp_group:
+    # apply thresholding logic
+    if anchor_group == comp_group: # comparing within the same group
         group_sims["introgression"] = (group_sims.anchor_sim < threshold).astype(int)
-    elif comp_group == "REF":
-        # comp_group should only consist of 1 REF
+    elif comp_group == "REF": # comparing to reference group
         group_sims["introgression"] = (group_sims.comp_sim < threshold).astype(int)
-    else:
+    else: # comparing to different/wild group
         group_sims["introgression"] = (group_sims.comp_sim >= (threshold)).astype(int)
-        pair_ref_group = pair[pair["group"] == "REF"].drop(columns=["group"])
-        group_sims["ref_sim"] = pair_ref_group.mean(axis=0)
-        group_sims["introgression"] = (
-            (group_sims.ref_sim < threshold) & (group_sims.comp_sim > group_sims.comp_sim.min())
-        ).astype(int)
+        # previous logic that also required anchor to be less similar to its own group than to comp_group
+        # binned_bitmap_only_ref = binned_bitmap[binned_bitmap["group"] == "REF"].drop(columns=["group"])
+        # group_sims["ref_sim"] = binned_bitmap_only_ref.mean(axis=0)
+        # group_sims["introgression"] = (
+        #     (group_sims.ref_sim < threshold) & (group_sims.comp_sim > group_sims.comp_sim.min())
+        # ).astype(int)
     return group_sims
 
 
-def threshold_introgressions_simple(pair, anchor, threshold):
-    # applys a threshold to anchor's row; matches format of
-    # used when pair comes from REF's view
-    group_sims = pair.drop(columns=["group"]).loc[anchor].to_frame(name="anchor_sim")
+def threshold_introgressions_simple(binned_bitmap, anchor, threshold):
+    """Apply a simple threshold to introgressions. All bins are labeled as introgressed (1) or not
+    introgressed (0) based on whether the anchor's similarity is below the threshold.
+
+    Args:
+        binned_bitmap (pd.DataFrame): the binned k-mer similarities
+        anchor (str): the anchor accession
+        threshold (float): the similarity threshold for introgression
+
+    Returns:
+        pd.DataFrame: DataFrame with introgression calls
+    """
+
+    group_sims = binned_bitmap.drop(columns=["group"]).loc[anchor].to_frame(name="anchor_sim")
     group_sims["comp_sim"] = pd.NA
     group_sims["introgression"] = (group_sims.anchor_sim < threshold).astype(int)
     return group_sims
 
 
 def bins_to_bed(bins_df, bin_size, chr_name, comp_group):
-    # takes df organized into rows of bins w/ introgression column and converts to bed file format
+    """Takes df organized into rows of bins with an introgression column and converts to bed file
+    format. Adjacent introgressed bins are merged into a single introgression.
+
+    Args:
+        bins_df (pd.DataFrame): DataFrame containing binned introgression data
+        bin_size (int): Size of each bin
+        chr_name (str): Name of the chromosome
+        comp_group (str): Name of the comparison group
+
+    Returns:
+        pd.DataFrame: DataFrame in BED format
+    """
+
     # find start/end coordinates
     introgressions = bins_df[bins_df.introgression > 0].copy()
     introgressions["start"] = introgressions.index
@@ -308,37 +431,46 @@ def bins_to_bed(bins_df, bin_size, chr_name, comp_group):
     return introgressions
 
 
-def visualize(pair, output_file, inverse=False, title=None, groups=None):
-    # take a look at what pair looks like after manipulation
+def visualize(binned_bitmap, output_file, inverse=False, title=None, groups=None, xaxis_dtick=2000000):
+    """Visualize the binned k-mer similarities as a heatmap.
+    Args:
+        binned_bitmap (pd.DataFrame): the binned k-mer similarities
+        output_file (str): the output file path
+        inverse (bool, optional): whether to invert the color scale, defaults to False
+        title (str, optional): the title of the plot, defaults to None
+        groups (pd.Series, optional): accession groups, used to determine ordering of heatmap rows, defaults to None
+        xaxis_dtick (int, optional): the x-axis tick interval, defaults to 2000000
+    """
+
     # if groups is not None, sort by group; groups should be in the order that you want them to appear
     if groups is not None:
         ordered_names = groups.index.tolist()
         intros = None
-        if "Introgressions" in pair.index:
-            intros = pair.loc["Introgressions"].copy()
-            pair = pair.drop("Introgressions")
-        pair = pair.reindex(index=ordered_names)
+        if "Introgressions" in binned_bitmap.index:
+            intros = binned_bitmap.loc["Introgressions"].copy()
+            binned_bitmap = binned_bitmap.drop("Introgressions")
+        binned_bitmap = binned_bitmap.reindex(index=ordered_names)
         if intros is not None:
-            pair.loc["Introgressions"] = intros
+            binned_bitmap.loc["Introgressions"] = intros
 
     if inverse:
         fig = px.imshow(
-            pair,
+            binned_bitmap,
             color_continuous_scale=px.colors.sequential.Plasma[::-1],
-            x=pair.columns,
-            y=pair.index,
+            x=binned_bitmap.columns,
+            y=binned_bitmap.index,
             aspect="auto",
             zmin=0,
             zmax=1,
         )
     else:
         fig = px.imshow(
-            pair, x=pair.columns, y=pair.index, aspect="auto", title=title, zmin=0, zmax=1
+            binned_bitmap, x=binned_bitmap.columns, y=binned_bitmap.index, aspect="auto", title=title, zmin=0, zmax=1
         )
     fig.update_layout(
         font=dict(family="Helvetica Bold", color="black"),
         xaxis=dict(
-            dtick=2000000,
+            dtick=xaxis_dtick,
             title=dict(
                 text="Genomic Position",
                 font=dict(size=16),
@@ -353,9 +485,6 @@ def visualize(pair, output_file, inverse=False, title=None, groups=None):
             xanchor="center",
             font=dict(size=20),
         ),
-        # #size
-        # width=1000,
-        # height=10000,
     )
     fig.write_image(output_file)
     return
@@ -378,6 +507,26 @@ def run_introgression_finder(
     render_vis,
     output_dir,
 ):
+    """Run the introgression finder pipeline for a given anchor genome.
+
+    Args:
+        anchor (str): the anchor genome accession name
+        genome (panagram.index.Genome): the anchor genome
+        ref_genome (panagram.index.Genome): the reference genome (None if not using ref space)
+        chr_name (str): the chromosome name
+        groups (pd.Series): the groups for each accession
+        comp_groups (list): the groups of accessions to compare against
+        threshold (float): the similarity threshold for introgression detection
+        bitmap_step (int): step size for sampling kmers in the bitmap (e.g., every 100th kmer)
+        bin_size (int): the size of the bins for bitmap creation
+        using_ref_space (bool): whether to use the reference genome space instead of accession space
+        preprocessing_args (dict): arguments for preprocessing the bitmap
+        genome_similarities (pd.DataFrame): the genome similarities (None if not used for preprocessing)
+        ref_genome_similarities (pd.DataFrame): the reference genome similarities (None if not used for preprocessing)
+        render_vis (bool): whether to render visualizations
+        output_dir (str): the output directory
+    """
+
     # Step 1 - choose an anchor and re-create pairwise correlation matrix for it
     # get an entire chr's bitmap
     chr_size = genome.sizes[chr_name]
@@ -387,7 +536,7 @@ def run_introgression_finder(
     ref_genome_name = preprocessing_args.pop("ref_genome_name")
     outgroup_accessions = preprocessing_args.pop("outgroup_accessions")
 
-    pair = bitmap_to_bins(
+    binned_bitmap = bitmap_to_bins(
         chr_bitmap,
         bin_size,
         omit_fixed_kmers,
@@ -397,30 +546,30 @@ def run_introgression_finder(
     )
 
     # preprocess bitmap
-    pair = preprocess_pair(pair, genome_similarities, **preprocessing_args)
+    binned_bitmap = preprocess_binned_bitmap(binned_bitmap, genome_similarities, **preprocessing_args)
 
     # get group information for the anchor's group and the comparison group
-    pair = pair.merge(groups, left_index=True, right_index=True, how="left")
+    binned_bitmap = binned_bitmap.merge(groups, left_index=True, right_index=True, how="left")
 
     # Step 2 - identify potential introgressions by thresholding kmer similarities
-    merged_sims = None
+    merged_introgressions = None
     for comp_group in comp_groups:
-        ref_with_ref_space = (comp_group == "REF") and using_ref_space
-        if ref_with_ref_space:
+        use_reference = (comp_group == "REF") and using_ref_space
+        if use_reference:
             # get reference bitmap
             ref_chr_size = ref_genome.sizes[chr_name]
             ref_chr_bitmap = ref_genome.query(chr_name, 0, ref_chr_size, step=bitmap_step)
             # Note omit unique kmers doesn't make sense here since we are using REF's view
-            ref_pair = bitmap_to_bins(ref_chr_bitmap, bin_size, omit_fixed_kmers)
+            ref_binned_bitmap = bitmap_to_bins(ref_chr_bitmap, bin_size, omit_fixed_kmers)
 
             # preprocess ref_pair in the same way as pair
-            ref_pair = preprocess_pair(ref_pair, ref_genome_similarities, **preprocessing_args)
+            ref_binned_bitmap = preprocess_binned_bitmap(ref_binned_bitmap, ref_genome_similarities, **preprocessing_args)
 
-            ref_pair = ref_pair.merge(groups, left_index=True, right_index=True, how="left")
-            pair_for_visualization = ref_pair
+            ref_binned_bitmap = ref_binned_bitmap.merge(groups, left_index=True, right_index=True, how="left")
+            bitmap_for_visualization = ref_binned_bitmap
 
             # get introgressions by looking at differences with REF
-            group_sims = threshold_introgressions_simple(ref_pair, anchor, threshold)
+            introgressions = threshold_introgressions_simple(ref_binned_bitmap, anchor, threshold)
 
         else:
             # TODO: revisit this - hard-coding a threshold might not work well post-normalization
@@ -428,26 +577,26 @@ def run_introgression_finder(
             row_mean_threshold = 0.75
             if not omit_fixed_kmers:
                 row_mean_threshold = 0.85
-            group_sims = threshold_introgressions(
-                pair, anchor, comp_group, threshold, row_mean_threshold
+            introgressions = threshold_introgressions(
+                binned_bitmap, anchor, comp_group, threshold, row_mean_threshold
             )
-            pair_for_visualization = pair
+            bitmap_for_visualization = binned_bitmap
             # change comp_group to REFA (REF in accession space) for vis and for liftover purposes
             if comp_group == "REF":
                 comp_group = "REFA"
 
-        # don't allow merged_sims to include results from REF when using_ref_space
-        if len(comp_groups) > 1 and not ref_with_ref_space:
-            if merged_sims is None:
-                merged_sims = group_sims
+        # don't allow merged_introgressions to include results from REF when using_ref_space
+        if len(comp_groups) > 1 and not use_reference:
+            if merged_introgressions is None:
+                merged_introgressions = introgressions
             else:
-                merged_sims += group_sims
+                merged_introgressions += introgressions
 
         # Step 3 - visualization
         # show user introgressions labeled on the original heatmap from panagram
         # invert values for figure so that introgressions = 0
-        pair_for_visualization.loc["Introgressions"] = (
-            ~(group_sims["introgression"].astype(bool))
+        bitmap_for_visualization.loc["Introgressions"] = (
+            ~(introgressions["introgression"].astype(bool))
         ).astype(int)
         if render_vis:
             output_vis = output_dir / "heatmaps"
@@ -455,7 +604,7 @@ def run_introgression_finder(
             output_vis = output_vis / f"{anchor}_{chr_name}_{comp_group}_heatmap.svg"
             title = f"{anchor} {chr_name} Introgressions Called with {comp_group}"
             visualize(
-                pair_for_visualization.drop(columns=["group"]),
+                bitmap_for_visualization.drop(columns=["group"]),
                 output_vis,
                 inverse=True,
                 title=title,
@@ -464,21 +613,21 @@ def run_introgression_finder(
 
         # Step 4 - save introgressions to bed file
         output_bed = output_dir / f"{anchor}_{chr_name}_{comp_group}.bed"
-        introgressions = bins_to_bed(group_sims, bin_size, chr_name, comp_group)
+        introgressions = bins_to_bed(introgressions, bin_size, chr_name, comp_group)
         introgressions.to_csv(output_bed, header=False, index=False, sep="\t")
 
     # Step 5 - repeat analysis one more time with merged introgressions from all comp_groups
-    if merged_sims is not None:
+    if merged_introgressions is not None:
         # divide by the max to get between 0 and 1, do 1 - x to invert
-        pair_for_visualization.loc["Introgressions"] = 1 - (
-            merged_sims["introgression"] / merged_sims["introgression"].max()
+        bitmap_for_visualization.loc["Introgressions"] = 1 - (
+            merged_introgressions["introgression"] / merged_introgressions["introgression"].max()
         )
 
         if render_vis:
             output_vis = output_dir / "heatmaps" / f"{anchor}_{chr_name}_merged_heatmap.svg"
             title = f"{anchor} {chr_name} Merged Introgressions"
             visualize(
-                pair_for_visualization.drop(columns=["group"]),
+                bitmap_for_visualization.drop(columns=["group"]),
                 output_vis,
                 inverse=True,
                 title=title,
@@ -487,7 +636,7 @@ def run_introgression_finder(
 
         # save introgressions to bed file
         output_bed = output_dir / f"{anchor}_{chr_name}_merged.bed"
-        introgressions = bins_to_bed(merged_sims, bin_size, chr_name, "merged")
+        introgressions = bins_to_bed(merged_introgressions, bin_size, chr_name, "merged")
         introgressions.to_csv(output_bed, header=False, index=False, sep="\t")
     return
 
@@ -509,10 +658,27 @@ def run_introgression_finder_worker(
     index_dir,
     group_tsv_path,
 ):
+    """Worker function for parallel chromosome processing. Creates large objects inside the process
+    to avoid pickling issues when directly using run_introgression_finder with multiprocessing.
+
+    Args:
+        anchor (str): the anchor genome accession name
+        ref_genome (panagram.index.Genome): the reference genome (None if not using ref space)
+        chr_name (str): the chromosome name
+        comp_groups (list): the groups of accessions to compare against
+        threshold (float): the similarity threshold for introgression detection
+        bitmap_step (int): step size for sampling kmers in the bitmap (e.g., every 100th kmer)
+        bin_size (int): size of bitmap bin in bases
+        using_ref_space (bool): whether to use the reference genome space instead of accession space
+        preprocessing_args (dict): arguments for preprocessing the bitmap
+        genome_similarities (pd.DataFrame): the genome similarities (None if not used for preprocessing)
+        ref_genome_similarities (pd.DataFrame): the reference genome similarities (None if not used for preprocessing)
+        render_vis (bool): whether to render visualizations
+        output_dir (Path): the output directory for results
+        index_dir (Path): the directory containing the genome index
+        group_tsv_path (Path): the path to the TSV file containing group information
     """
-    Worker function for parallel chromosome processing.
-    Reconstructs objects inside the process to avoid pickling issues.
-    """
+
     # Reconstruct index, genome, ref_genome, and groups inside the worker
     index = Index(index_dir)
     genome = index.genomes[anchor]
@@ -569,9 +735,9 @@ def main():
         help="filter size for smoothing",
     )
     parser.add_argument(
-        "--cst",
+        "--edg",
         action="store_true",
-        help="perform percentile-based contrast stretching; better highlights introgressions and normalizes kmer similarities",
+        help="perform edge tapered normalization on binned bitmap",
     )
     parser.add_argument("--rmf", action="store_true", help="remove fixed kmers from bitmap")
     parser.add_argument("--rmu", nargs="+", help="remove unique kmers from given bitmaps")

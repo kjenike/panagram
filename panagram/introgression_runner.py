@@ -7,6 +7,15 @@ import yaml
 
 
 def parse_config(config_path):
+    """Parse the introgression configuration file.
+
+    Args:
+        config_path (Path): Path to the YAML configuration file
+
+    Returns:
+        dict: parsed configuration as a dictionary
+    """
+
     with config_path.open() as f:
         config = yaml.safe_load(f)
 
@@ -36,7 +45,7 @@ def parse_config(config_path):
     call_trm = calling["trm"]
     call_sft = calling["sft"]
     call_ssz = calling["ssz"]
-    call_cst = calling["cst"]
+    call_edg = calling["edg"]
     call_isc = calling["isc"]
     call_vis = calling["vis"]
 
@@ -79,7 +88,7 @@ def parse_config(config_path):
             f"--ogrp {' '.join(call_ogrp)}" if call_ogrp else None,
             f"--ref {ref}",
             "--rmf" if call_rmf else None,
-            "--cst" if call_cst else None,
+            "--edg" if call_edg else None,
             "--isc" if call_isc else None,
             "--vis" if call_vis else None,
         ]
@@ -121,6 +130,16 @@ def parse_config(config_path):
 
 
 def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, output_dir, call_thr):
+    """Run the introgression pipeline.
+
+    Args:
+        call_flags (list): flags for the calling step
+        postprocess_flags (list): flags for the postprocessing step
+        score_flags (list): flags for the scoring step
+        output_dir (Path): directory for output files
+        call_thr (float): threshold for calling introgressions
+    """
+
     # Create output directories
     call_dir = output_dir / f"{output_dir.name}_{call_thr}"
     call_dir.mkdir(parents=True, exist_ok=True)
@@ -155,6 +174,18 @@ def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, outpu
 
 
 def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_dir):
+    """Run the introgression pipeline through several threshold values.
+
+    Args:
+        call_flags (list): flags for the calling step
+        postprocess_flags (list): flags for the postprocessing step
+        score_flags (list): flags for the scoring step
+        output_dir (Path): directory for output files
+
+    Raises:
+        ValueError: if PAF file is not provided during sweep and liftover is attempted.
+    """
+
     # throw error if paf is not provided during sweep and the user is trying to perform liftover
     # this is to prevent spawning multiple screens with duplicate minimap processes
     if postprocess_flags and any(
