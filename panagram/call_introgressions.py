@@ -96,7 +96,9 @@ def bitmap_to_bins(
         kmers_to_keep_columns.append(ref_genome_name)
 
         # find kmers that aren't present in the reference or the wild accessions and set their reference column to 1
-        bitmap_with_bin_idx.loc[bitmap_with_bin_idx[kmers_to_keep_columns].sum(axis=1) == 0, ref_genome_name] = 1
+        bitmap_with_bin_idx.loc[
+            bitmap_with_bin_idx[kmers_to_keep_columns].sum(axis=1) == 0, ref_genome_name
+        ] = 1
 
     # remove fixed kmers shared by all members of the pangenome (i.e., rows that are all 1)
     if omit_fixed_kmers:
@@ -334,17 +336,23 @@ def threshold_introgressions(binned_bitmap, anchor, comp_group, threshold, row_m
 
     # define df with group info and kmer sims of anchor's group; drop anchor's self-similarity
     binned_bitmap_only_anchor_group = (
-        binned_bitmap[binned_bitmap["group"] == anchor_group].drop(columns=["group"]).drop(anchor, axis=0)
+        binned_bitmap[binned_bitmap["group"] == anchor_group]
+        .drop(columns=["group"])
+        .drop(anchor, axis=0)
     )
 
     # define df with group info and kmer sim for comparison group
-    binned_bitmap_only_comp_group = binned_bitmap[binned_bitmap["group"] == comp_group].drop(columns=["group"])
+    binned_bitmap_only_comp_group = binned_bitmap[binned_bitmap["group"] == comp_group].drop(
+        columns=["group"]
+    )
 
     # throw out all acessions with large global diffs w/ the anchor
     if len(binned_bitmap_only_anchor_group) > 1 and anchor_group == comp_group:
         for accession, row in binned_bitmap_only_anchor_group.iterrows():
             if row.mean() < row_mean_threshold:
-                binned_bitmap_only_anchor_group = binned_bitmap_only_anchor_group[binned_bitmap_only_anchor_group.index != accession]
+                binned_bitmap_only_anchor_group = binned_bitmap_only_anchor_group[
+                    binned_bitmap_only_anchor_group.index != accession
+                ]
 
         if binned_bitmap_only_anchor_group.empty:
             print(
@@ -360,11 +368,11 @@ def threshold_introgressions(binned_bitmap, anchor, comp_group, threshold, row_m
     group_sims["comp_sim"] = binned_bitmap_only_comp_group.max(axis=0)
 
     # apply thresholding logic
-    if anchor_group == comp_group: # comparing within the same group
+    if anchor_group == comp_group:  # comparing within the same group
         group_sims["introgression"] = (group_sims.anchor_sim < threshold).astype(int)
-    elif comp_group == "REF": # comparing to reference group
+    elif comp_group == "REF":  # comparing to reference group
         group_sims["introgression"] = (group_sims.comp_sim < threshold).astype(int)
-    else: # comparing to different/wild group
+    else:  # comparing to different/wild group
         group_sims["introgression"] = (group_sims.comp_sim >= (threshold)).astype(int)
         # previous logic that also required anchor to be less similar to its own group than to comp_group
         # binned_bitmap_only_ref = binned_bitmap[binned_bitmap["group"] == "REF"].drop(columns=["group"])
@@ -431,7 +439,9 @@ def bins_to_bed(bins_df, bin_size, chr_name, comp_group):
     return introgressions
 
 
-def visualize(binned_bitmap, output_file, inverse=False, title=None, groups=None, xaxis_dtick=2000000):
+def visualize(
+    binned_bitmap, output_file, inverse=False, title=None, groups=None, xaxis_dtick=2000000
+):
     """Visualize the binned k-mer similarities as a heatmap.
     Args:
         binned_bitmap (pd.DataFrame): the binned k-mer similarities
@@ -465,7 +475,13 @@ def visualize(binned_bitmap, output_file, inverse=False, title=None, groups=None
         )
     else:
         fig = px.imshow(
-            binned_bitmap, x=binned_bitmap.columns, y=binned_bitmap.index, aspect="auto", title=title, zmin=0, zmax=1
+            binned_bitmap,
+            x=binned_bitmap.columns,
+            y=binned_bitmap.index,
+            aspect="auto",
+            title=title,
+            zmin=0,
+            zmax=1,
         )
     fig.update_layout(
         font=dict(family="Helvetica Bold", color="black"),
@@ -546,7 +562,9 @@ def run_introgression_finder(
     )
 
     # preprocess bitmap
-    binned_bitmap = preprocess_binned_bitmap(binned_bitmap, genome_similarities, **preprocessing_args)
+    binned_bitmap = preprocess_binned_bitmap(
+        binned_bitmap, genome_similarities, **preprocessing_args
+    )
 
     # get group information for the anchor's group and the comparison group
     binned_bitmap = binned_bitmap.merge(groups, left_index=True, right_index=True, how="left")
@@ -563,9 +581,13 @@ def run_introgression_finder(
             ref_binned_bitmap = bitmap_to_bins(ref_chr_bitmap, bin_size, omit_fixed_kmers)
 
             # preprocess ref_pair in the same way as pair
-            ref_binned_bitmap = preprocess_binned_bitmap(ref_binned_bitmap, ref_genome_similarities, **preprocessing_args)
+            ref_binned_bitmap = preprocess_binned_bitmap(
+                ref_binned_bitmap, ref_genome_similarities, **preprocessing_args
+            )
 
-            ref_binned_bitmap = ref_binned_bitmap.merge(groups, left_index=True, right_index=True, how="left")
+            ref_binned_bitmap = ref_binned_bitmap.merge(
+                groups, left_index=True, right_index=True, how="left"
+            )
             bitmap_for_visualization = ref_binned_bitmap
 
             # get introgressions by looking at differences with REF

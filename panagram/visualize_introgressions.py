@@ -1,7 +1,3 @@
-"""
-Extra functions for visualization of introgressions.
-"""
-
 import argparse
 from pathlib import Path
 import numpy as np
@@ -14,11 +10,17 @@ from reportlab.lib.utils import ImageReader
 import io
 
 
-def create_heatmap(distances_file, groups=None):
-    # visualize ground truth bins from get_distances.py by themselves
-    distances_file = Path(distances_file)
-    output_file = distances_file.parent / (distances_file.stem + ".svg")
-    distances = pd.read_csv(distances_file, sep="\t", index_col=0).fillna(0)
+def create_heatmap(text_file, groups=None):
+    """Create a heatmap of Jaccard similarities from get_distances.py.
+
+    Args:
+        text_file (str or Path): path to distances text file
+        groups (pd.Series, optional): accession groups, used to determine ordering of heatmap rows, defaults to None
+    """
+
+    text_file = Path(text_file)
+    output_file = text_file.parent / (text_file.stem + ".svg")
+    distances = pd.read_csv(text_file, sep="\t", index_col=0).fillna(0)
     distances = distances.sort_index()
     distances.columns = distances.columns.astype(int)
 
@@ -44,7 +46,7 @@ def create_heatmap(distances_file, groups=None):
             thickness=20,  # make it thicker
         ),
         title=dict(
-            text=distances_file.stem,
+            text=text_file.stem,
             # x=0.5,  # Center the title
             # xanchor="right",
             font=dict(size=20),
@@ -65,6 +67,13 @@ def create_heatmap(distances_file, groups=None):
 
 
 def create_heatmap_runner(input_dir, groups=None):
+    """Create heatmaps for all distance files in the input directory.
+
+    Args:
+        input_dir (Path): path to input directory containing distance files
+        groups (pd.Series, optional): accession groups, used to determine ordering of heatmap rows, defaults to None.
+    """
+
     distances_files = list(input_dir.glob("chr*.txt"))
     distances_files = [file for file in distances_files if "max_species" not in file.name]
     for file in distances_files:
@@ -74,6 +83,18 @@ def create_heatmap_runner(input_dir, groups=None):
 
 
 def calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds):
+    """Calculate precision-recall AUC for introgressions.
+
+    Args:
+        input_dir (Path): path to input directory containing distance files
+        intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
+        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
+        thresholds (list): list of thresholds to evaluate
+
+    Returns:
+        pd.DataFrame: DataFrame containing PR and related metrics for each threshold
+    """
+
     scored_dir_name = f"scored_{how_to_score}"
 
     # find the file we need
@@ -117,6 +138,15 @@ def calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds):
 
 
 def create_mcc_curve(input_dir, intro_type, how_to_score, thresholds):
+    """Create a Matthews Correlation Coefficient (MCC) curve.
+
+    Args:
+        input_dir (Path): path to input directory containing distance files
+        intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
+        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
+        thresholds (list): list of thresholds to evaluate
+    """
+
     results_df = calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds)
     fig = px.line(
         results_df,
@@ -142,6 +172,15 @@ def create_mcc_curve(input_dir, intro_type, how_to_score, thresholds):
 
 
 def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
+    """Create a precision-recall curve.
+
+    Args:
+        input_dir (Path): path to input directory containing distance files
+        intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
+        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
+        thresholds (list): list of thresholds to evaluate
+    """
+
     results_df = calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds)
     results_df = results_df[~((results_df["recall"] == 0) & (results_df["precision"] == 1))]
     results_df = results_df[~((results_df["recall"] == 0) & (results_df["precision"] == 0))]
@@ -169,6 +208,15 @@ def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
 
 
 def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
+    """Create a precision-recall curve with individual lines for each accession.
+
+    Args:
+        input_dir (Path): path to input directory containing distance files
+        intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
+        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
+        thresholds (list): list of thresholds to evaluate
+    """
+
     scored_dir_name = f"scored_{how_to_score}"
     output_file = f"{input_dir}/{how_to_score}_{intro_type}_prca.svg"
 
@@ -261,8 +309,8 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
         template="plotly_white",
         xaxis_title=dict(text="Recall"),
         yaxis_title=dict(text="Precision"),
-        xaxis=dict(range=[0.8, 1.01], ticks="outside", linecolor="black"),
-        yaxis=dict(range=[0.8, 1.01], ticks="outside", linecolor="black"),
+        xaxis=dict(range=[0, 1.01], ticks="outside", linecolor="black"),
+        yaxis=dict(range=[0, 1.01], ticks="outside", linecolor="black"),
         width=700,
         height=500,
         margin=dict(l=10, r=10, t=10, b=10),  # tight layout
@@ -272,6 +320,15 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
 
 
 def create_pr_curve_chromosomes(input_dir, intro_type, how_to_score, thresholds):
+    """Create a precision-recall curve with individual lines for each chromosome.
+
+    Args:
+        input_dir (Path): path to input directory containing distance files
+        intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
+        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
+        thresholds (list): list of thresholds to evaluate
+    """
+
     scored_dir_name = f"scored_{how_to_score}"
     output_file = f"{input_dir}/{how_to_score}_{intro_type}_prcc.svg"
 
@@ -307,7 +364,15 @@ def create_pr_curve_chromosomes(input_dir, intro_type, how_to_score, thresholds)
 
 
 def create_scored_heatmap_collage(input_dir, intro_type, how_to_score, thresholds):
-    # create a collage of heatmaps; each page should have a chromosome through each threshold
+    """Create a collage of heatmaps for each chromosome through each threshold.
+
+    Args:
+        input_dir (Path): path to input directory containing distance files
+        intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
+        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
+        thresholds (list): list of thresholds to evaluate
+    """
+
     scored_dir_name = f"scored_{how_to_score}"
     output_file = f"{input_dir}/{how_to_score}_{intro_type}_scored_heatmaps.pdf"
 

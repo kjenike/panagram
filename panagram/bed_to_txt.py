@@ -6,9 +6,9 @@ from postprocess_introgressions import (
 )
 
 GT_BED_FILE = Path(
-    "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v2/introgressions_gt/Athal_edited_0_introgressions.bed"
+    "/home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v3/introgressions_gt/Athal_edited_0_introgressions.bed"
 )
-INDEX_DIR = Path("/home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v2")
+INDEX_DIR = Path("/home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v3")
 REF = "Reference"
 WILD_TYPE = "WildRelative"
 WILD_TYPE_GROUP = "WT"

@@ -9,7 +9,18 @@ import plotly.express as px
 
 
 def merge_bed_files(bed_files, bin_size, chr_length):
-    # append bed files together as rows in a df to match the style of the df returned by read_text_file
+    """Convert BED files to binned format and append them together as rows in a DataFrame to match
+    the style of the DataFrame returned by read_text_file.
+
+    Args:
+        bed_files (list): list of paths to BED files
+        bin_size (int): size of the bins
+        chr_length (int): length of the chromosome
+
+    Returns:
+        pd.DataFrame: merged DataFrame containing all BED files
+    """
+
     merged_df = None
     for bed_file in bed_files:
         parts = bed_file.stem.split("_")
@@ -36,7 +47,16 @@ def merge_bed_files(bed_files, bin_size, chr_length):
 
 
 def merge_text_files(text_files):
-    # merge dfs together using max operator
+    """Merge DataFrames from read_text_file together using max operator. The highest value between
+    multiple Jaccard similarities is taken as the final value for each bin.
+
+    Args:
+        text_files (list): list of paths to text files containing Jaccard similarities
+
+    Returns:
+        pd.DataFrame: merged DataFrame containing all text files
+    """
+
     text_dfs = []
     for text_file in text_files:
         text_dfs.append(read_text_file(text_file))
@@ -44,15 +64,34 @@ def merge_text_files(text_files):
     return merged_df
 
 
-def read_text_file(introgression_file):
-    # read ground-truth introgressions for a chromosome from get_distances.py
-    intro_df = pd.read_csv(introgression_file, sep="\t", header=0, index_col=0).fillna(0)
+def read_text_file(text_file):
+    """Read Jaccard similarities for a chromosome from get_distances.py.
+
+    Args:
+        text_file (str): path to the text file containing Jaccard similarities
+
+    Returns:
+        pd.DataFrame: DataFrame containing text file information
+    """
+
+    intro_df = pd.read_csv(text_file, sep="\t", header=0, index_col=0).fillna(0)
     intro_df.columns = intro_df.columns.astype(int)
     return intro_df
 
 
 def rescale_introgressions_helper(row, original_bin_size, new_bin_size, chr_length):
-    # quick function to rescale bins to new bin size
+    """Rescale DataFrame to a new bin size.
+
+    Args:
+        row (pd.Series): Series containing introgression data
+        original_bin_size (int): original bin size
+        new_bin_size (int): new bin size
+        chr_length (int): length of the chromosome
+
+    Returns:
+        pd.Series: rescaled introgression data
+    """
+
     bins_df = row.rename("introgression").to_frame()
     bins_df.index = bins_df.index.astype(int)
     bed_df = bins_to_bed(bins_df, original_bin_size, "nan", "nan")
@@ -67,6 +106,19 @@ def rescale_introgressions_helper(row, original_bin_size, new_bin_size, chr_leng
 
 
 def merge_centromere_regions_helper(row, bin_size, chr_length, fasta_df):
+    """Uses merge_centromere_regions to fill in centromere regions between introgressions. Helper to
+    convert between bins and bed formats.
+
+    Args:
+        row (pd.Series): Series containing introgression data
+        bin_size (int): bin size
+        chr_length (int): length of the chromosome
+        fasta_df (pd.DataFrame): DataFrame containing FASTA information from the reference genome
+
+    Returns:
+        pd.Series: Merged centromere regions.
+    """
+
     # convert row to bed file - save temporarily
     bins_df = row.rename("introgression").to_frame()
     bins_df.index = bins_df.index.astype(int)
@@ -86,21 +138,54 @@ def merge_centromere_regions_helper(row, bin_size, chr_length, fasta_df):
 
 
 def threshold_introgressions_helper(intro_df, threshold):
+    """Threshold helper function. Values below the threshold
+    are set to 0 (not introgressed), and values equal to or above the threshold are set to 1
+    (introgressed).
+
+    Args:
+        intro_df (pd.DataFrame): DataFrame containing introgression data
+        threshold (float): threshold value for introgression
+
+    Returns:
+        pd.DataFrame: thresholded introgression data
+    """
+
     intro_df[intro_df < threshold] = 0
     intro_df[intro_df != 0] = 1
     return intro_df.astype(int)
 
 
 def threshold_introgressions(pred_df, gt_df, threshold):
-    # threshold introgressions for scoring
-    gt_df = threshold_introgressions_helper(gt_df, threshold)
+    """Threshold Jaccard similarities for scoring and make sure all predicted introgressions
+    are labeled as a 1.
 
-    # make sure all predicted introgressions are labeled as a 1
+    Args:
+        pred_df (pd.DataFrame): DataFrame containing predicted introgression data
+        gt_df (pd.DataFrame): DataFrame containing ground truth introgression data
+        threshold (float): threshold value for introgression
+
+    Returns:
+        pd.DataFrame: thresholded predicted and ground truth introgression data
+    """
+
+    gt_df = threshold_introgressions_helper(gt_df, threshold)
     pred_df = threshold_introgressions_helper(pred_df, threshold=1)
     return pred_df, gt_df
 
 
 def score_introgression_overlaps_helper(pred_df_row, gt_df_row, overlap_threshold):
+    """Score introgression overlaps between predicted and ground truth data.
+
+    Args:
+        pred_df_row (pd.Series): Series containing predicted introgression data
+        gt_df_row (pd.Series): Series containing ground truth introgression data
+        overlap_threshold (float): min. fraction of overlap required to consider a region a TP
+
+    Returns:
+        tuple(dict, pd.Series): dictionary containing overlap scores and gt_df_row with relabeled
+        TP/FN/TN/FP regions for visualization
+    """
+
     # label every region in pred as TP, TN, FP, or FN
     # using regions defined by pred means that FPs aren't ignored
     gt_df_row = gt_df_row.to_frame(name="introgression")
@@ -175,6 +260,16 @@ def score_introgression_overlaps_helper(pred_df_row, gt_df_row, overlap_threshol
 
 
 def score_introgression_overlaps(pred_df, gt_df, overlap_threshold):
+    """Get confusion matrix and related metrics for introgressions given ground truth in the same
+    coordinate/bin space. Accession names must match between pred_df and gt_df.
+    Args:
+        pred_df (pd.DataFrame): DataFrame containing predicted introgression data
+        gt_df (pd.DataFrame): DataFrame containing ground truth introgression data
+        overlap_threshold (float): min. fraction of overlap required to consider a region a TP
+    Returns:
+        pd.DataFrame: DataFrame containing confusion matrix and related metrics
+    """
+
     # score introgressions per-region rather than per-bin
     shared_cols = list(set(pred_df.index).intersection(set(gt_df.index)))
     pred_df = pred_df.transpose()[shared_cols]
@@ -218,8 +313,17 @@ def score_introgression_overlaps(pred_df, gt_df, overlap_threshold):
 
 
 def score_introgressions(pred_df, gt_df):
-    # get confusion matrix and related metrics for introgressions given ground truth in the same coordinate/bin space
-    # NOTE: accession names must match
+    """Get confusion matrix and related metrics for introgressions given ground truth in the same
+    coordinate/bin space. Accession names must match between pred_df and gt_df.
+
+    Args:
+        pred_df (pd.DataFrame): DataFrame containing predicted introgression data
+        gt_df (pd.DataFrame): DataFrame containing ground truth introgression data
+
+    Returns:
+        pd.DataFrame: DataFrame containing confusion matrix and related metrics
+    """
+
     # rotate dfs, sort cols, and drop all columns that aren't shared btwn called and gt
     shared_cols = list(set(pred_df.index).intersection(set(gt_df.index)))
     pred_df = pred_df.transpose()[shared_cols]
@@ -260,8 +364,17 @@ def score_introgressions(pred_df, gt_df):
 
 
 def create_scored_heatmap_overlaps(pred_df, gt_df, overlap_threshold, output_file):
-    # performs modification of gt_df before passing to create_scored_heatmap
-    # only visualize the accessions that are shared btwn both files
+    """Helper function to create a scored heatmap for introgression overlaps. Performs modification
+    of gt_df before passing to create_scored_heatmap. Only visualizes the accessions that are shared
+    between both pred_df and gt_df.
+
+    Args:
+        pred_df (pd.DataFrame): DataFrame containing predicted introgression data
+        gt_df (pd.DataFrame): DataFrame containing ground truth introgression data
+        overlap_threshold (float): minimum overlap threshold for considering a region a true positive
+        output_file (str or Path): Path to the output file for the heatmap
+    """
+
     shared_accessions = list(set(pred_df.index.values).intersection(set(gt_df.index.values)))
     pred_df = pred_df[pred_df.index.isin(shared_accessions)].sort_index()
     gt_df = gt_df[gt_df.index.isin(shared_accessions)].sort_index()
@@ -280,7 +393,18 @@ def create_scored_heatmap_overlaps(pred_df, gt_df, overlap_threshold, output_fil
     return
 
 
-def create_scored_heatmap(pred_df, gt_df, output_file, groups=None):
+def create_scored_heatmap(pred_df, gt_df, output_file, groups=None, xaxis_dtick=2000000):
+    """Create a scored heatmap for introgressions given ground truth in the same coordinate/bin
+    space.
+
+    Args:
+        pred_df (pd.DataFrame): DataFrame containing predicted introgression data
+        gt_df (pd.DataFrame): DataFrame containing ground truth introgression data
+        output_file (str or Path): Path to the output file for the heatmap
+        groups (pd.Series, optional): accession groups, used to determine ordering of heatmap rows, defaults to None
+        xaxis_dtick (int, optional): the x-axis tick interval, defaults to 2000000
+    """
+
     pred_df = pred_df.copy()
     # only visualize the accessions that are shared btwn both files
     shared_accessions = list(set(pred_df.index.values).intersection(set(gt_df.index.values)))
@@ -315,9 +439,12 @@ def create_scored_heatmap(pred_df, gt_df, output_file, groups=None):
         font=dict(family="Helvetica Bold", color="black"),
         coloraxis_showscale=False,
         yaxis=dict(tickmode="linear", title=""),
-        title=output_file.stem,
+        title=dict(
+            text=output_file.stem,
+            font=dict(size=20),
+        ),
         xaxis=dict(
-            dtick=4000000,
+            dtick=xaxis_dtick,
             title=dict(
                 text="Genomic Position",
                 font=dict(size=16),

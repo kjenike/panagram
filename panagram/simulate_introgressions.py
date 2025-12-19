@@ -7,8 +7,10 @@ from scipy.stats import beta
 
 def parse_fasta(path):
     """Parse FASTA file into an ordered dict of sequences.
+
     Args:
         path (str or Path): path to FASTA file
+
     Returns:
         OrderedDict: keys are sequence names, values are sequences (str)
     """
@@ -34,14 +36,14 @@ def parse_fasta(path):
 
 
 def write_fasta(seqs, path, wrap=60):
-    """
-    Write sequences to a FASTA file with configurable line wrapping.
+    """Write sequences to a FASTA file with configurable line wrapping.
 
     Args:
         seqs (dict): keys are sequence names, values are sequences (str)
         path (str or Path): path to output FASTA file
         wrap (int): number of bases per line (default: 60)
     """
+
     with open(path, "w") as f:
         for name, seq in seqs.items():
             f.write(f">{name}\n")
@@ -52,6 +54,7 @@ def write_fasta(seqs, path, wrap=60):
 
 def write_bed(bed_entries, bed_path):
     """Write BED file with introgression entries.
+
     Args:
         bed_entries (list of str): list of BED entries as strings
         bed_path (str or Path): path to output BED file
@@ -76,6 +79,7 @@ def mutate_seq_with_introgressions(
 ):
     """Apply introgressions by copying segments from rel_seq into ref_seq. Introgression sizes are
     sampled from a skewed distribution between size_min and size_max (inclusive).
+
     Args:
         chrom (str): chromosome name for bed entries
         ref_seq (str): reference sequence
@@ -85,9 +89,9 @@ def mutate_seq_with_introgressions(
         n_introgressions (int): number of introgressions to apply
         introgression_lengths (list of int): lengths of introgressions
         rng (np.random.Generator): random number generator
+
     Returns:
-        new_seq (str): sequence after introgressions applied
-        bed_entries (list of str): list of BED entries for introgressions
+        tuple(str, list): sequence after introgressions applied, BED entries for introgressions
     """
 
     bed_entries = []
@@ -152,6 +156,7 @@ def apply_genome_wide_introgressions(
     rng,
 ):
     """Apply introgressions across all chromosomes and save corresponding BED entries.
+
     Args:
         ref_seqs (dict): reference sequences (chrom -> seq)
         rel_seqs (dict): wild relative sequences (chrom -> seq)
@@ -161,9 +166,10 @@ def apply_genome_wide_introgressions(
         size_min (int): minimum introgression size
         size_max (int): maximum introgression size
         rng (np.random.Generator): random number generator
+
     Returns:
-        new_seqs (dict): sequences after introgressions applied (chrom -> seq)
-        bed_entries (list of str): list of BED entries for introgressions
+        tuple(dict, list): sequences after introgressions applied (chrom -> seq), BED entries for
+        introgressions
     """
 
     bed_entries = []
@@ -205,6 +211,7 @@ def apply_genome_wide_introgressions(
 def generate_skewed_sizes(n, size_min, size_max, rng, a=0.05, b=1):
     """Generate n sizes from a beta distribution skewed towards smaller sizes. Used for sampling
     indel sizes.
+
     Args:
         n (int): number of sizes to generate
         size_min (int): minimum size
@@ -212,8 +219,9 @@ def generate_skewed_sizes(n, size_min, size_max, rng, a=0.05, b=1):
         rng (np.random.Generator): random number generator
         a (float): alpha parameter of beta distribution (default: 0.05)
         b (float): beta parameter of beta distribution (default: 1)
+
     Returns:
-        list of int: generated sizes
+        list: generated sizes
     """
 
     # generate sizes from beta distribution skewed towards smaller sizes
@@ -226,11 +234,13 @@ def generate_skewed_sizes(n, size_min, size_max, rng, a=0.05, b=1):
 def create_random_trenches(weights, rng, block_size=1_000_000, drop_fraction=0.3):
     """
     Apply random trenches to the weights by reducing their values in certain blocks.
+
     Args:
         weights (np.ndarray): array of weights to modify
         block_size (int): size of the blocks to consider for dropping weights
         drop_fraction (float): probability of dropping weights in a block
         rng (np.random.Generator): random number generator
+
     Returns:
         np.ndarray: modified weights with trenches applied
     """
@@ -254,11 +264,13 @@ def generate_edge_tapered_weights(n, rng, edge_fraction=0.3, edge_power=5):
     Generate n weights with a trench shape: high at edges, low in middle. To be used for sampling
     indel positions with higher probability at edges of the chromosome. Adds random noise to increase
     variability.
+
     Args:
         n (int): number of weights to generate
         edge_fraction (float): proportion of positions considered "edges"
         edge_power (float): how steep the edge taper is
         rng (np.random.Generator): random number generator
+
     Returns:
         np.ndarray: array of weights with trench shape
     """
@@ -285,12 +297,14 @@ def generate_edge_tapered_weights(n, rng, edge_fraction=0.3, edge_power=5):
 def position_spacer(positions, lengths, chr_size):
     """Add space to positions to ensure no overlap given lengths and max size. Removes positions
     that cannot fit within chromosome size.
+
     Args:
         positions (list of int): candidate positions
         lengths (list of int): corresponding lengths
         chr_size (int): size of chromosome to avoid overflow
+
     Returns:
-        selected_positions (list of tuples): selected positions and lengths without overlap
+        list[tuple]: selected positions and lengths without overlap
     """
     selected_positions = []
     current_end = -1
@@ -320,8 +334,8 @@ def position_spacer(positions, lengths, chr_size):
 def generate_mutation_positions(
     mutation_type, n_positions, size_min, size_max, position_weights, rng
 ):
-    """
-    Generate random positions and lengths for mutations of a given type without overlap or replacement.
+    """Generate random positions and lengths for mutations of a given type without overlap or replacement.
+
     Args:
         mutation_type (str): type of mutation ("deletion", "insertion", "snp")
         n_positions (int): number of mutation positions to generate
@@ -329,9 +343,10 @@ def generate_mutation_positions(
         size_max (int): maximum size of mutation
         position_weights (array of float): corresponding weights for available positions
         rng (np.random.Generator): random number generator
+
     Returns:
-        mutation_positions (list of tuples): list of (position, length, mutation_type)
-        position_weights (array of float): updated list of available weights after mutations
+        tuple(list, np.ndarray): list of (position, length, mutation_type), updated list of
+        available weights after mutations
     """
 
     # create random positions for each mutation type without overlap or replacement
@@ -374,8 +389,7 @@ def generate_mutation_positions(
 def mutate_seq_with_indels_and_snps(
     seq, sub_rate, ins_rate, del_rate, ins_size_min, ins_size_max, del_size_min, del_size_max, rng
 ):
-    """
-    Precompute random positions for substitutions, deletions, insertions, then apply them.
+    """Precompute random positions for substitutions, deletions, insertions, then apply them.
     Use apply_genome_wide_mutations() to apply to all sequences in a dict.
 
     Args:
@@ -388,10 +402,10 @@ def mutate_seq_with_indels_and_snps(
         del_size_min (int): minimum deletion size
         del_size_max (int): maximum deletion size
         rng (np.random.Generator): random number generator
+
     Returns:
-        mutated_seq (str): sequence after mutations applied
-        reverse_mapper (np.array): mapping from original indices to new indices (-1 for deleted)
-        available_positions (list of int): remaining non-mutated positions
+        tuple(str, np.ndarray, list): sequence after mutations applied, mapping from original
+        indices to new indices (-1 for deleted), remaining non-mutated positions
     """
 
     L = len(seq)
@@ -426,7 +440,7 @@ def mutate_seq_with_indels_and_snps(
     all_mutations = ins_positions + del_positions + sub_positions
     all_mutations.sort()
 
-    bases = ["A", "C", "G", "T"]
+    bases = ["a", "c", "g", "t"]
     current_index = 0
     offset = 0
     new_seq = []
@@ -493,6 +507,7 @@ def apply_genome_wide_mutations(
     seqs, sub_rate, ins_rate, del_rate, ins_size_min, ins_size_max, del_size_min, del_size_max, rng
 ):
     """Apply per-base mutation rates (SNPs, indels) to each sequence in seqs dict.
+
     Args:
         seqs (dict): input sequences (chrom -> seq)
         sub_rate (float): per-base substitution rate
@@ -503,10 +518,11 @@ def apply_genome_wide_mutations(
         del_size_min (int): minimum deletion size
         del_size_max (int): maximum deletion size
         rng (np.random.Generator): random number generator
+
     Returns:
-        new_seqs (dict): sequences after mutations applied (chrom -> seq)
-        mappers (dict): mapping from original indices to new indices for each chrom (chrom -> list of int)
-        available_positions (dict): remaining non-mutated positions for each chrom (chrom -> list of int)
+        tuple(dict, dict, dict): sequences after mutations applied (chrom -> seq), mapping from
+        original indices to new indices for each chrom (chrom -> list of int), remaining non-mutated
+        positions for each chrom (chrom -> list of int)
     """
 
     new_seqs = {}

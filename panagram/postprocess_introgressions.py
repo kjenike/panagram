@@ -13,10 +13,11 @@ def read_fasta_generator(fp):
     """Generator for fasta file - allows reading of one record at a time to save memory.
     Or, all records can be read at once using read_fasta().
 
-    :param fp: file pointer
-    :type fp: _io.TextIOWrapper
-    :yield: name and seq in the file
-    :rtype: tuple(name, seq)
+    Args:
+        fp (_io.TextIOWrapper): file pointer
+
+    Yields:
+        tuple: name and seq in the file
     """
 
     name, seq = None, []
@@ -35,10 +36,11 @@ def read_fasta_generator(fp):
 def read_fasta(input_file):
     """Read FASTA into a pandas dataframe.
 
-    :param input_file: FASTA file path
-    :type input_file: str
-    :return: dataframe of FASTA records with "Name" and "Sequence" columns
-    :rtype: pd.DataFrame
+    Args:
+        input_file (str): FASTA file path
+
+    Returns:
+        pd.DataFrame: dataframe of FASTA records with "Name" and "Sequence" columns
     """
 
     input_file = Path(input_file)
@@ -54,17 +56,17 @@ def read_fasta(input_file):
 
 
 def extract_bed_region(bed_row, fasta_df):
-    """Grab the sequence corresponding to the bed file coordinates listed.
+    """Grab the sequence corresponding to the bed file coordinates listed. Follows bedtools getfasta
+    logic (0-index, inclusive start coord, exclusive end coord).
 
-    :param bed_row: row of a bed file's dataframe
-    :type bed_row: pd.DataFrame
-    :param fasta_df: fasta information containing sequences that the bed file references
-    :type fasta_df: pd.DataFrame
-    :return: sequence corresponding to bed coordinates
-    :rtype: str
+    Args:
+        bed_row (pd.DataFrame): row of a bed file's dataframe
+        fasta_df (pd.DataFrame): fasta information containing sequences that the bed file references
+
+    Returns:
+        str: sequence corresponding to bed coordinates
     """
-    # extract a region from a FASTA that a BED file points to
-    # follows bedtools getfasta logic (0-index, inclusive start coord, exclusive end coord)
+
     chromosome_sequence = fasta_df.loc[fasta_df.Name == bed_row["Chromosome"], "Sequence"].iloc[0]
     start = int(bed_row["Start"])
     end = int(bed_row["End"])
@@ -73,8 +75,17 @@ def extract_bed_region(bed_row, fasta_df):
 
 
 def bed_file_is_empty(bed_file):
+    """Check if a bed file is empty.
+
+    Args:
+        bed_file (str or Path): path to bed file
+
+    Returns:
+        bool: True if bed file is empty, False otherwise
+    """
+
     try:
-        bed_df = pd.read_csv(
+        _ = pd.read_csv(
             bed_file,
             sep="\t",
             header=None,
@@ -87,10 +98,11 @@ def bed_file_is_empty(bed_file):
 def read_bed_file(bed_file):
     """Read in a given bed file.
 
-    :param bed_file: path to bed file with introgression locations
-    :type bed_file: str or Path
-    :return: dataframe representing bed file
-    :rtype: pd.DataFrame
+    Args:
+        bed_file (str or Path): path to bed file with introgression locations
+
+    Returns:
+        pd.DataFrame: dataframe representing bed file
     """
 
     if bed_file_is_empty(bed_file):
@@ -111,6 +123,17 @@ def read_bed_file(bed_file):
 
 
 def merge_centromere_regions(bed_df, fasta_df, bin_size):
+    """Merge centromere regions in a bed dataframe.
+
+    Args:
+        bed_df (pd.DataFrame): DataFrame containing bed file information (Chromosome, Start, End, Notes, Sequence)
+        fasta_df (pd.DataFrame): DataFrame containing fasta file information
+        bin_size (int): size of the bins used for merging
+
+    Returns:
+        pd.DataFrame: DataFrame with centromere regions merged
+    """
+
     # detect potential centromere regions (regions that are 2 bins apart)
     bed_df["End_Shifted"] = bed_df.End.shift(1)
     bed_df["New_Start"] = bed_df.Start.shift(1)
@@ -162,6 +185,19 @@ def align_assemblies(
     output_file,
     direction="query_to_reference",
 ):
+    """Align query assembly to reference using minimap2.
+
+    Args:
+        reference_file (str): path to the reference genome file (FASTA format)
+        query_file (str): path to the query genome file (FASTA format)
+        minimap_flags (list): list of flags to pass to minimap2
+        output_file (str): path to the output file (PAF format)
+        direction (str, optional): direction of the alignment. Defaults to "query_to_reference"
+
+    Raises:
+        ValueError: If direction is not "query_to_reference" or "reference_to_query".
+    """
+
     # Call minimap2 command - requires minimap2 to be in path
     if direction == "query_to_reference":
         minimap_command = ["minimap2"] + minimap_flags + [reference_file, query_file]
@@ -192,7 +228,14 @@ def liftover_coordinates(
     paf_file,
     output_file,
 ):
-    # Call liftover script - requires paftools.js to be in path
+    """Liftover coordinates from one genome assembly to another. Requires paftools.js to be in path.
+
+    Args:
+        bed_file (str): Path to the BED file to liftover
+        paf_file (str): Path to the PAF file indicating mapping between assemblies
+        output_file (str): Path to the output file for lifted coordinates (BED format)
+    """
+
     liftover_command = [
         "paftools.js",
         "liftover",
@@ -215,6 +258,16 @@ def liftover_coordinates(
 
 
 def get_intro_df_template(bin_size, chr_length):
+    """Create a template DataFrame with the correct number of bins for introgressions.
+
+    Args:
+        bin_size (int): size of the bins used for introgressions
+        chr_length (int): length of the chromosome
+
+    Returns:
+        pd.DataFrame: template DataFrame with a row for introgressions
+    """
+
     # create pandas df full of 0s
     n_bins = math.ceil(chr_length / bin_size)
     bin_names = [i * bin_size for i in range(n_bins)]
@@ -224,9 +277,17 @@ def get_intro_df_template(bin_size, chr_length):
 
 
 def bed_to_bins(bed_df, bin_size, chr_length):
-    # convert bedfile coordinates back into an index of bins for a chromosome
-    # match format of txt files from original introgressions script
-    # with a per-bin 0/1 introgression score
+    """Convert BED file coordinates to bin indices. Bins with introgressions are marked with a 1.
+    Rounds coordinates to nearest bin to reduce number of extra bins marked as introgressions.
+
+    Args:
+        bed_df (pd.DataFrame): DataFrame containing BED file coordinates
+        bin_size (int): size of the bins used for introgressions
+        chr_length (int): length of the chromosome
+
+    Returns:
+        pd.DataFrame: DataFrame with an "introgression" column and bin indices as rows.
+    """
 
     # read in bed file
     intro_df = get_intro_df_template(bin_size, chr_length)
@@ -260,8 +321,17 @@ def bed_to_bins(bed_df, bin_size, chr_length):
 
 
 def fill_gaps(row, gap_size):
-    # take gap size argument; count 0s between intros; if the gap is <= gap_size, fill it
-    # recommend running fill gaps prior to remove_small_regions after liftover, which can fragment intros
+    """Fill gaps between introgressions in a row. Running fill gaps is recommended prior to running
+    remove_small_regions after liftover, which can fragment introgressions.
+
+    Args:
+        row (pd.Series): a row of the DataFrame containing introgression data
+        gap_size (int): the maximum gap size to fill
+
+    Returns:
+        list: the modified row with filled gaps
+    """
+
     row = row.values.copy()
     i = 0
     while i < len(row):
@@ -288,8 +358,17 @@ def fill_gaps(row, gap_size):
 
 
 def remove_small_regions(row, min_size):
-    # omit introgressions that are smaller than the minimum size
-    # recommend running fill gaps prior to this func after liftover, which can fragment intros
+    """Omit introgressions that are smaller than the minimum size. Run fill gaps prior to using this
+    function after liftover, which can fragment introgressions.
+
+    Args:
+        row (pd.Series): a row of the DataFrame containing introgression data
+        min_size (int): the minimum size an introgression must be to avoid removal
+
+    Returns:
+        list: the modified row with small introgressions removed
+    """
+
     row = row.values.copy()
     i = 0
     while i < len(row):
@@ -310,8 +389,10 @@ def remove_small_regions(row, min_size):
 
 
 def postprocess_introgressions():
-    # does postprocessing on specified file or all files in a folder
-    # allows for liftover, gap filling, centromere filling, and lone bin removal in any order
+    """Postprocess introgression bed files with various actions: liftover, fill gaps, fill
+    centromeres, remove small regions.
+    """
+
     parser = argparse.ArgumentParser(description="Introgression postprocessing.")
     parser.add_argument(
         "--bed", type=str, help="path to introgression bed file or folder", required=True
