@@ -27,6 +27,8 @@ python introgression_runner.py <config.yaml> <--sweep>
 
 Add the `--sweep` flag to try a range of kmer similarity thresholds from 0.1-0.95. Note that this
 kicks off a number of threads equal to `18 * num. threads chosen in config file`.
+[screen](https://www.gnu.org/software/screen/) must be installed on your system for `--sweep` to
+work.
 
 ## Example
 
@@ -111,8 +113,8 @@ parameters for each section are as follows:
 | min      | int/null          | see postprocessing                                                                                                              |
 | gap      | int/null          | see postprocessing                                                                                                              |
 | thr      | float             | all values above this threshold are considered introgressed in the ground truth                                                 |
-| cmp      |                   | groups to check introgressions against; REF and merged results are compared against the set of introgressions in any group in this list |
-| vis      |                   | visualize true/false positives and negatives per bin                                                                            |
+| cmp      | list[string]      | groups to check introgressions against; REF and merged results are compared against the set of introgressions in any group in this list |
+| vis      | boolean           | visualize true/false positives and negatives per bin                                                                            |
 
 ## Introgression Simulator Usage
 

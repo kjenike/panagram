@@ -24,11 +24,12 @@ def parse_config(config_path):
     postprocessing = config.get("postprocessing")
     scoring = config.get("scoring")
 
-    output_dir = Path(general["output_dir_base"]) / general["output_dir_stem"]
+    output_dir = Path(general["output_dir"])
     index_dir = Path(general["index_dir"])
     tsv = Path(general["tsv"])
     bin_size = general["bin"]
     ref = general["ref"]
+    threads = general["threads"]
 
     call_run = calling["run"]
     call_rmf = calling["rmf"]
@@ -56,16 +57,15 @@ def parse_config(config_path):
     post_map = postprocessing["map"]
     post_paf = postprocessing["paf"]
 
-    score_gdt_dir = Path(scoring.get("gdt_dir", ""))
+    score_gdt_dir = Path(scoring.get("gdt", ""))
     score_run = scoring["run"]
     score_act = scoring["act"]
     score_min = scoring["min"]
     score_gap = scoring["gap"]
-    score_how = scoring["how"]
+    score_how = "bins"
     score_thr = scoring["thr"]
     score_cmp = scoring["cmp"]
     score_vis = scoring["vis"]
-    score_othr = scoring["othr"]
 
     # Build flags for each step
     call_flags = None
@@ -91,6 +91,7 @@ def parse_config(config_path):
             "--edg" if call_edg else None,
             "--isc" if call_isc else None,
             "--vis" if call_vis else None,
+            f"--threads {threads}",
         ]
         call_flags = [f for f in call_flags if f]
 
@@ -115,7 +116,6 @@ def parse_config(config_path):
             f"--gdt {score_gdt_dir}",
             f"--how {score_how}",
             f"--thr {score_thr}",
-            f"--othr {score_othr}" if score_othr else None,
             f"--cmp {' '.join(score_cmp)}",
             f"--act {' '.join(score_act)}",
             f"--bin {bin_size}",

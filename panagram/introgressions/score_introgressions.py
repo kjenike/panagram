@@ -452,7 +452,6 @@ def create_scored_heatmap(pred_df, gt_df, output_file, groups=None, xaxis_dtick=
         ),
     )
     fig.write_image(output_file)
-    fig.write_image(output_file.with_suffix(".svg"))
 
     # save out pred df to make more visuals with if needed
     pred_df.to_csv(output_file.with_suffix(".csv"), sep="\t")
@@ -642,15 +641,27 @@ def main():
             pred_df, gt_df = threshold_introgressions(pred_df, gt_df, threshold)
 
             # rescale gt to match pred if needed
-            original_bin_size = int(gt_df.columns[1])
-            if bin_size != original_bin_size:
-                gt_df = gt_df.apply(
+            # original_bin_size = int(gt_df.columns[1])
+            # if bin_size != original_bin_size:
+            #     gt_df = gt_df.apply(
+            #         rescale_introgressions_helper,
+            #         original_bin_size=original_bin_size,
+            #         new_bin_size=bin_size,
+            #         chr_length=chr_length,
+            #         axis=1,
+            #     )
+
+            # rescale pred to match gt if needed
+            gt_bin_size = int(gt_df.columns[1])
+            if bin_size != gt_bin_size:
+                pred_df = pred_df.apply(
                     rescale_introgressions_helper,
-                    original_bin_size=original_bin_size,
-                    new_bin_size=bin_size,
+                    original_bin_size=bin_size,
+                    new_bin_size=gt_bin_size,
                     chr_length=chr_length,
                     axis=1,
                 )
+                bin_size = gt_bin_size
 
             if actions:
                 for action in actions:

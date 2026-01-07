@@ -265,27 +265,6 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
         results.append(counts_across_all_chrs[["Sample", "Threshold", "Precision", "Recall"]])
 
     results = pd.concat(results, ignore_index=True)
-    # TODO: change back after testing
-    # results["Sample Type"] = [
-    #     "HiFi",
-    #     "HiFi",
-    #     "HiFi",
-    #     "HiFi",
-    #     "HiFi",
-    #     "HiFi",
-    #     "HiFi",
-    #     "ONT",
-    #     "ONT",
-    #     "ONT",
-    #     "ONT",
-    #     "ONT",
-    #     "ONT",
-    #     "ONT",
-    #     "ONT",
-    #     "HiFi",
-    #     "HiFi",
-    #     "HiFi",
-    # ]*len(thresholds)
 
     # results = results[~((results["Recall"] == 0) & (results["Precision"] == 1))]
 
@@ -295,13 +274,7 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
         x="Recall",
         y="Precision",
         color="Sample",
-        # color_discrete_sequence=results["Sample Type"].map(
-        #     {"HiFi": "#000000", "ONT": "#636EFA"}
-        # ),
         color_discrete_sequence=px.colors.qualitative.Light24,
-        # markers=True,
-        # text="Threshold",
-        # title="Precision-Recall Curves per Sample",
     )
     fig.update_traces(textposition="top center")
     fig.update_layout(
@@ -313,7 +286,7 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
         yaxis=dict(range=[0, 1.01], ticks="outside", linecolor="black"),
         width=700,
         height=500,
-        margin=dict(l=10, r=10, t=10, b=10),  # tight layout
+        margin=dict(l=10, r=10, t=10, b=10),  # tighten layout
     )
     fig.write_image(output_file)
     return

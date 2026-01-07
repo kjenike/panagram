@@ -730,6 +730,7 @@ def run_introgression_finder_worker(
 
 def main():
     parser = argparse.ArgumentParser(description="Introgression highlighter tool.")
+    parser.add_argument("--threads", type=int, default=1, help="number of threads to use")
     parser.add_argument("--stp", type=int, default=100, help="bitmap kmer step size")
     parser.add_argument("--bin", type=int, default=1000000, help="size of bitmap bin in bases")
     parser.add_argument(
@@ -797,6 +798,7 @@ def main():
     omit_unique_for = args.rmu
     outgroups = args.ogrp
     render_vis = args.vis
+    n_threads = args.threads
 
     group_tsv = Path(args.tsv)
     if not group_tsv.is_file():
@@ -822,7 +824,7 @@ def main():
         raise ValueError("Invalid smoothing filter selected. Can be mean, median, or None.")
     preprocessing_args["smoothing_filter"] = args.sft
     preprocessing_args["smoothing_filter_size"] = args.ssz
-    preprocessing_args["contrast_stretching"] = args.cst
+    preprocessing_args["edge_normalization"] = args.edg
     preprocessing_args["omit_fixed_kmers"] = omit_fixed_kmers
     trim_std = args.trm
 
@@ -915,7 +917,7 @@ def main():
             chromosomes = genome.sizes.keys()
 
         # Parallel execution for chromosomes
-        with ProcessPoolExecutor(max_workers=5) as executor:
+        with ProcessPoolExecutor(max_workers=n_threads) as executor:
             futures = []
             for chr_name in chromosomes:
                 futures.append(
