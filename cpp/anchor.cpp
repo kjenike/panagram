@@ -209,14 +209,16 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: expected " << (ngenomes*2+1) << " or fewer arguments\n";
         return 1;
     }
-
+    std::cout << "Made it through first bit \n";
+    std::cout << ngenomes << "\n";
+    std::cout << argc << "\n"; 
     KMCdb db(root, ngenomes);
-
+    std::cout << "Got kmc db\n";
     #pragma omp parallel for
     for (size_t i = 3; i < argc; i+=2) {
         auto name = std::string(argv[i]), 
              fasta = std::string(argv[i+1]);
-        std::cout << "Anchoring " << name << " " << fasta << "\n";
+	std::cout << "Anchoring " << name << " " << fasta << "\n";
         db.anchor_fasta(name, fasta);
     }
 
