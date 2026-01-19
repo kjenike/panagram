@@ -27,7 +27,7 @@ from .index import Index
 from . import figs
 import dash_bootstrap_components as dbc
 
-tmpdir="/DOGS/W_ZOO/"
+tmpdir=params.index_dir
 def view(params):
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
 
@@ -725,7 +725,7 @@ def view(params):
         return line_shapes,annotations,node,label_legend,kmer_num #fig,label_legend
     
     def get_umap_genome_hist(chrom,anchor_name):
-        umap_f = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/"+tmpdir+"/anchor/"+anchor_name+"/umap_clusters_"+chrom+"_100000_2_3_0_100.txt"
+        umap_f = tmpdir+"/anchor/"+anchor_name+"/umap_clusters_"+chrom+"_100000_2_3_0_100.txt"
         color,cluster_size = [],[]
         with open(umap_f,"r") as f:
             line = f.readline()
@@ -766,7 +766,7 @@ def view(params):
         return hist_fig
 
     def get_umap_from_file(chrom, anchor):
-        umap_f = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/"+tmpdir+"/anchor/"+anchor+"/umap_clusters_"+chrom+"_100000_2_3_0_100.txt"
+        umap_f = tmpdir+"/anchor/"+anchor+"/umap_clusters_"+chrom+"_100000_2_3_0_100.txt"
         X,Y,color,chrom_stop,chrom_start = [],[],[],[],[]
         with open(umap_f,"r") as f:
             line = f.readline()
@@ -849,7 +849,7 @@ def view(params):
         return fig
 
     def read_clusters(anchor,chrom):
-        cluster_file = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/"+tmpdir+"/anchor/"+anchor+"/umap_clusters_"+chrom+"_100000_2_3_0_100.txt"
+        cluster_file = tmpdir+"/anchor/"+anchor+"/umap_clusters_"+chrom+"_100000_2_3_0_100.txt"
         data = {"x":[],"y":[],"z":[]}
         with open(cluster_file,"r") as f:
             line = f.readline()
@@ -1688,7 +1688,7 @@ def view(params):
         return fig
     def anchor_umaps_per_chr(anchor_name):
         data = {}
-        umap_f = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/"+tmpdir+"/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
+        umap_f = tmpdir+"/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
         with open(umap_f,"r") as f:
             line = f.readline()
             zmax = 0
@@ -1708,7 +1708,7 @@ def view(params):
         return data,zmax
 
     def make_genome_umap(anchor_name):
-        umap_f = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/"+tmpdir+"/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
+        umap_f = tmpdir+"/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
         umap_x,umap_y,color,chroms,chrom_start,chrom_stop = [],[],[],[],[],[]
         with open(umap_f,"r") as f:
             line = f.readline()
@@ -1759,7 +1759,7 @@ def view(params):
         return umap_fig
 
     def make_genome_umap_hist(anchor_name):
-        umap_f = "/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/"+tmpdir+"/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
+        umap_f = tmpdir+"/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
         color,cluster_size = [],[]
         with open(umap_f,"r") as f:
             line = f.readline()
@@ -2281,7 +2281,7 @@ def view(params):
         print(f"main fig in {toc_tmp_2 - toc_tmp_1:0.4f} seconds")
         
         #perc_shared_fig = plot_perc_shared(perc_shared)
-        fig2 = plot_perc_shared(perc_shared,"/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/"+tmpdir+"/anchor/"+anchor_name+"/perc_shared."+anchor_name+".txt")
+        fig2 = plot_perc_shared(perc_shared,tmpdir+"/anchor/"+anchor_name+"/perc_shared."+anchor_name+".txt")
         #UMAP figure 
         umap_fig = get_umap_from_file(chrom,anchor_name)
         umap_genome_hist = get_umap_genome_hist(chrom,anchor_name)
