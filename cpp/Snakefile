@@ -8,7 +8,6 @@ index = Index(".", mode="w")
 index.load_config()
 
 SAMPLES = index.samples #pd.read_table(config["samples"]).set_index("name")
-
 TMPDIR = f"tmp/"
 KMC_EXTS = ["kmc_pre","kmc_suf"]
 ANCHOR_BIN="./run_anchor"

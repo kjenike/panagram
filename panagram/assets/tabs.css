@@ -1,0 +1,26 @@
+/* Container style for the whole Tabs component */
+.custom-tabs {
+    #font-family: 'Roboto';
+    margin: 20px;
+    border-radius: 10px;
+    #box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+/* Style for each individual tab */
+.custom-tab {
+    background-color: #f1f1f1;
+    border: none;
+    padding: 12px 20px;
+    font-size: 40px;
+    border-radius: 10px 10px 0 0;
+    margin-right: 4px;
+    transition: background-color 0.3s;
+}
+
+/* When a tab is selected */
+.custom-tab--selected {
+    background-color: white;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
+    font-weight: bold;
+}
