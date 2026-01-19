@@ -2,6 +2,7 @@
 
 anchor=$1
 fasta=$2
+working_dir=$3
 
 window=100000
 eps=2
@@ -19,4 +20,8 @@ do
 
 done < $fasta.fai
 
+while read col1 col2 colmore
+do 
+	python pairwise_comp.py "$col1" "$working_dir" > "$working_dir"/anchor/"$col1"/perc_shared."$col1".txt
+done < samples.tsv
 
