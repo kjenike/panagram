@@ -436,7 +436,7 @@ def create_scored_heatmap(pred_df, gt_df, output_file, groups=None, xaxis_dtick=
         aspect="auto",
     )
     fig.update_layout(
-        font=dict(family="Helvetica Bold", color="black"),
+        font=dict(family="Arial", color="black"),
         coloraxis_showscale=False,
         yaxis=dict(tickmode="linear", title=""),
         title=dict(

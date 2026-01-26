@@ -32,7 +32,7 @@ def create_heatmap(text_file, groups=None):
 
     fig = px.imshow(distances, color_continuous_scale="Greens", aspect="auto", zmin=0, zmax=1)
     fig.update_layout(
-        font=dict(family="Helvetica Bold", color="black"),
+        font=dict(family="Arial", color="black"),
         coloraxis_colorbar=dict(
             title=dict(
                 text="Jaccard Similarity",
@@ -156,7 +156,7 @@ def create_mcc_curve(input_dir, intro_type, how_to_score, thresholds):
 
     fig.update_traces(textposition="top center")
     fig.update_layout(
-        font=dict(family="Helvetica Bold", color="black"),
+        font=dict(family="Arial", color="black"),
         template="plotly_white",
         xaxis_title=dict(text="Threshold"),
         yaxis_title=dict(text="Matthews Correlation Coefficient (MCC)"),
@@ -192,8 +192,8 @@ def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
     )
     fig.update_traces(textposition="top center")
     fig.update_layout(
-        font=dict(family="Helvetica Bold", color="black"),
-        template="plotly_white",
+        font=dict(family="Arial", color="black"),
+        template="plotly",
         xaxis_title=dict(text="Recall"),
         yaxis_title=dict(text="Precision"),
         xaxis=dict(range=[0, 1.01], ticks="outside", linecolor="black"),
@@ -278,7 +278,7 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
     )
     fig.update_traces(textposition="top center")
     fig.update_layout(
-        font=dict(family="Helvetica Bold", color="black"),
+        font=dict(family="Arial", color="black"),
         template="plotly_white",
         xaxis_title=dict(text="Recall"),
         yaxis_title=dict(text="Precision"),

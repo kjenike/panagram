@@ -100,12 +100,17 @@ def bitmap_to_bins(
             bitmap_with_bin_idx[kmers_to_keep_columns].sum(axis=1) == 0, ref_genome_name
         ] = 1
 
+    all_bins = bitmap_with_bin_idx.index.get_level_values(0).unique()
+
     # remove fixed kmers shared by all members of the pangenome (i.e., rows that are all 1)
     if omit_fixed_kmers:
         bitmap_with_bin_idx = bitmap_with_bin_idx.loc[~(bitmap_with_bin_idx == 1).all(axis=1)]
 
     # get the sum of how many kmers equal 1 in each bin
     binned_bitmap = bitmap_with_bin_idx.groupby(level=0).sum()
+
+    # reindex to include bins that may now be empty
+    binned_bitmap = binned_bitmap.reindex(all_bins, fill_value=1)
 
     # fix the index's bin number to be the bin's chr position and transpose
     binned_bitmap = binned_bitmap.set_index(binned_bitmap.index * binlen).T
@@ -484,7 +489,7 @@ def visualize(
             zmax=1,
         )
     fig.update_layout(
-        font=dict(family="Helvetica Bold", color="black"),
+        font=dict(family="Arial", color="black"),
         xaxis=dict(
             dtick=xaxis_dtick,
             title=dict(
@@ -494,6 +499,7 @@ def visualize(
         ),
         yaxis=dict(
             title="",  # Omit y-axis label
+            tickmode="linear",
         ),
         title=dict(
             text=title,

@@ -76,7 +76,7 @@ def extract_attribute_from_bed(bed_file, attribute):
     bed_df["attributes"] = bed_df["attributes"].str.extract(f"{attribute}=([^;]+)")
 
     attributes = bed_df["attributes"].dropna().tolist()
-    attributes = "\n".join(attributes).replace(",", "\n")
+    attributes = "\n".join(attributes).replace(",", "\n").replace(" ", "")
 
     return attributes
 
