@@ -94,18 +94,18 @@ parameters for each section are as follows:
 
 ### Postprocessing Parameters
 
-| Parameter | Type         | Description                                                                                                                                                                      |
-|----------|--------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| run      | boolean      | whether to run postprocessing                                                                                                                                                    |
-| act      | list[string] | choose postprocessing steps: 'lift' (liftover to ref coordinate space), 'fgap' (fill gaps between introgressed bins), 'fcen' (fill larger gaps caused by centromere), 'rmbn' (remove small introgressions) |
-| min      | int/null     | if rmbn, remove introgressions smaller than this number of bins                                                                                                                            |
-| gap      | int/null     | if fgap, fill gaps between introgressions up to this number of bins                                                                                                                |
-| map      | str/null     | if lift and not paf, minimap parameters for aligning to ref; must include -c flag; null to use '-x asm20 -c'                                                                 |
-| paf      | str/null     | if lift already run, path to existing alignment folder to skip alignment                                                                                                 |
+| Parameter | Type             | Description                                                                                                                                                                      |
+|----------|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| run      | boolean           | whether to run postprocessing                                                                                                                                                    |
+| act      | list[string]/null | choose postprocessing steps: 'lift' (liftover to ref coordinate space), 'fgap' (fill gaps between introgressed bins), 'fcen' (fill larger gaps caused by centromere), 'rmbn' (remove small introgressions); null to skip and just copy bed files to postprocess folder as-is for scoring |
+| min      | int/null          | if rmbn, remove introgressions smaller than this number of bins                                                                                                                            |
+| gap      | int/null          | if fgap, fill gaps between introgressions up to this number of bins                                                                                                                |
+| map      | str/null          | if lift and not paf, minimap parameters for aligning to ref; must include -c flag; null to use '-x asm20 -c'                                                                 |
+| paf      | str/null          | if lift already run, path to existing alignment folder to skip alignment                                                                                                 |
 
 ### Scoring Parameters
 
-| Parameter | Type              | Description                                                                                                                     |
+| Parameter | Type             | Description                                                                                                                     |
 |----------|-------------------|---------------------------------------------------------------------------------------------------------------------------------|
 | run      | boolean           | whether to run scoring                                                                                                          |
 | gdt      | str               | path to folder containing Jaccard similarity text files or ground truth introgressions in the same format                      |

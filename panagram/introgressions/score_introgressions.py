@@ -149,7 +149,7 @@ def threshold_introgressions_helper(intro_df, threshold):
     Returns:
         pd.DataFrame: thresholded introgression data
     """
-
+    intro_df = intro_df.copy()
     intro_df[intro_df < threshold] = 0
     intro_df[intro_df != 0] = 1
     return intro_df.astype(int)
@@ -709,6 +709,7 @@ def main():
             # score introgressions
             if how_to_score == "bins":
                 metrics = score_introgressions(pred_df, gt_df)
+
                 # visualize introgressions
                 if render_vis:
                     vis_output_file = vis_dir / f"{chr}_{intro_type}.png"
