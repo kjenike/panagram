@@ -556,13 +556,13 @@ def main():
         "--offspring",
         type=int,
         default=1,
-        help="Number of offspring to simulate from created wild relative (default: 1)",
+        help="Number of offspring to simulate from created wild relative",
     )
     parser.add_argument(
         "--rounds",
         type=int,
         default=5,
-        help="Number of rounds to apply mutations to offspring. Will output offspring for each round (default: 5)",
+        help="Number of rounds to apply mutations to offspring. Will output offspring for each round",
     )
 
     # introgressions (counts and size range)
@@ -570,7 +570,7 @@ def main():
         "--num-introgressions",
         type=int,
         default=48,
-        help="Number of introgressions per generation (default: 48)",
+        help="Number of introgressions per generation",
     )
     parser.add_argument(
         "--introgression-size-min", type=int, default=50000, help="Min introgression size (bp)"
@@ -584,20 +584,20 @@ def main():
     parser.add_argument(
         "--rel-sub-rate",
         type=float,
-        default=3.3e-3,
-        help="Wild relative per-base substitution rate (default: 3.3e-3)",
+        default=3e-3,
+        help="Wild relative per-base substitution rate",
     )
     parser.add_argument(
         "--rel-ins-rate",
         type=float,
-        default=3.3e-3,
-        help="Wild relative per-base insertion rate (default: 3.3e-3)",
+        default=3e-3,
+        help="Wild relative per-base insertion rate",
     )
     parser.add_argument(
         "--rel-del-rate",
         type=float,
-        default=3.3e-3,
-        help="Wild relative per-base deletion rate (default: 3.3e-3)",
+        default=3e-3,
+        help="Wild relative per-base deletion rate",
     )
     parser.add_argument(
         "--rel-ins-size-min", type=int, default=1, help="Wild relative insertion size min (bp)"
@@ -617,20 +617,26 @@ def main():
     parser.add_argument(
         "--mut-sub-rate",
         type=float,
-        default=1e-2,
+        default=3e-3,
         help="Offspring per-base substitution rate",
     )
     parser.add_argument(
         "--mut-ins-rate",
         type=float,
-        default=1e-2,
+        default=3e-3,
         help="Offspring per-base insertion rate",
     )
     parser.add_argument(
         "--mut-del-rate",
         type=float,
-        default=1e-2,
+        default=3e-3,
         help="Offspring per-base deletion rate",
+    )
+    parser.add_argument(
+        "--mut-rate-start",
+        type=float,
+        default=3e-4,
+        help="Starting mutation rate for offspring (will increase linearly to mut_rate over rounds)",
     )
     parser.add_argument(
         "--mut-ins-size-min", type=int, default=1, help="Offspring insertion size min (bp)"
@@ -645,9 +651,7 @@ def main():
         "--mut-del-size-max", type=int, default=1000, help="Offspring deletion size max (bp)"
     )
 
-    parser.add_argument(
-        "--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)"
-    )
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
 
     args = parser.parse_args()
 
@@ -706,9 +710,14 @@ def main():
     write_bed(introgressions, output_folder / f"{reference.stem}_0_introgressions.bed")
 
     parent_seqs = offspring_seqs
-    sub_rates = np.linspace(1e-3, args.mut_sub_rate, args.rounds)
-    ins_rates = np.linspace(1e-3, args.mut_ins_rate, args.rounds)
-    del_rates = np.linspace(1e-3, args.mut_del_rate, args.rounds)
+    sub_rates = np.linspace(args.mut_rate_start, args.mut_sub_rate, args.rounds)
+    ins_rates = np.linspace(args.mut_rate_start, args.mut_ins_rate, args.rounds)
+    del_rates = np.linspace(args.mut_rate_start, args.mut_del_rate, args.rounds)
+
+    # get intro information for offspring
+    introgression_chromosomes = [introgression.split("\t")[0] for introgression in introgressions]
+    introgression_starts = [int(introgression.split("\t")[1]) for introgression in introgressions]
+    introgression_ends = [int(introgression.split("\t")[2]) for introgression in introgressions]
 
     for i in range(args.rounds):
         print(
@@ -717,7 +726,7 @@ def main():
         )
 
         # apply mutations to offspring from previous generation
-        offspring_seqs, _, _ = apply_genome_wide_mutations(
+        offspring_seqs, reverse_mappers, _ = apply_genome_wide_mutations(
             parent_seqs,
             sub_rate=sub_rates[i],
             ins_rate=ins_rates[i],
@@ -729,8 +738,37 @@ def main():
             rng=rng,
         )
 
+        # figure out and save new introgression positions in offspring genome using reverse mappers
+        # assumes introgressions are in same order and non-overlapping
+        new_introgressions = []
+        for j in range(len(introgressions)):
+            # get introgression info for this introgression
+            intro_chrom = introgression_chromosomes[j]
+            intro_start = introgression_starts[j]
+            intro_end = introgression_ends[j]
+
+            # get reverse mapper for this chromosome
+            reverse_mapper = reverse_mappers[intro_chrom]
+
+            # get new start and end positions in offspring genome
+            new_start = reverse_mapper[intro_start]
+            # try to correct start/end positions if they map to -1 (deleted region)
+            while new_start == -1:
+                intro_start += 1
+                new_start = reverse_mapper[intro_start]
+
+            # get new end position in offspring genome
+            new_end = reverse_mapper[intro_end]
+            while new_end == -1:
+                intro_end -= 1
+                new_end = reverse_mapper[intro_end]
+
+            # save new introgression info
+            new_introgressions.append(f"{intro_chrom}\t{new_start}\t{new_end}\tintrogression")
+
         # save per-gen FASTA
         write_fasta(offspring_seqs, output_folder / f"{reference.stem}_{i+1}_offspring.fasta")
+        write_bed(new_introgressions, output_folder / f"{reference.stem}_{i+1}_introgressions.bed")
 
     print("Simulation finished.")
     return
