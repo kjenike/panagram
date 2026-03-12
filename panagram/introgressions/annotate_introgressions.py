@@ -4,11 +4,12 @@ from pathlib import Path
 import pandas as pd
 
 
-def parse_gff(gff_file):
+def parse_gff(gff_file, omit_unknown=True):
     """Parse GFF file to extract only genes.
 
     Args:
         gff_file (Path): path to the GFF file
+        omit_unknown (bool): whether to omit genes with unknown function
 
     Returns:
         pd.DataFrame: gene annotations from GFF file
@@ -27,6 +28,11 @@ def parse_gff(gff_file):
         "attributes",
     ]
     gff_df = gff_df[gff_df["type"] == "gene"]
+
+    if omit_unknown:
+        gff_df = gff_df[
+            gff_df["attributes"].str.contains("unknown|hypothetical", case=False, na=False) == False
+        ]
     return gff_df
 
 
@@ -90,7 +96,7 @@ def main():
     parser.add_argument("--bed", type=Path, required=True, help="Path to the bed folder.")
     parser.add_argument("--accession", type=str, required=True, help="Accession name.")
     parser.add_argument(
-        "--term", type=str, default="Ontology_term", help="Attribute to extract from GFF."
+        "--term", type=str, default="sollyc4.0_ID", help="Attribute to extract from GFF."
     )
     args = parser.parse_args()
 
