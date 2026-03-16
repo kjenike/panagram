@@ -1,6 +1,6 @@
 # Panagram: Interactive, alignment-free pan-genome browser  
 
-#### Katie Jenike, Nicole Brown, Sam Kovaka, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Zach Lippman, Michael Schatz
+#### Katie Jenike, Nicole Brown, Sam Kovaka, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Zach Lippman, Ian R. Henderson, Michael C. Schatz
 
 
 [An alignment-free pan-genome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf)
@@ -22,7 +22,7 @@ Installation may fail if pip is not up-to-date or if setuptools is not up-to-dat
 pip install --upgrade pip
 pip install --upgrade setuptools
 ```
-
+Please use the dev branch now. This is the most up-to-date. 
 ## Dependencies
 
 Requires python version >=3.7, pip, samtools, and tabix. All other dependencies should be automatically installed via pip.
