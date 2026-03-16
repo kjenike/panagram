@@ -103,6 +103,10 @@ def calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds):
         all_metrics_file = (
             f"{input_dir}/{input_dir.name}_{threshold}/{scored_dir_name}/metrics_{intro_type}.tsv"
         )
+        if not Path(all_metrics_file).is_file():
+            raise ValueError(
+                f"Metrics file not found: {all_metrics_file}. Check input directory and threshold paths."
+            )
 
         # create df of precisions and recalls across thresholds
         metrics = pd.read_csv(all_metrics_file, sep="\t", index_col=0)
@@ -130,6 +134,11 @@ def calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds):
     #     if results_df["recall"][i] == 0 and results_df["precision"][i] == 0:
     #         results_df.at[i, "recall"] = 0
     #         results_df.at[i, "precision"] = 1
+    # add point at (0,1) for plotting
+    # results_df = pd.concat(
+    #     [results_df, pd.DataFrame({"threshold": [-1], "TP": [0], "FP": [0], "FN": [0], "TN": [1], "precision": [1], "recall": [0], "MCC": [0]})],
+    #     ignore_index=True,
+    # )
 
     auc_pr = np.trapz(results_df["precision"].values, results_df["recall"].values)
     print(f"PR AUC {intro_type}:", auc_pr)
@@ -182,7 +191,7 @@ def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
     """
 
     results_df = calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds)
-    results_df = results_df[~((results_df["recall"] == 0) & (results_df["precision"] == 1))]
+    # results_df = results_df[~((results_df["recall"] == 0) & (results_df["precision"] == 1))]
     results_df = results_df[~((results_df["recall"] == 0) & (results_df["precision"] == 0))]
 
     fig = px.line(
@@ -224,6 +233,10 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
     results = []
     for threshold in thresholds:
         threshold_path = input_dir / f"{input_dir.name}_{threshold}" / scored_dir_name / "heatmaps"
+        if not threshold_path.is_dir():
+            raise ValueError(
+                f"Heatmaps directory not found: {threshold_path}. Check input directory and threshold paths."
+            )
         metrics_files = list(threshold_path.glob(f"*_{intro_type}.csv"))
         counts_across_all_chrs = None
 
@@ -252,6 +265,20 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
             counts_across_all_chrs["TP"] + counts_across_all_chrs["FN"]
         )
 
+        # Compute Matthews Correlation Coefficient (MCC)
+        counts_across_all_chrs["MCC"] = (
+            (
+                (counts_across_all_chrs["TP"] * counts_across_all_chrs["TN"])
+                - (counts_across_all_chrs["FP"] * counts_across_all_chrs["FN"])
+            )
+            / np.sqrt(
+                (counts_across_all_chrs["TP"] + counts_across_all_chrs["FP"])
+                * (counts_across_all_chrs["TP"] + counts_across_all_chrs["FN"])
+                * (counts_across_all_chrs["TN"] + counts_across_all_chrs["FP"])
+                * (counts_across_all_chrs["TN"] + counts_across_all_chrs["FN"])
+            )
+        ).fillna(0)
+
         # Handle division by zero (e.g., no TP or FP)
         counts_across_all_chrs["Precision"] = counts_across_all_chrs["Precision"].fillna(0)
         counts_across_all_chrs["Recall"] = counts_across_all_chrs["Recall"].fillna(0)
@@ -262,10 +289,11 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
         ] = 1
         counts_across_all_chrs["Threshold"] = threshold
         counts_across_all_chrs["Sample"] = counts_across_all_chrs.index
-        results.append(counts_across_all_chrs[["Sample", "Threshold", "Precision", "Recall"]])
+        results.append(
+            counts_across_all_chrs[["Sample", "Threshold", "Precision", "Recall", "MCC"]]
+        )
 
     results = pd.concat(results, ignore_index=True)
-
     # results = results[~((results["Recall"] == 0) & (results["Precision"] == 1))]
 
     # Plot PR curves: one line per sample
@@ -279,7 +307,7 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
     fig.update_traces(textposition="top center")
     fig.update_layout(
         font=dict(family="Arial", color="black"),
-        template="plotly_white",
+        # template="plotly_white",
         xaxis_title=dict(text="Recall"),
         yaxis_title=dict(text="Precision"),
         xaxis=dict(range=[0, 1.01], ticks="outside", linecolor="black"),
@@ -311,6 +339,10 @@ def create_pr_curve_chromosomes(input_dir, intro_type, how_to_score, thresholds)
         all_metrics_file = (
             f"{input_dir}/{input_dir.name}_{threshold}/{scored_dir_name}/metrics_{intro_type}.tsv"
         )
+        if not Path(all_metrics_file).is_file():
+            raise ValueError(
+                f"Metrics file not found: {all_metrics_file}. Check input directory and threshold paths."
+            )
 
         # create df of precisions and recalls across thresholds
         metrics = pd.read_csv(all_metrics_file, sep="\t", index_col=0).fillna(0)
@@ -353,6 +385,10 @@ def create_scored_heatmap_collage(input_dir, intro_type, how_to_score, threshold
     image_batches = []
     for threshold in thresholds:
         threshold_path = input_dir / f"{input_dir.name}_{threshold}" / scored_dir_name / "heatmaps"
+        if not threshold_path.is_dir():
+            raise ValueError(
+                f"Heatmaps directory not found: {threshold_path}. Check input directory and threshold paths."
+            )
         threshold_heatmaps = list(threshold_path.glob(f"*_{intro_type}.png"))
         threshold_heatmaps.sort()
         image_batches.append(threshold_heatmaps)
@@ -423,24 +459,12 @@ def main():
         type=str,
         help="whether bins or overlaps were used during scoring",
     )
-    print("Visualizing results...")
-    args = parser.parse_args()
-
-    input_dir = Path(args.dir)
-    if not input_dir.is_dir():
-        raise ValueError("Input directory not found. Check --dir path.")
-
-    vis_functions = args.v
-    for func in vis_functions:
-        if func not in ["htmp", "shtmp", "prc", "prcc", "prca", "mcc"]:
-            raise ValueError("Unknown visualization function specified. Check args.v.")
-
-    if any(func in vis_functions for func in ("shtmp", "prc", "prcc", "prca")):
-        how_to_score = args.how
-        if how_to_score not in ["bins", "overlaps"]:
-            raise ValueError("--how must be either 'bins' or 'overlaps'.")
-
-        thresholds = [
+    parser.add_argument(
+        "--thresholds",
+        type=float,
+        nargs="+",
+        help="thresholds to evaluate for PR curves",
+        default=[
             0.1,
             0.15,
             0.2,
@@ -459,11 +483,35 @@ def main():
             0.85,
             0.9,
             0.95,
-        ]
+        ],
+    )
+
+    print("Visualizing results...")
+    args = parser.parse_args()
+
+    input_dir = Path(args.dir)
+    if not input_dir.is_dir():
+        raise ValueError("Input directory not found. Check --dir path.")
+
+    vis_functions = args.v
+    for func in vis_functions:
+        if func not in ["htmp", "shtmp", "prc", "prcc", "prca", "mcc"]:
+            raise ValueError("Unknown visualization function specified. Check args.v.")
+
+    if any(func in vis_functions for func in ("shtmp", "prc", "prcc", "prca")):
+        how_to_score = args.how
+        if how_to_score not in ["bins", "overlaps"]:
+            raise ValueError("--how must be either 'bins' or 'overlaps'.")
+
+        thresholds = args.thresholds
 
         # take the first threshold path and check for introgression types
         scored_dir_name = f"scored_{how_to_score}"
         scored_dir_path = input_dir / f"{input_dir.name}_{thresholds[0]}" / scored_dir_name
+        if not scored_dir_path.is_dir():
+            raise ValueError(
+                f"Scored directory not found: {scored_dir_path}. Check input directory and threshold paths."
+            )
         score_tsvs = scored_dir_path.glob("*.tsv")
 
         intro_types = set()
@@ -493,6 +541,7 @@ def main():
                 create_heatmap_runner(input_dir, groups=groups)
             else:
                 create_heatmap_runner(input_dir)
+
     print("Done.")
     return
 
