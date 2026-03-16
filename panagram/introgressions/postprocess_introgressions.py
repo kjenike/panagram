@@ -1,5 +1,7 @@
 import argparse
 from pathlib import Path
+import shutil
+from io import StringIO
 import subprocess
 import math
 import numpy as np
@@ -226,7 +228,6 @@ def align_assemblies(
 def liftover_coordinates(
     bed_file,
     paf_file,
-    output_file,
 ):
     """Liftover coordinates from one genome assembly to another. Requires paftools.js to be in path.
 
@@ -234,6 +235,9 @@ def liftover_coordinates(
         bed_file (str): Path to the BED file to liftover
         paf_file (str): Path to the PAF file indicating mapping between assemblies
         output_file (str): Path to the output file for lifted coordinates (BED format)
+
+    Returns:
+        pd.DataFrame: DataFrame containing lifted coordinates in BED format (Chromosome, Start, End, Notes)
     """
 
     liftover_command = [
@@ -251,10 +255,126 @@ def liftover_coordinates(
         print("Error:", e.stderr)
         exit(1)
 
-    # Save the result as a bed file
-    with open(output_file, "w") as f:
-        f.write(result.stdout)
-    return
+    new_coordinates_df = pd.read_csv(
+        StringIO(result.stdout),
+        sep="\t",
+        header=None,
+        usecols=[0, 1, 2, 3],
+        names=["Chromosome", "Start", "End", "Notes"],
+    )
+
+    return new_coordinates_df
+
+
+def run_alignments(
+    unique_accessions,
+    paf,
+    index_dir,
+    index,
+    reference_accession,
+    reference_file,
+    map_args,
+    n_threads,
+):
+
+    # run minimap in parallel for each accession if paf files are not already provided
+    if paf is None:
+        paf_dir = index_dir / "alignments"
+        paf_dir.mkdir(parents=True, exist_ok=True)
+        minimap_flags = map_args.split(" ")
+
+        with ProcessPoolExecutor(max_workers=n_threads) as executor:
+            futures = []
+            for accession in unique_accessions:
+                bed_genome = index.genomes[accession]
+                query_file = index_dir / bed_genome.fasta
+                paf_file = paf_dir / f"{accession}_{reference_accession}.paf"
+                futures.append(
+                    executor.submit(
+                        align_assemblies, reference_file, query_file, minimap_flags, paf_file
+                    )
+                )
+
+            for future in as_completed(futures):
+                future.result()
+    else:
+        paf_dir = Path(paf)
+
+    return paf_dir
+
+
+def run_liftovers(
+    bed_files,
+    unique_accessions,
+    paf_dir,
+    reference_accession,
+    output_dir,
+):
+
+    # NOTE: we might end up with more bed files than we started if 1 chr splits into multiple
+    # could mess with scoring if you only intended to score a subset of chromosomes
+    bed_df = pd.DataFrame(
+        columns=["Chromosome", "Start", "End", "Notes", "Accession", "Introgression Type"]
+    )
+    for bed_file in bed_files:
+        bed_chr, bed_accession, bed_intro_type = get_bed_pieces(bed_file)
+
+        # find paf file with the same name of the bed file
+        if paf_dir.is_dir():
+            paf_file = paf_dir / f"{bed_accession}_{reference_accession}.paf"
+        else:
+            raise ValueError(
+                f"Cannot find paf file {paf_dir / f'{bed_accession}_{reference_accession}.paf'}. Check --paf path."
+            )
+
+        # check for empty bed files
+        if bed_file_is_empty(bed_file):
+            # create placeholder row for new coordinates
+            new_coordinates_df = pd.DataFrame(
+                {"Chromosome": [bed_chr], "Start": [0], "End": [0], "Notes": ["placeholder"]}
+            )
+        # liftover if needed
+        elif bed_intro_type != "REF":
+            if bed_intro_type == "REFA":
+                bed_intro_type = "REF"
+            new_coordinates_df = liftover_coordinates(bed_file, paf_file)
+
+        # if no liftover needed, just read in the bed file
+        else:
+            new_coordinates_df = read_bed_file(bed_file)
+            new_coordinates_df = new_coordinates_df[["Chromosome", "Start", "End", "Notes"]]
+
+        new_coordinates_df["Accession"] = bed_accession
+        new_coordinates_df["Introgression_Type"] = bed_intro_type
+        bed_df = pd.concat([bed_df, new_coordinates_df], ignore_index=True)
+
+    new_bed_files = []
+    # concat liftover results together - at minimum, there should be a file for each file that we started with, even if empty
+    for accession in unique_accessions:
+        # get all results for each chr, remove any placeholders, sort, and save
+        accession_df = bed_df[bed_df.Accession == accession]
+
+        chromosomes = accession_df.Chromosome.unique()
+        for chromosome in chromosomes:
+            introgression_types = accession_df.Introgression_Type.unique()
+            for introgression_type in introgression_types:
+                chromosome_df = accession_df[
+                    (accession_df.Chromosome == chromosome)
+                    & (accession_df.Introgression_Type == introgression_type)
+                ]
+                chromosome_df = chromosome_df[chromosome_df.Notes != "placeholder"]
+                chromosome_df = chromosome_df.sort_values(by="Start")
+
+                # save
+                bed_output = output_dir / f"{accession}_{chromosome}_{introgression_type}.bed"
+                chromosome_df["Introgression_Type"] = chromosome_df["Introgression_Type"] + "_intro"
+                chromosome_df[["Chromosome", "Start", "End", "Introgression_Type"]].to_csv(
+                    bed_output, header=False, index=False, sep="\t"
+                )
+                # update bed_files list to point to lifted files for downstream actions
+                new_bed_files.append(bed_output)
+
+    return new_bed_files
 
 
 def get_intro_df_template(bin_size, chr_length):
@@ -305,6 +425,16 @@ def bed_to_bins(bed_df, bin_size, chr_length):
     bed_df["Bin Labels"] = bed_df.apply(
         lambda row: list(range(row["Start Bin"], row["End Bin"], bin_size)), axis=1
     )
+
+    # if no bin labels (e.g. if start and end are in the same bin),
+    # check if the start/end are at least 25% of the bin size apart, and if so, mark the start bin as an introgression
+    bed_df.loc[
+        (bed_df["Bin Labels"].str.len() == 0)
+        & ((bed_df["End"] - bed_df["Start"]) >= (bin_size / 4)),
+        "Bin Labels",
+    ] = bed_df["Start Bin"].apply(lambda x: [x])
+    # alternatively, add the start bin as the bin label every time
+    # bed_df.loc[bed_df["Bin Labels"].str.len() == 0, "Bin Labels"] = bed_df["Start Bin"].apply(lambda x: [x])
 
     # for each bedfile entry, add 1 to corresponding bins in df
     bin_labels = [pos for sublist in bed_df["Bin Labels"] for pos in sublist]
@@ -388,6 +518,24 @@ def remove_small_regions(row, min_size):
     return row
 
 
+def get_bed_pieces(bed_file):
+    """Get the chromosome, accession, and introgression type from a bed file name. Assumes bed file
+    names are in the format "accession_chr_introgressiontype.bed".
+
+    Args:
+        bed_file (str or Path): path to bed file
+
+    Returns:
+        tuple: chromosome, accession, and introgression type
+    """
+
+    parts = bed_file.stem.split("_")
+    bed_intro_type = parts[-1]
+    bed_chr = parts[-2]
+    bed_accession = "_".join(parts[:-2])
+    return bed_chr, bed_accession, bed_intro_type
+
+
 def postprocess_introgressions():
     """Postprocess introgression bed files with various actions: liftover, fill gaps, fill
     centromeres, remove small regions.
@@ -410,12 +558,18 @@ def postprocess_introgressions():
         "--map",
         type=str,
         help="minimap flags to use",
-        default="-x asm20 -c -t 3",  # preset for cross-species full-genome alignment
+        default="-x asm20 -c -t 1",  # preset for cross-species full-genome alignment
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        help="number of alignments to run in parallel for liftover",
+        default=1,
     )
     parser.add_argument(
         "--paf",
         type=str,
-        help="path to minimap paf file or folder for liftover to ref space",
+        help="path to folder with minimap paf files for liftover to ref space",
     )
     parser.add_argument(
         "--bin",
@@ -439,9 +593,12 @@ def postprocess_introgressions():
     args = parser.parse_args()
 
     actions = args.act
-    for action in actions:
-        if action not in ["lift", "fgap", "fcen", "rmbn"]:
-            raise ValueError(f"Unrecognized action {action}. Check --act flag for valid actions.")
+    if actions:
+        for action in actions:
+            if action not in ["lift", "fgap", "fcen", "rmbn"]:
+                raise ValueError(
+                    f"Unrecognized action {action}. Check --act flag for valid actions."
+                )
 
     index_dir = Path(args.idx)
     if not index_dir.is_dir():
@@ -457,8 +614,11 @@ def postprocess_introgressions():
     else:
         raise ValueError("Bed file/folder not found. Check --bed path.")
 
-    # perform liftover per-accession, so we can use the same results for all files
+    output_dir = Path(args.out)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     if "lift" in actions:
+        # check for reference file
         if args.ref is None:
             raise ValueError("--ref must be specified for liftover.")
         reference_accession = args.ref
@@ -467,129 +627,95 @@ def postprocess_introgressions():
         if not reference_file.is_file():
             raise ValueError("Reference file not found. Check --ref path.")
 
-        # run minimap in parallel for each accession if paf files are not already provided
-        if args.paf is None:
-            # Get unique bed_accessions from bed_files
-            unique_accessions = set()
-            for bed_file in bed_files:
-                bed_accession = bed_file.name.split("_")[0]
-                unique_accessions.add(bed_accession)
+        # Get unique bed_accessions from bed_files
+        unique_accessions = set()
+        for bed_file in bed_files:
+            bed_accession = bed_file.name.split("_")[0]
+            unique_accessions.add(bed_accession)
 
-            paf_dir = index_dir / "alignments"
-            paf_dir.mkdir(parents=True, exist_ok=True)
-            minimap_flags = args.map.split(" ")
+        # perform alignment if needed
+        paf_dir = run_alignments(
+            unique_accessions,
+            args.paf,
+            index_dir,
+            index,
+            reference_accession,
+            reference_file,
+            args.map,
+            args.threads,
+        )
 
-            with ProcessPoolExecutor() as executor:
-                futures = []
-                for accession in unique_accessions:
-                    bed_genome = index.genomes[accession]
-                    query_file = index_dir / bed_genome.fasta
-                    paf_file = paf_dir / f"{accession}_{reference_accession}.paf"
-                    futures.append(
-                        executor.submit(
-                            align_assemblies, reference_file, query_file, minimap_flags, paf_file
-                        )
-                    )
-
-                for future in as_completed(futures):
-                    future.result()
-        else:
-            paf_dir = Path(args.paf)
-
-    output_dir = Path(args.out)
-    output_dir.mkdir(parents=True, exist_ok=True)
+        # perform liftover
+        bed_files = run_liftovers(
+            bed_files,
+            unique_accessions,
+            paf_dir,
+            reference_accession,
+            output_dir,
+        )
 
     for bed_file in bed_files:
-        parts = bed_file.stem.split("_")
-        bed_intro_type = parts[-1]
-        bed_chr = parts[-2]
-        bed_accession = "_".join(parts[:-2])
+        bed_chr, bed_accession, bed_intro_type = get_bed_pieces(bed_file)
         bed_genome = index.genomes[bed_accession]
+        if "lift" in actions:
+            bed_genome = index.genomes[args.ref]
         if bed_intro_type == "REF":
             if args.ref is None:
                 raise ValueError("--ref must be specified if REF files are present.")
             bed_genome = index.genomes[args.ref]
         bed_output = output_dir / bed_file.name
 
-        for action in actions:
-            # handle empty bed files by warning and outputting empty processed bed file and skipping
-            # note that liftover and rmbn can produce empty bed files, so we have to check after each action
-            if bed_file_is_empty(bed_file):
-                # print(f"Warning: {bed_file.name} is empty. Outputting empty postprocessed bed file.")
-                if bed_intro_type == "REFA" and action == "lift":
-                    # if file's intro type is REFA, change intro type to REF
-                    bed_intro_type = "REF"
-                    # change output file name to reflect new intro type
-                    bed_output = output_dir / f"{bed_accession}_{bed_chr}_REF.bed"
-                bed_output.touch()
-                break
+        if actions:
+            for action in actions:
+                # handle empty bed files by warning and outputting empty processed bed file and skipping
+                # note that rmbn can produce empty bed files, so we have to check after each action
+                if bed_file_is_empty(bed_file):
+                    bed_output.touch()
+                    break
 
-            if action == "lift":
-                # lift - perform liftover (if needed) - requires ref; paf optional
-                # find paf file with the same name of the bed file
-                if paf_dir.is_dir():
-                    paf_file = paf_dir / f"{bed_accession}_{reference_accession}.paf"
-                elif paf_dir.is_file():
-                    paf_file = paf_dir
-                else:
-                    raise ValueError("Cannot find paf file/folder. Check --paf path.")
+                elif action == "fgap":
+                    # fgap - merge regions >=1 bin size apart - requires bin size
+                    bin_size = args.bin
+                    chr_length = bed_genome.sizes[bed_chr]
+                    gap_size = args.gap
+                    bed_df = read_bed_file(bed_file)
+                    bins_df = bed_to_bins(bed_df, bin_size, chr_length)
+                    bins_df["introgression"] = bins_df.apply(fill_gaps, gap_size=gap_size, axis=0)
 
-                if bed_intro_type == "REFA":
-                    # if file's intro type is REFA, liftover and change intro type to REF
-                    bed_intro_type = "REF"
-                    # change output file name to reflect new intro type
-                    bed_output = output_dir / f"{bed_accession}_{bed_chr}_REF.bed"
-                    liftover_coordinates(bed_file, paf_file, bed_output)
+                    # save
+                    bed_df = bins_to_bed(bins_df, bin_size, bed_chr, bed_intro_type)
+                    bed_df.to_csv(bed_output, header=False, index=False, sep="\t")
                     bed_file = bed_output
 
-                if bed_intro_type != "REF":
-                    # save bed file lifted over to reference coordinate space
-                    liftover_coordinates(bed_file, paf_file, bed_output)
+                elif action == "rmbn":
+                    # rmbn - perform singleton bin removal - requires bin size, min. introgression size
+                    bin_size = args.bin
+                    chr_length = bed_genome.sizes[bed_chr]
+                    min_size = args.min
+                    bed_df = read_bed_file(bed_file)
+                    bins_df = bed_to_bins(bed_df, bin_size, chr_length)
+                    bins_df["introgression"] = bins_df.apply(
+                        remove_small_regions, min_size=min_size, axis=0
+                    )
+
+                    # save
+                    bed_df = bins_to_bed(bins_df, bin_size, bed_chr, bed_intro_type)
+                    bed_df.to_csv(bed_output, header=False, index=False, sep="\t")
                     bed_file = bed_output
 
-                # bed genome is now the reference since we are in reference space
-                bed_genome = reference_genome
+                elif action == "fcen":
+                    # fcen - fill in centromeres between introgression regions - requires bin size
+                    fasta_file = index_dir / bed_genome.fasta
+                    fasta_df = read_fasta(fasta_file)
+                    bed_df = read_bed_file(bed_file)
+                    bed_df = merge_centromere_regions(bed_df, fasta_df, bin_size)
 
-            elif action == "fgap":
-                # fgap - merge regions >=1 bin size apart - requires bin size
-                bin_size = args.bin
-                chr_length = bed_genome.sizes[bed_chr]
-                gap_size = args.gap
-                bed_df = read_bed_file(bed_file)
-                bins_df = bed_to_bins(bed_df, bin_size, chr_length)
-                bins_df["introgression"] = bins_df.apply(fill_gaps, gap_size=gap_size, axis=0)
-
-                # save
-                bed_df = bins_to_bed(bins_df, bin_size, bed_chr, bed_intro_type)
-                bed_df.to_csv(bed_output, header=False, index=False, sep="\t")
-                bed_file = bed_output
-
-            elif action == "rmbn":
-                # rmbn - perform singleton bin removal - requires bin size, min. introgression size
-                bin_size = args.bin
-                chr_length = bed_genome.sizes[bed_chr]
-                min_size = args.min
-                bed_df = read_bed_file(bed_file)
-                bins_df = bed_to_bins(bed_df, bin_size, chr_length)
-                bins_df["introgression"] = bins_df.apply(
-                    remove_small_regions, min_size=min_size, axis=0
-                )
-
-                # save
-                bed_df = bins_to_bed(bins_df, bin_size, bed_chr, bed_intro_type)
-                bed_df.to_csv(bed_output, header=False, index=False, sep="\t")
-                bed_file = bed_output
-
-            elif action == "fcen":
-                # fcen - fill in centromeres between introgression regions - requires bin size
-                fasta_file = index_dir / bed_genome.fasta
-                fasta_df = read_fasta(fasta_file)
-                bed_df = read_bed_file(bed_file)
-                bed_df = merge_centromere_regions(bed_df, fasta_df, bin_size)
-
-                # save
-                bed_df.to_csv(bed_output, header=False, index=False, sep="\t")
-                bed_file = bed_output
+                    # save
+                    bed_df.to_csv(bed_output, header=False, index=False, sep="\t")
+                    bed_file = bed_output
+        else:
+            # copy file to output directory if no actions specified
+            shutil.copy(bed_file, bed_output)
     return
 
 
