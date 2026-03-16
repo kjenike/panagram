@@ -57,7 +57,7 @@ def parse_config(config_path):
     post_map = postprocessing["map"]
     post_paf = postprocessing["paf"]
 
-    score_gdt_dir = Path(scoring.get("gdt", ""))
+    score_gdt_dir = Path(scoring["gdt"])
     score_run = scoring["run"]
     score_act = scoring["act"]
     score_min = scoring["min"]
@@ -99,7 +99,7 @@ def parse_config(config_path):
     if post_run:
         postprocess_flags = [
             f"--idx {index_dir}",
-            f"--act {' '.join(post_act)}",
+            f"--act {' '.join(post_act)}" if post_act else None,
             f"--bin {bin_size}",
             f"--min {post_min}" if post_min else None,
             f"--gap {post_gap}" if post_gap else None,
@@ -117,7 +117,7 @@ def parse_config(config_path):
             f"--how {score_how}",
             f"--thr {score_thr}",
             f"--cmp {' '.join(score_cmp)}",
-            f"--act {' '.join(score_act)}",
+            f"--act {' '.join(score_act)}" if score_act else None,
             f"--bin {bin_size}",
             f"--min {score_min}" if score_min else None,
             f"--gap {score_gap}" if score_gap else None,
@@ -143,6 +143,7 @@ def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, outpu
     # Create output directories
     call_dir = output_dir / f"{output_dir.name}_{call_thr}"
     call_dir.mkdir(parents=True, exist_ok=True)
+    postprocess_dir = call_dir / "postprocessed"
 
     # Run pipeline
     if call_flags:
@@ -151,7 +152,6 @@ def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, outpu
             f"python call_introgressions.py {' '.join(call_flags)}", shell=True, check=True
         )
     if postprocess_flags:
-        postprocess_dir = call_dir / "postprocessed"
         postprocess_flags += [f"--bed {call_dir}", f"--out {postprocess_dir}"]
         subprocess.run(
             f"python postprocess_introgressions.py {' '.join(postprocess_flags)}",
@@ -196,26 +196,52 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
                 "PAF file/folder must be provided when using liftover during a sweep. Try running the pipeline with a single threshold first to generate the PAF files, or run alignment manually and specify the PAF files."
             )
 
-    thresholds = [
-        0.1,
-        0.15,
-        0.2,
-        0.25,
-        0.3,
-        0.35,
-        0.4,
-        0.45,
-        0.5,
-        0.55,
-        0.6,
-        0.65,
-        0.7,
-        0.75,
-        0.8,
-        0.85,
-        0.9,
-        0.95,
-    ]
+    # TODO: pick threshold based on if urf is enabled or not
+    if call_flags and any(flag == "--urf" for flag in call_flags):
+        print("Running sweep with URF enabled. Thresholds will be between 0 and 1.")
+        thresholds = [
+            0.1,
+            0.15,
+            0.2,
+            0.25,
+            0.3,
+            0.35,
+            0.4,
+            0.45,
+            0.5,
+            0.55,
+            0.6,
+            0.65,
+            0.7,
+            0.75,
+            0.8,
+            0.85,
+            0.9,
+            0.95,
+        ]
+
+    else:
+        print("Running sweep with URF disabled. Thresholds will be between 0 and 0.7.")
+        thresholds = [
+            0.0,
+            0.04,
+            0.08,
+            0.12,
+            0.16,
+            0.2,
+            0.24,
+            0.28,
+            0.32,
+            0.36,
+            0.4,
+            0.44,
+            0.48,
+            0.52,
+            0.56,
+            0.6,
+            0.64,
+            0.68,
+        ]
 
     for thr in thresholds:
         thr_call_flags = call_flags.copy() if call_flags else None
@@ -243,6 +269,10 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
             score_dir = call_dir / f"scored_{how_to_score}"
             thr_score_flags += [f"--pre {postprocess_dir}", f"--out {score_dir}"]
             cmd += [f"python score_introgressions.py {' '.join(thr_score_flags)}"]
+        if not cmd:
+            raise ValueError(
+                "No steps to run in the pipeline. Please check the configuration file."
+            )
 
         cmd = " && ".join(cmd)
         cmd += f"; touch {call_dir / 'done.marker'}"
@@ -266,8 +296,10 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
     print("All screens completed.")
 
     # Run visualization step after all thresholds are done
-    vis_cmd = f"python visualize_introgressions.py -v prc prcc prca mcc shtmp --dir {output_dir} --how bins"
-    subprocess.run(vis_cmd, shell=True, check=True)
+    if score_flags and any(flag == "--vis" for flag in score_flags):
+        vis_cmd = f"python visualize_introgressions.py -v prc prcc prca mcc shtmp --dir {output_dir} --how bins --thresholds {' '.join(str(thr) for thr in thresholds)}"
+        subprocess.run(vis_cmd, shell=True, check=True)
+
     print("Sweep complete.")
     return
 

@@ -1,6 +1,7 @@
 from pathlib import Path
 import argparse
 import numpy as np
+from scipy.stats import zscore
 from scipy.ndimage import uniform_filter1d, median_filter
 import pandas as pd
 from panagram.index import Index
@@ -310,6 +311,7 @@ def preprocess_binned_bitmap(
         binned_bitmap = binned_bitmap.apply(
             smooth_row, axis=1, filter_type=smoothing_filter, filter_size=smoothing_filter_size
         )
+
     return binned_bitmap
 
 
@@ -378,13 +380,13 @@ def threshold_introgressions(binned_bitmap, anchor, comp_group, threshold, row_m
     elif comp_group == "REF":  # comparing to reference group
         group_sims["introgression"] = (group_sims.comp_sim < threshold).astype(int)
     else:  # comparing to different/wild group
-        group_sims["introgression"] = (group_sims.comp_sim >= (threshold)).astype(int)
-        # previous logic that also required anchor to be less similar to its own group than to comp_group
-        # binned_bitmap_only_ref = binned_bitmap[binned_bitmap["group"] == "REF"].drop(columns=["group"])
-        # group_sims["ref_sim"] = binned_bitmap_only_ref.mean(axis=0)
-        # group_sims["introgression"] = (
-        #     (group_sims.ref_sim < threshold) & (group_sims.comp_sim > group_sims.comp_sim.min())
-        # ).astype(int)
+        binned_bitmap_only_ref = binned_bitmap[binned_bitmap["group"] == "REF"].drop(
+            columns=["group"]
+        )
+        group_sims["ref_sim"] = binned_bitmap_only_ref.mean(axis=0)
+        group_sims["introgression"] = (
+            (group_sims.ref_sim < 0.95) & (group_sims.comp_sim >= group_sims.ref_sim + threshold)
+        ).astype(int)
     return group_sims
 
 
@@ -444,6 +446,42 @@ def bins_to_bed(bins_df, bin_size, chr_name, comp_group):
     return introgressions
 
 
+def per_bin_cosine(row, ref_row, window=3, thr=0.9):
+    assert window % 2 == 1
+
+    half_window = window // 2
+    num_bins = len(row)
+    labels = np.zeros(num_bins, dtype=int)
+
+    for bin_index in range(num_bins):
+        window_start = max(0, bin_index - half_window)
+        window_end = min(num_bins, bin_index + half_window + 1)
+
+        row_window = row.iloc[window_start:window_end].to_numpy()
+        ref_window = ref_row.iloc[window_start:window_end].to_numpy()
+
+        # both constant → similar
+        if np.all(row_window == row_window[0]) and np.all(ref_window == ref_window[0]):
+            labels[bin_index] = 1
+            continue
+
+        row_window_z = zscore(row_window, ddof=0)
+        ref_window_z = zscore(ref_window, ddof=0)
+
+        # one constant → dissimilar
+        if np.any(np.isnan(row_window_z)) or np.any(np.isnan(ref_window_z)):
+            continue
+
+        cosine_similarity = np.dot(row_window_z, ref_window_z) / (
+            np.linalg.norm(row_window_z) * np.linalg.norm(ref_window_z)
+        )
+
+        if cosine_similarity >= thr:
+            labels[bin_index] = 1
+
+    return labels
+
+
 def visualize(
     binned_bitmap, output_file, inverse=False, title=None, groups=None, xaxis_dtick=2000000
 ):
@@ -488,25 +526,74 @@ def visualize(
             zmin=0,
             zmax=1,
         )
+    # fig.update_layout(
+    #     font=dict(family="Arial", color="black"),
+    #     xaxis=dict(
+    #         dtick=xaxis_dtick,
+    #         title=dict(
+    #             text="Genomic Position",
+    #             font=dict(size=16),
+    #         ),
+    #     ),
+    #     yaxis=dict(
+    #         title="",  # Omit y-axis label
+    #         tickmode="linear",
+    #     ),
+    #     title=dict(
+    #         text=title,
+    #         x=0.5,  # Center the title
+    #         xanchor="center",
+    #         font=dict(size=20),
+    #     ),
+    # )
+    # height = 12 * binned_bitmap.shape[0] + 200
+    # width = 10 * binned_bitmap.shape[1] + 200
+    # height = max(height, 500)
+    # width = max(width, 500)
+    # width = max(width, height)  # make it square
+    # height = width
+    height = 900
+    width = 900
+
     fig.update_layout(
+        plot_bgcolor="white",
+        margin=dict(l=0, r=0, t=100, b=80),
+        autosize=True,
         font=dict(family="Arial", color="black"),
         xaxis=dict(
+            title=dict(text="Position (Bp)", font=dict(size=12)),
             dtick=xaxis_dtick,
-            title=dict(
-                text="Genomic Position",
-                font=dict(size=16),
-            ),
+            tickangle=270,
+            tickfont=dict(size=12),
         ),
         yaxis=dict(
             title="",  # Omit y-axis label
+            tickfont=dict(size=12),
             tickmode="linear",
         ),
         title=dict(
             text=title,
-            x=0.5,  # Center the title
+            font=dict(size=14),
+            x=0.5,
             xanchor="center",
-            font=dict(size=20),
         ),
+        coloraxis_colorbar=dict(
+            title=dict(
+                text="Kmer Similarity",
+                side="right",
+                font=dict(size=12),
+            ),
+            tickfont=dict(size=12),
+            outlinecolor="black",
+            outlinewidth=1,
+            thickness=15,
+            # len=0.3,
+            ticks="outside",
+            tickcolor="black",
+            dtick=0.2,
+        ),
+        width=width,
+        height=height,
     )
     fig.write_image(output_file)
     return
@@ -586,6 +673,14 @@ def run_introgression_finder(
             # Note omit unique kmers doesn't make sense here since we are using REF's view
             ref_binned_bitmap = bitmap_to_bins(ref_chr_bitmap, bin_size, omit_fixed_kmers)
 
+            # anchor_row = ref_binned_bitmap.loc[anchor]
+            # # compute cosine similarity per bin between anchor and all other rows
+            # cosine_sim_binned = pd.DataFrame(
+            #     ref_binned_bitmap.apply(lambda row: per_bin_cosine(row, anchor_row, window=5, thr=0.5), axis=1).to_list(),
+            #     index=ref_binned_bitmap.index,
+            #     columns=ref_binned_bitmap.columns
+            # )
+
             # preprocess ref_pair in the same way as pair
             ref_binned_bitmap = preprocess_binned_bitmap(
                 ref_binned_bitmap, ref_genome_similarities, **preprocessing_args
@@ -598,6 +693,18 @@ def run_introgression_finder(
 
             # get introgressions by looking at differences with REF
             introgressions = threshold_introgressions_simple(ref_binned_bitmap, anchor, threshold)
+
+            # # remove introgressions that aren't supported by cosine similarity
+            # outgroups = ["ANG", "INS"]
+            # cosine_sim_binned = cosine_sim_binned[binned_bitmap["group"].isin(outgroups)]
+            # cosine_sim_binned = cosine_sim_binned.max(axis=0).to_frame(name="cosine_sim")
+            # introgressions = introgressions.merge(
+            #     cosine_sim_binned, left_index=True, right_index=True, how="left"
+            # )
+            # introgressions["introgression"] = (
+            #     introgressions["introgression"] & (introgressions["cosine_sim"] == 1)
+            # ).astype(int)
+            # introgressions = introgressions.drop(columns=["cosine_sim"])
 
         else:
             # TODO: revisit this - hard-coding a threshold might not work well post-normalization
@@ -857,9 +964,9 @@ def main():
 
     ref_genome_similarities = None
     if args.urf:
-        if "REF" not in comp_groups:
+        if comp_groups != ["REF"]:
             raise ValueError(
-                "REF must be included as a comparison group using --cmp if using --urf"
+                "REF must be the only comparison group specified with --cmp if using --urf"
             )
         ref_genome = index.genomes[reference]
         using_ref_space = True
