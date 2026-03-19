@@ -129,17 +129,6 @@ def calculate_pr_auc(input_dir, intro_type, thresholds):
         )
     ).fillna(0)
 
-    # Anchor NaN points at (1,0) for plotting
-    # for i in range(len(results_df)):
-    #     if results_df["recall"][i] == 0 and results_df["precision"][i] == 0:
-    #         results_df.at[i, "recall"] = 0
-    #         results_df.at[i, "precision"] = 1
-    # add point at (0,1) for plotting
-    # results_df = pd.concat(
-    #     [results_df, pd.DataFrame({"threshold": [-1], "TP": [0], "FP": [0], "FN": [0], "TN": [1], "precision": [1], "recall": [0], "MCC": [0]})],
-    #     ignore_index=True,
-    # )
-
     correlation, _ = spearmanr(results_df["threshold"], results_df["recall"])
     recall_increasing = correlation > 0
 

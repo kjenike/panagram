@@ -234,7 +234,6 @@ def liftover_coordinates(
     Args:
         bed_file (str): Path to the BED file to liftover
         paf_file (str): Path to the PAF file indicating mapping between assemblies
-        output_file (str): Path to the output file for lifted coordinates (BED format)
 
     Returns:
         pd.DataFrame: DataFrame containing lifted coordinates in BED format (Chromosome, Start, End, Notes)
@@ -276,6 +275,22 @@ def run_alignments(
     map_args,
     n_threads,
 ):
+    """Run minimap2 alignments in parallel for each accession if paf files are not already provided.
+    If paf files are provided, skip this step and return the paf directory.
+
+    Args:
+        unique_accessions (list): List of unique accessions for which to run alignments
+        paf (str): Path to the PAF directory containing alignment information
+        index_dir (Path): Path to the index directory
+        index (Index): Index object containing genome information
+        reference_accession (str): Accession name of the reference genome
+        reference_file (Path): Path to the reference genome file
+        map_args (str): String of arguments for minimap2
+        n_threads (int): Number of threads to use for parallel processing
+
+    Returns:
+        Path: Path to the PAF directory containing alignment files
+    """
 
     # run minimap in parallel for each accession if paf files are not already provided
     if paf is None:
@@ -310,6 +325,23 @@ def run_liftovers(
     reference_accession,
     output_dir,
 ):
+    """Run liftover for each bed file to convert coordinates to reference space. If bed file is
+    empty, save an empty liftover file. After liftover, concat all bed files together, split by
+    chromosome and introgression type, and save.
+
+    Args:
+        bed_files (list): List of paths to BED files to liftover
+        unique_accessions (list): List of unique accession names
+        paf_dir (Path): Path to the PAF directory containing alignment files
+        reference_accession (str): Accession name of the reference genome
+        output_dir (Path): Path to the output directory
+
+    Raises:
+        ValueError: If paf file corresponding to a bed file is not found in the paf directory.
+
+    Returns:
+        list: List of paths to the lifted BED files
+    """
 
     # NOTE: we might end up with more bed files than we started if 1 chr splits into multiple
     # could mess with scoring if you only intended to score a subset of chromosomes
