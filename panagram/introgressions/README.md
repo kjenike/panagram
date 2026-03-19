@@ -1,10 +1,10 @@
 # Introgression Calling with Panagram
 
 Introgressions are regions where one species has inherited a sequence from another related species.
-Panagram's bitmap enables calculating the fraction of shared kmers between an anchor and all other
-accessions in a pangenome. This allows one to call introgressions by looking for differences between
-a reference anchor and another accession, or by looking for similarities between one accession and
-another suspected introgression donor.
+Panagram's bitmap enables calculating kmer similarity, the fraction of shared kmers between an
+anchor and all other accessions in a pangenome. This allows one to call introgressions by
+looking for differences between a reference anchor and another accession, or by looking for
+similarities between one accession and another suspected introgression donor.
 
 The introgression caller found here can be used to identify potential introgressed regions across
 a pangenome and save them to a BED file for further analysis. The introgression caller works best on
@@ -15,7 +15,7 @@ a per-bin basis.
 There are additionally scripts to generate simulated pangenomes with various numbers of mutations
 and introgressions.
 
-## Usage
+## Usage and Anchoring Requirements
 
 Once you have assembled a pangenome with Panagram, you will need an additional config.yaml file and
 group.tsv file to control the introgression caller parameters. See below for the format for these
@@ -25,10 +25,52 @@ files. The introgression caller can be used as follows:
 python introgression_runner.py <config.yaml> <--sweep>
 ```
 
-Add the `--sweep` flag to try a range of kmer similarity thresholds from 0.1-0.95. Note that this
+Add the `--sweep` flag to try a range of kmer similarity thresholds. Note that this
 kicks off a number of threads equal to `18 * num. threads chosen in config file`.
 [screen](https://www.gnu.org/software/screen/) must be installed on your system for `--sweep` to
 work.
+
+The caller will try to run in two different modes, based on the parameters you provide:
+
+2-way Comparison Mode:
+In order to use this mode, set cmp to [REF]. This mode only requires anchoring on one genome,
+REF, if urf is also set to true. In this mode, the caller
+looks at the kmer similarity of a suspected introgression recipient with respect to REF. It marks
+any bin with kmer similarity below the specified threshold as introgressed. This mode can be used
+if you do not know which genomes the potential introgression donors are, or if anchoring on multiple
+genomes would be very computationally expensive.
+
+3-way Comparison Mode:
+In order to use this mode, set cmp to [GRP], where GRP is the name for a group of related potential
+introgression donors in the group.tsv file. You must still define REF as well, and you
+must run anchoring for all suspected introgression recipients when running Panagram. In this mode,
+the caller anchors on the introgression recipient and compares its kmer similarity to REF and to
+GRP. It marks a bin as introgressed if the similarity to GRP is greater than REF by the specified
+threshold. cmp can be a list of multiple groups; the caller will independently loop through each
+group for each recipent and mark introgressions that potentially came from each GRP. The same
+regions may be marked for different groups.
+
+## Outputs
+There are 4 folders that the introgression caller can output:
+
+raw: Contains BED files after the calling step. BED files are labeled as follows:
+AccessionName_Chromosome_GRP.bed. GRP is the name of the introgression donor group used during
+calling. For 3-way comparisons, BED files contain potential introgression locations in the
+coordinate system of the acession listed in AcessionName. If you use 2-way, GRP will either be REF
+or REFA. REF means that the urf flag was set to true, and introgression locations will be
+saved in the coordinate system of your REF accession. If urf was false (or the accession was listed
+in rmu), introgression locations will be saved in the coordinate system of AcessionName.
+
+heatmaps: If you turned vis on, this is where you can find visuals in SVG format of kmer similarity
+after any modifications made during the calling step (but before postprocessing). Visuals are
+labeled the same way as the BED files.
+
+postprocessed: If you chose to run postprocessing, your postprocessed BED files will be here in the
+same naming scheme used for the raw folder.
+
+scored: If scoring, there will be a precision/recall metrics file here based on the number of
+introgressions that match the other method you are comparing to. There are also additional heatmaps
+visualizing per-bin TP, FP, TN, and FN regions for each accession.
 
 ## Example
 
@@ -39,11 +81,14 @@ pangenome at [Coming Soon!]. The example also contains config and group files fo
 
 The group.tsv is a tab-separated file with 2 columns:
 - *name*: the name given to each accession in the samples.tsv file for Panagram
-- *group*: the group an accession is a part of. 'REF' denotes which accession is the reference. Other
-groups can have any name; typically there are at least 2 other groups for introgression donors and
-introgression recipients. The caller can be set to call all introgressions for one group based on
-differences with 'REF' or call introgressions based on similarities between one group (typically
-donors) and another (typically recipients).
+- *group*: the group an accession is a part of. 'REF' denotes one accession as the reference.
+REF should be a genome suspected of having few to no introgressions with the suspected introgression
+donors. REF should also be closely related (preferably the same species) as the genomes that you
+suspect to be introgression recipients. Other groups can have any name. Typically there are at least
+2 other groups - one for introgression donors and one for introgression recipients. Introgression
+donor groups should be listed in the cmp parameter. Introgression recipient groups should be listed
+in the grp parameter. You can also use the anc parameter to check a custom list of recipients for
+introgressions (you must still create a group.tsv though).
 
 ## Config File Parameters
 
@@ -55,8 +100,8 @@ can only be used if comparing called introgressions to the SV-based approach
 by the simulator. It will calculate precision, recall, and other metrics based on the number of
 introgressions that match the results from another method.
 
-Parameters are controlled by a YAML file. See `example_config.yaml` for reasonable defaults. The
-parameters for each section are as follows:
+Parameters are controlled by a YAML file. See `example_config.yaml` and the tips section below
+for reasonable defaults. The parameters for each section are as follows:
 
 ### General Parameters
 
@@ -71,26 +116,26 @@ parameters for each section are as follows:
 
 ### Calling Parameters
 
-| Parameter | Type                | Description                                                                 |
-|----------|---------------------|-----------------------------------------------------------------------------|
-| run      | boolean             | whether to run calling                                              |
-| grp      | string              | groups of suspected introgression recipients                                |
-| anc      | list[string]/null   | accessions to run introgression caller for (set grp to null to use this list)|
-| chr      | list[string]/null   | chromosomes to check for introgressions (null = all)                         |
-| cmp      | list[string]        | REF and/or groups of suspected introgression donors to compare against       |
-| thr      | float               | bins below threshold are introgressions for REF; above for other groups      |
-| stp      | int                 | kmer step size when sampling from bitmap                                     |
-| gnm      | float/-1/null       | shift kmer sims to this mean; -1 auto-calc; null disables                     |
-| trm      | int/null            | omit values outside this many stdevs from gnm calculations                      |
-| sft      | string/null         | choose either 'mean' or 'median' smoothing filter; null disables               |
-| ssz      | int/null            | number of bins in sft filter window                                           |
-| urf      | boolean             | use reference coordinate system when cmp is REF; won't be used for other groups |
-| rmf      | boolean             | remove fixed kmers shared by all accessions                                  |
-| rmu      | list[string]/null   | remove kmers not in REF or ogrp for these noisy accessions; forces urf=false for these accessions |
-| ogrp     | list[string]/null   | remove kmers not present in these groups (exclude REF)                       |
-| edg      | boolean             | highlight edges and dampen center kmer similarities                           |
-| isc      | boolean             | increase contrast by boosting kmer similarities                               |
-| vis      | boolean             | visualize binned bitmap and detected introgressions                          |
+| Parameter | Type                 | Description                                                                 |
+|-----------|----------------------|-----------------------------------------------------------------------------|
+| run       | boolean              | whether to run calling                                              |
+| grp       | string               | groups of suspected introgression recipients                                |
+| anc       | list[string]/null    | accessions to run introgression caller for (set grp to null to use this list)|
+| chr       | list[string]/null    | chromosomes to check for introgressions (null = all)                         |
+| cmp       | list[string]         | REF and/or groups of suspected introgression donors to compare against       |
+| thr       | float                | bins below threshold are introgressions for 2-way; bins more similar to grp than REF by threshold are introgressions for 3-way |
+| stp       | int                  | kmer step size when sampling from bitmap; this should match the step size used when running Panagram |
+| gnm       | float/-1/null        | shift kmer sims to this mean; -1 auto-calc; null disables                     |
+| trm       | int/null             | omit values outside this many stdevs from gnm calculations                      |
+| sft       | string/null          | choose either 'mean' or 'median' smoothing filter; might help even out small differences in similarity between bins ; null disables |
+| ssz       | int/null             | number of bins in sft filter window                                           |
+| urf       | boolean              | use reference coordinate system; cmp must be set to '[REF]' |
+| rmf       | boolean              | remove fixed kmers shared by all accessions                                  |
+| rmu       | list[string]/null    | remove kmers not in REF or ogrp for these noisy accessions; forces urf=false for these accessions |
+| ogrp      | list[string]/null    | remove kmers not present in these groups (exclude REF)                       |
+| edg       | boolean              | highlight edges and dampen center kmer similarities                           |
+| isc       | boolean              | increase contrast by boosting kmer similarities                               |
+| vis       | boolean              | visualize binned bitmap and detected introgressions                          |
 
 ### Postprocessing Parameters
 
@@ -107,7 +152,7 @@ parameters for each section are as follows:
 
 | Parameter | Type             | Description                                                                                                                     |
 |----------|-------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| run      | boolean           | whether to run scoring                                                                                                          |
+| run      | boolean           | whether to run scoring; should almost always be false unless testing                                                            |
 | gdt      | str               | path to folder containing Jaccard similarity text files or ground truth introgressions in the same format                      |
 | act      | list[string]/null | apply postprocessing to ground truth; null to skip                                                                              |
 | min      | int/null          | see postprocessing                                                                                                              |
@@ -115,6 +160,32 @@ parameters for each section are as follows:
 | thr      | float             | all values above this threshold are considered introgressed in the ground truth                                                 |
 | cmp      | list[string]      | groups to check introgressions against; REF and merged results are compared against the set of introgressions in any group in this list |
 | vis      | boolean           | visualize true/false positives and negatives per bin                                                                            |
+
+## Tips for Choosing Parameters
+
+Most parameters can remain as their defaults as shown in config_example.yaml. The most important
+parameters to tune are as follows:
+
+bin/min: Bin size determines the smallest possible introgression that will appear in your output
+before postprocessing. In general, introgressions tend
+to span large chunks of a chromosome, so bin size should be fairly large. In testing, we compared
+our method to one that called introgressions in 1,000,000 bp bins. We often used bin sizes smaller
+than this and set min introgression size such that bin size * min = ~1,000,000 bp. We found that
+a bin size of 125,000 worked best overall with min set to 8. For 2 way calling, size
+500,000 additionally worked well with min set to 2.
+
+gap: This is dependent on bin size, like min. In testing, setting this such that bin size * gap =
+1,000,000 bp worked best.
+
+thr: Easiest to tune after running the 2-way comparison once with the defaults, then looking at your
+pangenome's kmer similarities in the heatmaps folder. For 2-way calling, try to determine what the
+kmer similarity value is for large regions that are noticibly different from the reference (like in
+the example above). In testing, for 2-way calling, thresholds between 0.7-0.8 worked best. For
+3-way calling, the threshold is a bit less important. Smaller thresholds, between 0-0.2 worked best.
+
+gnm: This can help if you have very different genomes together in the same pangenome. Try setting
+this to -1 first. If you notice that visually, there are too many bins that are set
+to 1 across the Pangenome, try setting to 0.9 or lower.
 
 ## Introgression Simulator Usage
 
@@ -176,4 +247,3 @@ optional arguments:
                         Offspring deletion size max (bp)
   --seed SEED           Random seed for reproducibility (default: 42)
 ```
-
