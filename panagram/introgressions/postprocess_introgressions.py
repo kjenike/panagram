@@ -335,14 +335,15 @@ def run_liftovers(
             )
         # liftover if needed
         elif bed_intro_type != "REF":
-            if bed_intro_type == "REFA":
-                bed_intro_type = "REF"
             new_coordinates_df = liftover_coordinates(bed_file, paf_file)
-
         # if no liftover needed, just read in the bed file
         else:
             new_coordinates_df = read_bed_file(bed_file)
             new_coordinates_df = new_coordinates_df[["Chromosome", "Start", "End", "Notes"]]
+
+        # change intro type to REF since now introgressions are in reference space
+        if bed_intro_type == "REFA":
+            bed_intro_type = "REF"
 
         new_coordinates_df["Accession"] = bed_accession
         new_coordinates_df["Introgression_Type"] = bed_intro_type

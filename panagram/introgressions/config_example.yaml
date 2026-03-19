@@ -33,7 +33,7 @@ postprocessing:
   paf: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/tomato_sl4_la1589/alignments
 
 scoring:
-  run: true
+  run: false
   gdt_dir: /home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/tomato_sl4_paper_subset_20
   act: [fgap, rmbn]
   min: 2

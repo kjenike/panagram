@@ -47,7 +47,6 @@ def parse_config(config_path):
     call_sft = calling["sft"]
     call_ssz = calling["ssz"]
     call_edg = calling["edg"]
-    call_isc = calling["isc"]
     call_vis = calling["vis"]
 
     post_run = postprocessing["run"]
@@ -62,7 +61,6 @@ def parse_config(config_path):
     score_act = scoring["act"]
     score_min = scoring["min"]
     score_gap = scoring["gap"]
-    score_how = "bins"
     score_thr = scoring["thr"]
     score_cmp = scoring["cmp"]
     score_vis = scoring["vis"]
@@ -89,7 +87,6 @@ def parse_config(config_path):
             f"--ref {ref}",
             "--rmf" if call_rmf else None,
             "--edg" if call_edg else None,
-            "--isc" if call_isc else None,
             "--vis" if call_vis else None,
             f"--threads {threads}",
         ]
@@ -114,7 +111,6 @@ def parse_config(config_path):
         score_flags = [
             f"--idx {index_dir}",
             f"--gdt {score_gdt_dir}",
-            f"--how {score_how}",
             f"--thr {score_thr}",
             f"--cmp {' '.join(score_cmp)}",
             f"--act {' '.join(score_act)}" if score_act else None,
@@ -152,19 +148,14 @@ def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, outpu
             f"python call_introgressions.py {' '.join(call_flags)}", shell=True, check=True
         )
     if postprocess_flags:
-        postprocess_flags += [f"--bed {call_dir}", f"--out {postprocess_dir}"]
+        postprocess_flags += [f"--bed {call_dir / 'raw'}", f"--out {postprocess_dir}"]
         subprocess.run(
             f"python postprocess_introgressions.py {' '.join(postprocess_flags)}",
             shell=True,
             check=True,
         )
     if score_flags:
-        how_to_score = None
-        for flag in score_flags:
-            if flag.startswith("--how "):
-                how_to_score = flag.split(" ")[1]
-                break
-        score_dir = call_dir / f"scored_{how_to_score}"
+        score_dir = call_dir / "scored"
         score_flags += [f"--pre {postprocess_dir}", f"--out {score_dir}"]
         subprocess.run(
             f"python score_introgressions.py {' '.join(score_flags)}", shell=True, check=True
@@ -196,9 +187,11 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
                 "PAF file/folder must be provided when using liftover during a sweep. Try running the pipeline with a single threshold first to generate the PAF files, or run alignment manually and specify the PAF files."
             )
 
-    # TODO: pick threshold based on if urf is enabled or not
-    if call_flags and any(flag == "--urf" for flag in call_flags):
-        print("Running sweep with URF enabled. Thresholds will be between 0 and 1.")
+    comp_groups = [flag.split()[1:] for flag in call_flags if flag.startswith("--cmp")]
+    comp_groups = comp_groups[0] if comp_groups else []
+
+    if call_flags and comp_groups == ["REF"]:
+        print("Running sweep for 2-way comparison. Thresholds will be between 0 and 1.")
         thresholds = [
             0.1,
             0.15,
@@ -221,7 +214,7 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
         ]
 
     else:
-        print("Running sweep with URF disabled. Thresholds will be between 0 and 0.7.")
+        print("Running sweep for 3-way comparison. Thresholds will be between 0 and 0.7.")
         thresholds = [
             0.0,
             0.04,
@@ -258,15 +251,10 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
             thr_call_flags += [f"--out {call_dir}", f"--thr {thr}"]
             cmd += [f"python call_introgressions.py {' '.join(thr_call_flags)}"]
         if thr_postprocess_flags:
-            thr_postprocess_flags += [f"--bed {call_dir}", f"--out {postprocess_dir}"]
+            thr_postprocess_flags += [f"--bed {call_dir / 'raw'}", f"--out {postprocess_dir}"]
             cmd += [f"python postprocess_introgressions.py {' '.join(thr_postprocess_flags)}"]
         if thr_score_flags:
-            how_to_score = None
-            for flag in thr_score_flags:
-                if flag.startswith("--how "):
-                    how_to_score = flag.split(" ")[1]
-                    break
-            score_dir = call_dir / f"scored_{how_to_score}"
+            score_dir = call_dir / "scored"
             thr_score_flags += [f"--pre {postprocess_dir}", f"--out {score_dir}"]
             cmd += [f"python score_introgressions.py {' '.join(thr_score_flags)}"]
         if not cmd:
@@ -297,7 +285,7 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
 
     # Run visualization step after all thresholds are done
     if score_flags and any(flag == "--vis" for flag in score_flags):
-        vis_cmd = f"python visualize_introgressions.py -v prc prcc prca mcc shtmp --dir {output_dir} --how bins --thresholds {' '.join(str(thr) for thr in thresholds)}"
+        vis_cmd = f"python visualize_introgressions.py -v prc prcc prca mcc shtmp --dir {output_dir} --thresholds {' '.join(str(thr) for thr in thresholds)}"
         subprocess.run(vis_cmd, shell=True, check=True)
 
     print("Sweep complete.")

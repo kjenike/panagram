@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 import numpy as np
+from scipy.stats import spearmanr
 import pandas as pd
 import plotly.express as px
 from PIL import Image
@@ -82,20 +83,19 @@ def create_heatmap_runner(input_dir, groups=None):
     return
 
 
-def calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds):
+def calculate_pr_auc(input_dir, intro_type, thresholds):
     """Calculate precision-recall AUC for introgressions.
 
     Args:
         input_dir (Path): path to input directory containing distance files
         intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
-        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
         thresholds (list): list of thresholds to evaluate
 
     Returns:
         pd.DataFrame: DataFrame containing PR and related metrics for each threshold
     """
 
-    scored_dir_name = f"scored_{how_to_score}"
+    scored_dir_name = "scored"
 
     # find the file we need
     results = []
@@ -140,23 +140,54 @@ def calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds):
     #     ignore_index=True,
     # )
 
+    correlation, _ = spearmanr(results_df["threshold"], results_df["recall"])
+    recall_increasing = correlation > 0
+
+    # Set threshold for (0,1) point based on recall trend
+    if recall_increasing:
+        # Recall increases with threshold -> lowest recall at lowest threshold
+        point_threshold = results_df["threshold"].min() - 1
+    else:
+        # Recall decreases with threshold -> lowest recall at highest threshold
+        point_threshold = results_df["threshold"].max() + 1
+
+    results_df = pd.concat(
+        [
+            results_df,
+            pd.DataFrame(
+                {
+                    "threshold": [point_threshold],
+                    "TP": [0],
+                    "FP": [0],
+                    "FN": [0],
+                    "TN": [1],
+                    "precision": [1],
+                    "recall": [0],
+                    "MCC": [0],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+
+    results_df = results_df.sort_values("threshold", ascending=True)
+
     auc_pr = np.trapz(results_df["precision"].values, results_df["recall"].values)
     print(f"PR AUC {intro_type}:", auc_pr)
     print(f"Max MCC {intro_type}:", results_df["MCC"].max())
     return results_df
 
 
-def create_mcc_curve(input_dir, intro_type, how_to_score, thresholds):
+def create_mcc_curve(input_dir, intro_type, thresholds):
     """Create a Matthews Correlation Coefficient (MCC) curve.
 
     Args:
         input_dir (Path): path to input directory containing distance files
         intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
-        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
         thresholds (list): list of thresholds to evaluate
     """
 
-    results_df = calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds)
+    results_df = calculate_pr_auc(input_dir, intro_type, thresholds)
     fig = px.line(
         results_df,
         x="threshold",
@@ -175,22 +206,21 @@ def create_mcc_curve(input_dir, intro_type, how_to_score, thresholds):
         height=500,
         margin=dict(l=10, r=10, t=10, b=10),  # tight layout
     )
-    output_file = f"{input_dir}/{how_to_score}_{intro_type}_mcc.svg"
+    output_file = f"{input_dir}/{intro_type}_mcc.svg"
     fig.write_image(output_file)
     return
 
 
-def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
+def create_pr_curve(input_dir, intro_type, thresholds):
     """Create a precision-recall curve.
 
     Args:
         input_dir (Path): path to input directory containing distance files
         intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
-        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
         thresholds (list): list of thresholds to evaluate
     """
 
-    results_df = calculate_pr_auc(input_dir, intro_type, how_to_score, thresholds)
+    results_df = calculate_pr_auc(input_dir, intro_type, thresholds)
     # results_df = results_df[~((results_df["recall"] == 0) & (results_df["precision"] == 1))]
     results_df = results_df[~((results_df["recall"] == 0) & (results_df["precision"] == 0))]
 
@@ -211,23 +241,22 @@ def create_pr_curve(input_dir, intro_type, how_to_score, thresholds):
         height=500,
         margin=dict(l=10, r=10, t=10, b=10),  # tight layout
     )
-    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prc.svg"
+    output_file = f"{input_dir}/{intro_type}_prc.svg"
     fig.write_image(output_file)
     return
 
 
-def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
+def create_pr_curve_accessions(input_dir, intro_type, thresholds):
     """Create a precision-recall curve with individual lines for each accession.
 
     Args:
         input_dir (Path): path to input directory containing distance files
         intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
-        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
         thresholds (list): list of thresholds to evaluate
     """
 
-    scored_dir_name = f"scored_{how_to_score}"
-    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prca.svg"
+    scored_dir_name = "scored"
+    output_file = f"{input_dir}/{intro_type}_prca.svg"
 
     # find the file we need
     results = []
@@ -307,7 +336,6 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
     fig.update_traces(textposition="top center")
     fig.update_layout(
         font=dict(family="Arial", color="black"),
-        # template="plotly_white",
         xaxis_title=dict(text="Recall"),
         yaxis_title=dict(text="Precision"),
         xaxis=dict(range=[0, 1.01], ticks="outside", linecolor="black"),
@@ -320,18 +348,17 @@ def create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds):
     return
 
 
-def create_pr_curve_chromosomes(input_dir, intro_type, how_to_score, thresholds):
+def create_pr_curve_chromosomes(input_dir, intro_type, thresholds):
     """Create a precision-recall curve with individual lines for each chromosome.
 
     Args:
         input_dir (Path): path to input directory containing distance files
         intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
-        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
         thresholds (list): list of thresholds to evaluate
     """
 
-    scored_dir_name = f"scored_{how_to_score}"
-    output_file = f"{input_dir}/{how_to_score}_{intro_type}_prcc.svg"
+    scored_dir_name = "scored"
+    output_file = f"{input_dir}/{intro_type}_prcc.svg"
 
     # find the file we need
     results = []
@@ -359,7 +386,6 @@ def create_pr_curve_chromosomes(input_dir, intro_type, how_to_score, thresholds)
         y="Precision",
         color="Chromosome",
         markers=True,
-        # text="Threshold",
         title="Precision-Recall Curves per Chromosome",
     )
     fig.update_traces(textposition="top center")
@@ -368,18 +394,24 @@ def create_pr_curve_chromosomes(input_dir, intro_type, how_to_score, thresholds)
     return
 
 
-def create_scored_heatmap_collage(input_dir, intro_type, how_to_score, thresholds):
+def create_scored_heatmap_collage(input_dir, intro_type, thresholds):
     """Create a collage of heatmaps for each chromosome through each threshold.
 
     Args:
         input_dir (Path): path to input directory containing distance files
         intro_type (str): introgression type (could be a group name, 'REF', or 'merged')
-        how_to_score (str): method for scoring introgressions ('overlaps' or 'bins')
         thresholds (list): list of thresholds to evaluate
     """
 
-    scored_dir_name = f"scored_{how_to_score}"
-    output_file = f"{input_dir}/{how_to_score}_{intro_type}_scored_heatmaps.pdf"
+    scored_dir_name = "scored"
+    output_file = f"{input_dir}/{intro_type}_scored_heatmaps.pdf"
+
+    # check that 18 thresholds exist
+    if len(thresholds) != 18:
+        print(
+            f"Warning: Expected 18 thresholds for heatmap collage, but got {len(thresholds)}. Skipping heatmap collage."
+        )
+        return
 
     # image_batches: list of lists, each with 9 image paths
     image_batches = []
@@ -455,11 +487,6 @@ def main():
         default=None,
     )
     parser.add_argument(
-        "--how",
-        type=str,
-        help="whether bins or overlaps were used during scoring",
-    )
-    parser.add_argument(
         "--thresholds",
         type=float,
         nargs="+",
@@ -499,14 +526,10 @@ def main():
             raise ValueError("Unknown visualization function specified. Check args.v.")
 
     if any(func in vis_functions for func in ("shtmp", "prc", "prcc", "prca")):
-        how_to_score = args.how
-        if how_to_score not in ["bins", "overlaps"]:
-            raise ValueError("--how must be either 'bins' or 'overlaps'.")
-
         thresholds = args.thresholds
 
         # take the first threshold path and check for introgression types
-        scored_dir_name = f"scored_{how_to_score}"
+        scored_dir_name = "scored"
         scored_dir_path = input_dir / f"{input_dir.name}_{thresholds[0]}" / scored_dir_name
         if not scored_dir_path.is_dir():
             raise ValueError(
@@ -522,19 +545,19 @@ def main():
     for func in vis_functions:
         if func == "prc":
             for intro_type in intro_types:
-                create_pr_curve(input_dir, intro_type, how_to_score, thresholds)
+                create_pr_curve(input_dir, intro_type, thresholds)
         elif func == "prcc":
             for intro_type in intro_types:
-                create_pr_curve_chromosomes(input_dir, intro_type, how_to_score, thresholds)
+                create_pr_curve_chromosomes(input_dir, intro_type, thresholds)
         elif func == "prca":
             for intro_type in intro_types:
-                create_pr_curve_accessions(input_dir, intro_type, how_to_score, thresholds)
+                create_pr_curve_accessions(input_dir, intro_type, thresholds)
         elif func == "shtmp":
             for intro_type in intro_types:
-                create_scored_heatmap_collage(input_dir, intro_type, how_to_score, thresholds)
+                create_scored_heatmap_collage(input_dir, intro_type, thresholds)
         elif func == "mcc":
             for intro_type in intro_types:
-                create_mcc_curve(input_dir, intro_type, how_to_score, thresholds)
+                create_mcc_curve(input_dir, intro_type, thresholds)
         elif func == "htmp":
             if args.grp is not None:
                 groups = pd.read_csv(args.grp, sep="\t", index_col=0)

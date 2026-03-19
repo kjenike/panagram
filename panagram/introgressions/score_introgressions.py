@@ -173,145 +173,6 @@ def threshold_introgressions(pred_df, gt_df, threshold):
     return pred_df, gt_df
 
 
-def score_introgression_overlaps_helper(pred_df_row, gt_df_row, overlap_threshold):
-    """Score introgression overlaps between predicted and ground truth data.
-
-    Args:
-        pred_df_row (pd.Series): Series containing predicted introgression data
-        gt_df_row (pd.Series): Series containing ground truth introgression data
-        overlap_threshold (float): min. fraction of overlap required to consider a region a TP
-
-    Returns:
-        tuple(dict, pd.Series): dictionary containing overlap scores and gt_df_row with relabeled
-        TP/FN/TN/FP regions for visualization
-    """
-
-    # label every region in pred as TP, TN, FP, or FN
-    # using regions defined by pred means that FPs aren't ignored
-    gt_df_row = gt_df_row.to_frame(name="introgression")
-    pred_df_row = pred_df_row.to_frame(name="introgression")
-
-    # arcane code to label consecutive strings of 1s and 0s as separate regions
-    # finds where there are differences between the previous row and the current
-    # where there are differences, labels them as different regions using cumsum
-    pred_df_row["region"] = (pred_df_row["introgression"].diff().fillna(1) != 0).cumsum()
-
-    pred_ones = pred_df_row.groupby("region")["introgression"].sum()
-    counts = pred_df_row.groupby("region")["introgression"].count()
-    gt_ones = gt_df_row.groupby(pred_df_row["region"])["introgression"].sum()
-
-    # Combine the results
-    region_df = pd.DataFrame({"gt_ones": gt_ones, "pred_ones": pred_ones, "count": counts})
-
-    # Count TP, TN, FP, and FN regions
-    # TP - where the pred has 1s and the gt region has >= overlap_threshold% 1s
-    tp_regions = region_df[
-        (region_df["pred_ones"] > 0)
-        & ((region_df["gt_ones"] / region_df["count"]) >= overlap_threshold)
-    ]
-    # FN - where the pred has 0s and the gt region has < overlap_threshold% 0s
-    fn_regions = region_df[
-        (region_df["pred_ones"] == 0)
-        & ((region_df["count"] - region_df["gt_ones"]) / region_df["count"] < overlap_threshold)
-    ]
-    # TN - where the pred has 0s and the gt region has >= overlap_threshold% 0s
-    tn_regions = region_df[
-        (region_df["pred_ones"] == 0)
-        & ((region_df["count"] - region_df["gt_ones"]) / region_df["count"] >= overlap_threshold)
-    ]
-    # FP - where the pred has 1s and the gt region has < overlap_threshold% 1s
-    fp_regions = region_df[
-        (region_df["pred_ones"] > 0)
-        & ((region_df["gt_ones"] / region_df["count"]) < overlap_threshold)
-    ]
-
-    true_pos = len(tp_regions)
-    false_pos = len(fp_regions)
-    true_neg = len(tn_regions)
-    false_neg = len(fn_regions)
-
-    # relabel regions in gt_df for visualization
-    if not tp_regions.empty:
-        # tps should appear as 1s on gt
-        tp_regions = list(tp_regions.index)
-        gt_df_row.loc[pred_df_row["region"].isin(tp_regions)] = 1
-    if not fn_regions.empty:
-        # fns should appear as 1s on gt
-        fn_regions = list(fn_regions.index)
-        gt_df_row.loc[pred_df_row["region"].isin(fn_regions)] = 1
-    if not tn_regions.empty:
-        # tns should appear as 0s on gt
-        tn_regions = list(tn_regions.index)
-        gt_df_row.loc[pred_df_row["region"].isin(tn_regions)] = 0
-    if not fp_regions.empty:
-        # fps should appear as 0s on gt
-        fp_regions = list(fp_regions.index)
-        gt_df_row.loc[pred_df_row["region"].isin(fp_regions)] = 0
-
-    # return the metrics for the regions and the modified gt_df_row
-    metrics = {
-        "True Positive": true_pos,
-        "True Negative": true_neg,
-        "False Positive": false_pos,
-        "False Negative": false_neg,
-    }
-    gt_df_row = list(gt_df_row["introgression"])
-    return metrics, gt_df_row
-
-
-def score_introgression_overlaps(pred_df, gt_df, overlap_threshold):
-    """Get confusion matrix and related metrics for introgressions given ground truth in the same
-    coordinate/bin space. Accession names must match between pred_df and gt_df.
-    Args:
-        pred_df (pd.DataFrame): DataFrame containing predicted introgression data
-        gt_df (pd.DataFrame): DataFrame containing ground truth introgression data
-        overlap_threshold (float): min. fraction of overlap required to consider a region a TP
-    Returns:
-        pd.DataFrame: DataFrame containing confusion matrix and related metrics
-    """
-
-    # score introgressions per-region rather than per-bin
-    shared_cols = list(set(pred_df.index).intersection(set(gt_df.index)))
-    pred_df = pred_df.transpose()[shared_cols]
-    gt_df = gt_df.transpose()[shared_cols]
-
-    # calculate overlap metrics per column
-    metrics_df = gt_df.apply(
-        lambda col: score_introgression_overlaps_helper(pred_df[col.name], col, overlap_threshold)[
-            0
-        ],
-        axis=0,
-    ).tolist()
-    metrics_df = pd.DataFrame(metrics_df, index=gt_df.columns)
-
-    # sum across cols to get totals across all columns
-    true_pos = metrics_df["True Positive"].sum()
-    true_neg = metrics_df["True Negative"].sum()
-    false_pos = metrics_df["False Positive"].sum()
-    false_neg = metrics_df["False Negative"].sum()
-    total = true_pos + true_neg + false_pos + false_neg
-
-    with np.errstate(invalid="ignore"):
-        acc = (true_pos + true_neg) / total
-        precision = true_pos / (true_pos + false_pos)
-        recall = true_pos / (true_pos + false_neg)
-        fpr = false_pos / (false_pos + true_neg)
-
-    # return the metrics as a df
-    metrics = {
-        "True Positive": true_pos,
-        "True Negative": true_neg,
-        "False Positive": false_pos,
-        "False Negative": false_neg,
-        "Accuracy": acc,
-        "Precision": precision,
-        "Recall": recall,
-        "FPR": fpr,
-    }
-    metrics = pd.DataFrame([metrics])
-    return metrics
-
-
 def score_introgressions(pred_df, gt_df):
     """Get confusion matrix and related metrics for introgressions given ground truth in the same
     coordinate/bin space. Accession names must match between pred_df and gt_df.
@@ -361,36 +222,6 @@ def score_introgressions(pred_df, gt_df):
     metrics = pd.DataFrame([metrics])
 
     return metrics
-
-
-def create_scored_heatmap_overlaps(pred_df, gt_df, overlap_threshold, output_file):
-    """Helper function to create a scored heatmap for introgression overlaps. Performs modification
-    of gt_df before passing to create_scored_heatmap. Only visualizes the accessions that are shared
-    between both pred_df and gt_df.
-
-    Args:
-        pred_df (pd.DataFrame): DataFrame containing predicted introgression data
-        gt_df (pd.DataFrame): DataFrame containing ground truth introgression data
-        overlap_threshold (float): minimum overlap threshold for considering a region a true positive
-        output_file (str or Path): Path to the output file for the heatmap
-    """
-
-    shared_accessions = list(set(pred_df.index.values).intersection(set(gt_df.index.values)))
-    pred_df = pred_df[pred_df.index.isin(shared_accessions)].sort_index()
-    gt_df = gt_df[gt_df.index.isin(shared_accessions)].sort_index()
-
-    gt_cols = gt_df.columns
-    # calculate overlap metrics per column
-    gt_df = gt_df.apply(
-        lambda row: score_introgression_overlaps_helper(
-            pred_df.loc[row.name], row, overlap_threshold
-        )[1],
-        axis=1,
-        result_type="expand",
-    )
-    gt_df.columns = gt_cols
-    create_scored_heatmap(pred_df, gt_df, output_file)
-    return
 
 
 def create_scored_heatmap(pred_df, gt_df, output_file, groups=None, xaxis_dtick=2000000):
@@ -473,12 +304,6 @@ def main():
         help="path to file/folder of ground truth introgression text files",
         required=True,
     )
-    parser.add_argument(
-        "--how",
-        type=str,
-        help="whether to use bins or overlaps in scoring calculations",
-        required=True,
-    )
     parser.add_argument("--idx", type=str, help="path to Panagram index folder", required=True)
     parser.add_argument("--ref", type=str, help="name of reference in Panagram", required=True)
     parser.add_argument("--out", type=str, help="path to folder to save all outputs", required=True)
@@ -509,12 +334,6 @@ def main():
         type=float,
         default=0.5,
         help="ground truth Jaccard similarity lower threshold to be considered an introgression",
-    )
-    parser.add_argument(
-        "--othr",
-        type=float,
-        default=0.8,
-        help="min. overlap threshold for an overlap to be considered a TP/TN",
     )
     parser.add_argument(
         "--cmp",
@@ -588,11 +407,6 @@ def main():
     threshold = args.thr
     min_size = args.min
     gap_size = args.gap
-    how_to_score = args.how
-    if how_to_score not in ["bins", "overlaps"]:
-        raise ValueError("--how must be either 'bins' or 'overlaps'.")
-    if how_to_score == "overlaps":
-        overlap_threshold = args.othr
 
     render_vis = args.vis
     if render_vis:
@@ -639,17 +453,6 @@ def main():
 
             # perform actions on gt
             pred_df, gt_df = threshold_introgressions(pred_df, gt_df, threshold)
-
-            # rescale gt to match pred if needed
-            # original_bin_size = int(gt_df.columns[1])
-            # if bin_size != original_bin_size:
-            #     gt_df = gt_df.apply(
-            #         rescale_introgressions_helper,
-            #         original_bin_size=original_bin_size,
-            #         new_bin_size=bin_size,
-            #         chr_length=chr_length,
-            #         axis=1,
-            #     )
 
             # rescale pred to match gt if needed
             gt_bin_size = int(gt_df.columns[1])
@@ -707,25 +510,17 @@ def main():
                 gt_df.to_csv(gt_output_file, sep="\t")
 
             # score introgressions
-            if how_to_score == "bins":
-                metrics = score_introgressions(pred_df, gt_df)
+            metrics = score_introgressions(pred_df, gt_df)
 
-                # visualize introgressions
-                if render_vis:
-                    vis_output_file = vis_dir / f"{chr}_{intro_type}.png"
-                    if args.grp is not None:
-                        groups = pd.read_csv(args.grp, sep="\t", index_col=0)
-                        create_scored_heatmap(pred_df, gt_df, vis_output_file, groups=groups)
-                    else:
-                        create_scored_heatmap(pred_df, gt_df, vis_output_file)
-            else:
-                metrics = score_introgression_overlaps(pred_df, gt_df, overlap_threshold)
-                # visualize introgressions
-                if render_vis:
-                    vis_output_file = vis_dir / f"{chr}_{intro_type}.png"
-                    create_scored_heatmap_overlaps(
-                        pred_df, gt_df, overlap_threshold, vis_output_file
-                    )
+            # visualize introgressions
+            if render_vis:
+                vis_output_file = vis_dir / f"{chr}_{intro_type}.png"
+                if args.grp is not None:
+                    groups = pd.read_csv(args.grp, sep="\t", index_col=0)
+                    create_scored_heatmap(pred_df, gt_df, vis_output_file, groups=groups)
+                else:
+                    create_scored_heatmap(pred_df, gt_df, vis_output_file)
+
             metrics.index = [chr]
 
             # aggregate metrics
