@@ -5,9 +5,20 @@ from panagram.index import Index
 import call_introgressions as call
 
 
-def panagram_heatmap_general(
-    index_dir, anchor, groups, bitmap_step=100, bin_size=1000000
-):
+def panagram_heatmap_general(index_dir, anchor, groups=None, bitmap_step=100, bin_size=1000000):
+    """Given a panagram index and an anchor genome, creates heatmaps showing kmer
+    similarity across the anchor genome. Each row is a different genome in the index, and each
+    column is a different bin across the anchor genome. The color of each cell corresponds to the
+    number of shared kmers between that genome and the anchor genome in that bin.
+
+    Args:
+        index_dir (str or Path): directory containing the panagram index
+        anchor (str): genome name to anchor on for visualization
+        groups (str or Path, optional): path to the groups file (default: None)
+        bitmap_step (int, optional): Step size for bitmap query (default: 100)
+        bin_size (int, optional): Size of bins for visualization (default: 1000000)
+    """
+
     output_dir = Path(index_dir) / "panagram_visuals"
     output_dir.mkdir(parents=True, exist_ok=True)
     index = Index(index_dir)
@@ -39,11 +50,24 @@ def panagram_heatmap_general(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--index-dir", help="Directory containing the panagram index", required=True)
-    parser.add_argument("--anchor", help="Genome name to anchor on for visualization", required=True)
-    parser.add_argument("--groups", help="group.tsv file to determine row order; not required", required=False)
-    parser.add_argument("--bitmap-step", help="Step size for bitmap query (default: 100)", type=int, default=100)
-    parser.add_argument("--bin-size", help="Size of bins for visualization (default: 1000000)", type=int, default=1000000)
+    parser.add_argument(
+        "--index-dir", help="Directory containing the panagram index", required=True
+    )
+    parser.add_argument(
+        "--anchor", help="Genome name to anchor on for visualization", required=True
+    )
+    parser.add_argument(
+        "--groups", help="group.tsv file to determine row order; not required", required=False
+    )
+    parser.add_argument(
+        "--bitmap-step", help="Step size for bitmap query (default: 100)", type=int, default=100
+    )
+    parser.add_argument(
+        "--bin-size",
+        help="Size of bins for visualization (default: 1000000)",
+        type=int,
+        default=1000000,
+    )
     args = parser.parse_args()
 
     panagram_heatmap_general(
@@ -55,6 +79,7 @@ def main():
     )
 
     return
+
 
 if __name__ == "__main__":
     main()

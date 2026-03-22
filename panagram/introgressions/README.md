@@ -83,6 +83,10 @@ optional arguments:
   --bin-size BIN_SIZE   Size of bins for visualization (default: 1000000)
 ```
 
+Each row is a different genome in the index, and each column is a different bin representing a
+part of the anchor genome's chromosome. The color of each cell corresponds to the
+percent of shared kmers between that genome and the anchor genome in that bin.
+
 ## Outputs
 There are 4 folders that the introgression caller can output:
 
