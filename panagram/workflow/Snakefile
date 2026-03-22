@@ -28,9 +28,7 @@ def get_onehot_tag(wildcards):
     return 1 << i
 
 def get_anchor_mb(wc,input):
-    kmc_bytes = sum([f.size for f in input.kmc_pre+input.kmc_suf])
-    fa_bytes = input.fasta.size
-    return 1000+(1.5*kmc_bytes + fa_bytes*len(input.kmc_pre))/(10**6)
+    return 1+(1.5*input.size_mb)
 
 rule anchor:
     input:
@@ -50,8 +48,8 @@ rule anchor:
         index[wildcards.sample].run_anchor(index.bitvec_prefixes, log.log)
 
 def get_bitvec_mb(wc,input):
-    dbsize = max([d.size for d in input.dbs])
-    return 1000 + dbsize/(10**6)
+    dbsize = input.size_mb #max([d.size_mb for d in input.dbs])
+    return 1 + dbsize
 
 rule kmc_bitvec:
     input:
@@ -79,11 +77,6 @@ rule opdefs:
         "logs/kmc.opdef.benchmark.txt"
     run:
         index.init_opdefs()
-
-def get_kmc_mb(wc,input):
-    dbsize = sum([d.size for d in input.dbs])
-    config["kmc"]["memory"]*1000
-    return 1000 + dbsize/(10**6)
 
 rule kmc_count:
     input:

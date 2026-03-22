@@ -17,7 +17,7 @@ import yaml
 import multiprocessing as mp
 from types import SimpleNamespace
 import shutil
-import snakemake
+import snakemake.cli
 import re
 import logging
 
@@ -158,7 +158,7 @@ class Index(Serializable):
             print(f"Prepared. Run 'snakemake {argstr}' to build index")
         else:
             print(f"Running 'snakemake {argstr}'")
-            snakemake.main(args)
+            snakemake.cli.main(args)
 
         self.close()
 
@@ -1002,7 +1002,7 @@ class Genome:
         ends = np.clip(starts+binlen, 0, len(bitsum))
         coords = pd.MultiIndex.from_arrays([starts, ends])
         return pd.DataFrame([
-            pd.value_counts(bitsum[st:en]).reindex(self.bitsum_index, fill_value=0) for st,en in coords
+            pd.Series(bitsum[st:en]).value_counts().reindex(self.bitsum_index, fill_value=0) for st,en in coords
         ], index=coords).astype(int)
 
     def close(self):
