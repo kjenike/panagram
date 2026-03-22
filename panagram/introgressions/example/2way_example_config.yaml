@@ -1,0 +1,44 @@
+general:
+  output_dir: ./example/introgressions/2way_calls
+  index_dir: ./example
+  tsv: ./example/group.tsv
+  bin: 125000
+  ref: Reference
+  threads: 1
+
+calling:
+  run: true
+  grp: OFFSPRING
+  anc: null
+  chr: null
+  cmp: [REF]
+  thr: 0.8
+  stp: 100
+  gnm: -1
+  trm: 3
+  sft: mean
+  ssz: 2
+  urf: true
+  rmf: true
+  rmu: null
+  ogrp: null
+  edg: false
+  vis: true
+
+postprocessing:
+  run: true
+  act: [fgap, rmbn]
+  min: 8
+  gap: 4
+  map: null
+  paf: null
+
+scoring:
+  run: true
+  gdt: ./example/simulated_data
+  act: [fgap, rmbn]
+  min: 1
+  gap: 1
+  thr: 0.25
+  cmp: [WT]
+  vis: true
