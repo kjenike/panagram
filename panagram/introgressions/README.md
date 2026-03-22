@@ -27,7 +27,10 @@ The introgression caller requires the following to be available on the command l
 
 Panagram must be run as usual before the introgression caller can be used. Note that the
 introgression caller was tested on plant genomes with k = 31 for the initial Panagram
-assembly step. You may want to try running Panagram with a similar value of k.
+assembly step. You may want to try running Panagram with a similar value of k. If you have several
+contigs in your genome assemblies, you may want to either omit these before running Panagram, or
+rename the chromosomes across your pangenome so that each genome uses the same name for each
+chromosome. This will make it easier to specify which chromosomes to run introgression calling for.
 
 Once you have assembled a pangenome with Panagram, you will need an additional config.yaml file and
 group.tsv file to control the introgression caller parameters. See below for the format for these
@@ -207,9 +210,9 @@ for reasonable defaults. The parameters for each section are as follows:
 | Parameter | Type                 | Description                                                                 |
 |-----------|----------------------|-----------------------------------------------------------------------------|
 | run       | boolean              | whether to run calling                                              |
-| grp       | string               | groups of suspected introgression recipients                                |
-| anc       | list[string]/null    | accessions to run introgression caller for (set grp to null to use this list)|
-| chr       | list[string]/null    | chromosomes to check for introgressions (null = all)                         |
+| grp       | string               | group of suspected introgression recipients to call introgressions for      |
+| anc       | list[string]/null    | accessions to run introgression caller for (set grp to null to use this list instead)|
+| chr       | list[string]/null    | chromosomes to check for introgressions (null = all); you should specify a list of these if your assemblies contain contigs, unless you also want to call introgressions on all contigs |
 | cmp       | list[string]         | REF and/or groups of suspected introgression donors to compare against       |
 | thr       | float                | bins below threshold are introgressions for 2-way; bins more similar to grp than REF by threshold are introgressions for 3-way |
 | stp       | int                  | kmer step size when sampling from bitmap; this should match the step size used when running Panagram |
