@@ -96,7 +96,11 @@ There are 4 folders that the introgression caller can output:
 - *raw*: Contains BED files after the calling step. BED files are labeled as follows:
 AccessionName_Chromosome_GRP.bed. GRP is the name of the introgression donor group used during
 calling. For 3-way comparisons, BED files contain potential introgression locations in the
-coordinate system of the acession listed in AcessionName. If you use 2-way, GRP will either be REF
+coordinate system of the acession listed in AcessionName. You will see bed files for each
+GRP = 'group that you specified using the cmp parameter'. If you specified
+multiple groups, you will also see a bed file with GRP = 'merged'. This file contains introgressions
+found across all groups in cmp for convenience.
+If you use 2-way, GRP will either be REF
 or REFA. REF means that the urf flag was set to true, and introgression locations will be
 saved in the coordinate system of your REF accession. If urf was false (or the accession was listed
 in rmu), introgression locations will be saved in the coordinate system of AcessionName.
@@ -215,17 +219,16 @@ for reasonable defaults. The parameters for each section are as follows:
 | chr       | list[string]/null    | chromosomes to check for introgressions (null = all); you should specify a list of these if your assemblies contain contigs, unless you also want to call introgressions on all contigs |
 | cmp       | list[string]         | REF and/or groups of suspected introgression donors to compare against       |
 | thr       | float                | bins below threshold are introgressions for 2-way; bins more similar to grp than REF by threshold are introgressions for 3-way |
-| stp       | int                  | kmer step size when sampling from bitmap; this should match the step size used when running Panagram |
+| stp       | int                  | kmer step size when sampling from bitmap; this should match the step size used when running Panagram (almost always 100) |
 | gnm       | float/-1/null        | shift kmer sims to this mean; -1 auto-calc; null disables                     |
 | trm       | int/null             | omit values outside this many stdevs from gnm calculations                      |
 | sft       | string/null          | choose either 'mean' or 'median' smoothing filter; might help even out small differences in kmer sim between bins; null disables |
-| ssz       | int/null             | number of bins in sft filter window                                           |
+| ssz       | int/null             | number of bins in sft filter window; smaller numbers have a weaker smoothing effect |
 | urf       | boolean              | use reference coordinate system; cmp must be set to '[REF]' |
-| rmf       | boolean              | remove fixed kmers shared by all accessions                                  |
+| rmf       | boolean              | remove fixed kmers shared by all accessions; should almost always be set to True   |
 | rmu       | list[string]/null    | remove kmers not in REF or ogrp for these noisy accessions; forces urf=false for these accessions |
-| ogrp      | list[string]/null    | remove kmers not present in these groups (exclude REF)                       |
-| edg       | boolean              | highlight edges and dampen center kmer similarities                           |
-| isc       | boolean              | increase contrast by boosting kmer similarities                               |
+| ogrp      | list[string]/null    | outgroup accessions; remove kmers not present in these groups for rmu accessions |
+| edg       | boolean              | highlight edges and dampen center kmer similarities for genomes with many SVs near chromosome edges  |
 | vis       | boolean              | visualize binned bitmap and detected introgressions                          |
 
 ### Postprocessing Parameters
@@ -233,11 +236,11 @@ for reasonable defaults. The parameters for each section are as follows:
 | Parameter | Type             | Description                                                                                                                                                                      |
 |----------|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | run      | boolean           | whether to run postprocessing                                                                                                                                                    |
-| act      | list[string]/null | choose postprocessing steps: 'lift' (liftover to ref coordinate space), 'fgap' (fill gaps between introgressed bins), 'fcen' (fill larger gaps caused by centromere), 'rmbn' (remove small introgressions); null to skip and just copy bed files to postprocess folder as-is for scoring |
+| act      | list[string]/null | choose postprocessing steps: 'lift' (liftover to REF coordinate space; will run a minimap alignment), 'fgap' (fill gaps between introgressed bins), 'fcen' (fill larger gaps caused by centromere), 'rmbn' (remove small introgressions); null to skip and just copy bed files to postprocess folder as-is for scoring |
 | min      | int/null          | if rmbn, remove introgressions smaller than this number of bins                                                                                                                            |
 | gap      | int/null          | if fgap, fill gaps between introgressions up to this number of bins                                                                                                                |
 | map      | str/null          | if lift and not paf, minimap parameters for aligning to ref; must include -c flag; null to use '-x asm20 -c'                                                                 |
-| paf      | str/null          | if lift already run, path to existing alignment folder to skip alignment                                                                                                 |
+| paf      | str/null          | if lift already run, path to existing alignment folder to use for liftover                                                                                    |
 
 ### Scoring Parameters
 
@@ -248,7 +251,7 @@ for reasonable defaults. The parameters for each section are as follows:
 | act      | list[string]/null | apply postprocessing to ground truth; null to skip                                                                              |
 | min      | int/null          | see postprocessing                                                                                                              |
 | gap      | int/null          | see postprocessing                                                                                                              |
-| thr      | float             | all values above this threshold are considered introgressed in the ground truth                                                 |
+| thr      | float             | Jaccard similarity threshold; all values above this threshold are considered introgressed in the ground truth                                                 |
 | cmp      | list[string]      | groups to check introgressions against; REF and merged results are compared against the set of introgressions in any group in this list |
 | vis      | boolean           | visualize true/false positives and negatives per bin                                                                            |
 
@@ -276,9 +279,14 @@ kmer similarity value is for large regions that are noticibly different from the
 the example above). In testing, for 2-way calling, thresholds between 0.7-0.8 worked best. For
 3-way calling, the threshold is a bit less important. Smaller thresholds, between 0-0.2 worked best.
 
-- *gnm*: This can help if you have very different genomes together in the same pangenome. Try setting
+- *gnm*: Normally, this should be kept on. This can especially help if you have very different
+genomes together in the same pangenome. Try setting
 this to -1 first. If you notice that visually, there are too many bins that are set
 to 1 across the Pangenome, try setting to 0.9 or lower.
+
+- *rmu/ogrp*: This helps remove some noise from error/SNPs by calculating kmer similarity using only
+the kmers that are present in either REF or one of the specified set of outgroup accessions (ogrp).
+In testing, this was only useful on old ONT data/high-noise assemblies and shouldn't be regularly used.
 
 ## Introgression Simulator Usage
 

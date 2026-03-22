@@ -768,6 +768,14 @@ def main():
             raise ValueError("Reference genome must be provided using --ref when using --rmu.")
         # get list of outgroup accessions
         outgroup_accessions = groups[groups.group.isin(outgroups)].index.tolist()
+        if "REF" in outgroup_accessions:
+            raise ValueError(
+                "REF cannot be used as an outgroup accession. Please remove REF from the groups specified in --ogrp."
+            )
+        if any(acc in outgroup_accessions for acc in omit_unique_for):
+            raise ValueError(
+                "Accessions specified in --rmu cannot be in the outgroup. Please remove any accessions specified in --rmu from the groups specified in --ogrp."
+            )
 
     # get preprocessing arguments
     preprocessing_args = {}

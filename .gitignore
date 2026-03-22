@@ -3,6 +3,7 @@ env/
 build/
 KMC/
 panagram/extra/*
+panagram/introgressions/example/*
 **.egg-info
 **/__pycache__
 **.DS_Store
