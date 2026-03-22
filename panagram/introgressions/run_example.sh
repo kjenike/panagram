@@ -19,8 +19,7 @@ python simulate_introgressions.py \
   --mut-ins-size-max 1000 \
   --mut-del-size-min 1 \
   --mut-del-size-max 500 \
-  --seed 7 \
-  > ./example/simulated_data/simulator.log 2>&1
+  --seed 7
 
 # run panagram on the simulated data
 mv ./example/simulated_data/*.fasta ./example/FASTAS/
@@ -51,4 +50,4 @@ python bed_to_txt.py \
 python introgression_runner.py ./example/2way_example_config.yaml
 python introgression_runner.py ./example/3way_example_config.yaml
 
-echo "Done! Check out the kmer simularity plots in example/panagram_visuals/ and the introgression outputs in example/introgressions/!"
+echo "Done! Check out the kmer similarity plots in example/panagram_visuals/ and the introgression outputs in example/introgressions/!"

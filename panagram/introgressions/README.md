@@ -108,7 +108,7 @@ visualizing per-bin TP, FP, TN, and FN regions for each accession.
 ## Example
 
 You can generate and run an introgression analysis for a simulated example pangenome by running
-`./run_example.sh`. The example only takes a minute or two to run. It generates a pangenome with the
+`./run_example.sh`. The example takes around 5 minutes to run. It generates a pangenome with the
 following genomes:
 - Reference: Chromosome 1 from the reference genome of *Arabidopsis thaliana*
 - WildRelative: A simulated relative of *A. thaliana*, created by mutating Reference with SNPs, insertions,
@@ -122,7 +122,7 @@ generations of offspring (e.g., F2, F3, etc.)
 Here is what their kmer similarities look like when anchored on Reference, after removing fixed kmers:
 
 <div align="center">
-  <img src="./assets/Reference_chr1_heatmap.svg" alt="Panagram" width="300"/>
+  <img src="./assets/Reference_chr1_heatmap.svg" alt="Panagram" width="400"/>
 </div>
 
 Notice that the 2 introgressions appear at 12 Mb and 20 Mb and appear as bands of lower kmer similarity.
@@ -133,7 +133,7 @@ average similarities to Reference are all roughly the same. After applying the p
 similarities after preprocessing look like this:
 
 <div align="center">
-  <img src="./assets/OffspringGen6_chr1_REF_heatmap.svg" alt="Panagram" width="300"/>
+  <img src="./assets/OffspringGen6_chr1_REF_heatmap.svg" alt="Panagram" width="400"/>
 </div>
 
 Note the row at the bottom denoting which areas were called as introgressions in yellow. You can see
@@ -143,7 +143,7 @@ We can also use the 3-way caller to help with OffspringGen6. When we anchor on O
 preprocessing, the kmer similarities look like this:
 
 <div align="center">
-  <img src="./assets/OffspringGen6_chr1_WT_heatmap.svg" alt="Panagram" width="300"/>
+  <img src="./assets/OffspringGen6_chr1_WT_heatmap.svg" alt="Panagram" width="400"/>
 </div>
 
 Note that instead of being in the coordinate system of the Reference, we are in the coordinate system
