@@ -114,14 +114,14 @@ visualizing per-bin TP, FP, TN, and FN regions for each accession.
 You can generate and run an introgression analysis for a simulated example pangenome by running
 `./run_example.sh`. The example takes around 5 minutes to run. It generates a pangenome with the
 following genomes:
-- Reference: Chromosome 1 from the reference genome of *Arabidopsis thaliana*
+- Reference: Chromosome 1 from the reference genome of *Arabidopsis thaliana*.
 - WildRelative: A simulated relative of *A. thaliana*, created by mutating Reference with SNPs, insertions,
-and deletions
+and deletions.
 - OffspringGen1: Simulated F1 offspring of Reference x WildRelative. It is identical to Reference,
 except 2 introgressions from WildRelative.
 - OffspringGen[2-6]: More simulated offspring. They have the same introgressions as OffspringGen1,
 but they have random SNPs, insertions, and deletions applied to them in order to simulate more distant
-generations of offspring (e.g., F2, F3, etc.)
+generations of offspring (e.g., F2, F3, etc.).
 
 Here is what their kmer similarities look like when anchored on Reference, after removing fixed kmers:
 
@@ -159,6 +159,9 @@ analysis in other pangenomes. Feel free to play with the parameters in these fil
 impact by running `python introgression_runner.py ./example/2way_example_config.yaml`
 or `python introgression_runner.py ./example/3way_example_config.yaml` and looking at the heatmaps
 generated in the `./example/introgressions` folder.
+
+You can also explore the simulated pangenome in Panagram's browser by running `panagram view .` in
+the examples folder.
 
 ## Group File
 
