@@ -195,8 +195,9 @@ can only be used if comparing called introgressions to the SV-based approach
 by the simulator. It will calculate precision, recall, and other metrics based on the number of
 introgressions that match the results from another method.
 
-Parameters are controlled by a YAML file. See `example_config.yaml` and the tips section below
-for reasonable defaults. The parameters for each section are as follows:
+Parameters are controlled by a YAML file. See `./example/2way_example_config.yaml`,
+`./example/3way_example_config.yaml`, and the tips section below for reasonable defaults. The
+parameters for each section are as follows:
 
 ### General Parameters
 
