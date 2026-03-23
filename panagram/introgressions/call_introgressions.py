@@ -393,35 +393,11 @@ def visualize(
             zmin=0,
             zmax=1,
         )
-    # TODO: fix auto-size formatting
-    # fig.update_layout(
-    #     font=dict(family="Arial", color="black"),
-    #     xaxis=dict(
-    #         dtick=xaxis_dtick,
-    #         title=dict(
-    #             text="Genomic Position",
-    #             font=dict(size=16),
-    #         ),
-    #     ),
-    #     yaxis=dict(
-    #         title="",  # Omit y-axis label
-    #         tickmode="linear",
-    #     ),
-    #     title=dict(
-    #         text=title,
-    #         x=0.5,  # Center the title
-    #         xanchor="center",
-    #         font=dict(size=20),
-    #     ),
-    # )
-    # height = 12 * binned_bitmap.shape[0] + 200
-    # width = 10 * binned_bitmap.shape[1] + 200
-    # height = max(height, 500)
-    # width = max(width, 500)
-    # width = max(width, height)  # make it square
-    # height = width
-    height = 900
-    width = 900
+    # TODO: make auto-size formatting more robust (especially text and dtick sizes)
+    height = 12 * binned_bitmap.shape[0] + 200
+    width = 10 * binned_bitmap.shape[1] + 200
+    height = max(height, 2000)
+    width = max(width, 2000)
 
     fig.update_layout(
         plot_bgcolor="white",

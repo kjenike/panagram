@@ -76,14 +76,12 @@ python create_heatmap.py \
 --anchor <anchor_name>
 
 optional arguments:
-  -h, --help            show this help message and exit
-  --index-dir INDEX_DIR
-                        Directory containing the panagram index
-  --anchor ANCHOR       Genome name to anchor on for visualization
-  --groups GROUPS       group.tsv file to determine row order; not required
+  --groups GROUPS       group.tsv file to determine row order of genomes on y-axis
   --bitmap-step BITMAP_STEP
                         Step size for bitmap query (default: 100)
   --bin-size BIN_SIZE   Size of bins for visualization (default: 1000000)
+  --rmf                 Whether to omit fixed kmers (default: True)
+  --gnm GNM             Normalize genomes to this mean, or -1 to auto-calc (default: None)
 ```
 
 Each row is a different genome in the index, and each column is a different bin representing a
@@ -302,10 +300,6 @@ python simulate_introgressions.py \
 --out-folder <output folder>
 
 optional arguments:
-  -h, --help            show this help message and exit
-  --ref REF             Reference FASTA (input)
-  --out-folder OUT_FOLDER
-                        Output folder
   --offspring OFFSPRING
                         Number of offspring to simulate from created wild relative
   --rounds ROUNDS       Number of rounds to apply mutations to offspring. Will output offspring for each round
