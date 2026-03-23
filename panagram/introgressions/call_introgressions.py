@@ -393,11 +393,11 @@ def visualize(
             zmin=0,
             zmax=1,
         )
-    # TODO: make auto-size formatting more robust (especially text and dtick sizes)
+    # TODO: make auto-size formatting more robust (especially text and dtick sizes and bin sizes)
     height = 12 * binned_bitmap.shape[0] + 200
     width = 10 * binned_bitmap.shape[1] + 200
-    height = max(height, 2000)
-    width = max(width, 2000)
+    height = max(height, 900)
+    width = max(width, 900)
 
     fig.update_layout(
         plot_bgcolor="white",

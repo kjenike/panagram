@@ -58,7 +58,8 @@ the caller anchors on the introgression recipient and compares its kmer similari
 GRP. It marks a bin as introgressed if the similarity to GRP is greater than REF by the specified
 threshold. cmp can be a list of multiple groups; the caller will independently loop through each
 group for each recipent and mark introgressions that potentially came from each GRP. The same
-regions may be marked for different groups.
+regions may be marked for different groups; the caller doesn't yet attempt to predict which accession
+was the most likely introgression donor.
 
 Add the `--sweep` flag to try a range of kmer similarity thresholds. Note that this
 kicks off a number of threads equal to `18 * num. threads chosen in config file`.
@@ -256,16 +257,16 @@ parameters for each section are as follows:
 
 ## Tips for Choosing Parameters
 
-Most parameters can remain as their defaults as shown in config_example.yaml. The most important
-parameters to tune are as follows:
+Most parameters can remain as their defaults as shown in the config files in the
+example folder. The most important parameters to tune are as follows:
 
 - *bin and min*: Bin size determines the smallest possible introgression that will appear in your output
 before postprocessing. In general, introgressions tend
 to span large chunks of a chromosome, so bin size should be fairly large. In testing, we compared
 our method to one that called introgressions in 1,000,000 bp bins. We often used bin sizes smaller
 than this and set min introgression size such that bin size * min = ~1,000,000 bp. We found that
-a bin size of 125,000 worked best overall with min set to 8. For 2 way calling, size
-500,000 additionally worked well with min set to 2.
+a bin size of 125,000 worked best overall with min set to 8. For 2 way calling, sizes
+500,000 and 1,000,000 additionally worked well with min set to 2 and 1 respectively.
 
 - *gap*: This is dependent on bin size, like min. In testing, setting this such that bin size * gap =
 1,000,000 bp worked best.
@@ -286,6 +287,9 @@ to 1 across the Pangenome, try setting to 0.9 or lower.
 - *rmu/ogrp*: This helps remove some noise from error/SNPs by calculating kmer similarity using only
 the kmers that are present in either REF or one of the specified set of outgroup accessions (ogrp).
 In testing, this was only useful on old ONT data/high-noise assemblies and shouldn't be regularly used.
+
+It may be worth running the introgression caller for one chromosome on one accession and checking
+that output first before trying to run all chromosomes for a full group.
 
 ## Introgression Simulator Usage
 
