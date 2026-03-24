@@ -68,8 +68,10 @@ kicks off a number of threads equal to `18 * num. threads chosen in config file`
 
 Before running the introgression caller, you may want to look at the similarities/differences
 in kmer similarities between your genomes. You can view this in the Panagram browser, or use
-the following script to output plots of kmer similarity after fixed kmers have been removed (a
-common preprocessing step during introgression calling that makes differences more appearent):
+the following script to output plots of kmer similarity. This script also allows you to view the
+impact of two common preprocessing steps performed during calling: removing fixed kmers (rmf) and
+applying normalization (gnm) before calculating kmer similarity. These steps make differences more
+appearent across the pangenome:
 
 ```
 python create_heatmap.py \

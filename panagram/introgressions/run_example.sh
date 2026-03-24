@@ -2,6 +2,8 @@
 
 set -e
 
+bgzip -dc ./example/FASTAS/athaliana_chr1.fasta.gz > ./example/FASTAS/athaliana_chr1.fasta
+
 # create a simulated wild relative and offspring using chr1 from Arabidopsis thaliana
 echo "Simulating introgressions..."
 mkdir -p ./example/simulated_data
