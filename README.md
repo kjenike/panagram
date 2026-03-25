@@ -30,21 +30,40 @@ Requires python version >=3.7, pip, samtools, and tabix. All other dependencies 
 Panagram relies on [KMC](https://github.com/refresh-bio/KMC) to build its kmer index. This should be installed automatically, however it is possible that the KMC installation will fail but panagram will successfully install. In this case `panagram view` can be run, but `panagram index` will return an error. You may be able to debug the KMC installation by running `make -C KMC py_kmc_api` and attempting to fix any errors, then re-run `pip install -v .` after the errors are fixed.
 
 # Running
-Panagram runs in two steps, the pre-processing step (index command) and the viewing (view command). 
+Panagram runs in two steps, the anchoring step (index command) and viewing (view command). 
 
-
-# Preprocessing
+# Anchoring
 Usage:
 Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap
+Start by preparing the panagram index. For this, you will need a tsv file with a list of the samples. 
+
 ```
 panagram 
-usage: panagram index [-h] <config.toml>
+usage: panagram index <samples.tsv> -k <k> --prepare
 ```
-See example config.toml file for more details on the layout. Must include paths to all of the fasta files and optionally any annotations in gff format. 
+The samples.tsv file should contain one sample per line. On each line include the sample name and minimally the fasta file location. See below for an example. 
 
-Panagram may fail to index datasets with more than 32 genomes. This is **not** a fundamental limitation, and we are working on fixing it.
+```
+name	fasta	gff	id	anchor
+sample1	FASTAS/sample1.fasta	GFFS/sample1.gff	0	True
+sample2	FASTAS/sample2.fasta	GFFS/sample2.gff	1	True
+sample3	FASTAS/sample3.fasta	GFFS/sample3.gff	2	True
+sample4	FASTAS/sample4.fasta	GFFS/sample4.gff	3	True
+sample5	FASTAS/sample5.fasta	GFFS/sample5.gff	4	True
+sample6	FASTAS/sample6.fasta	GFFS/sample6.gff	5	True
+```
 
-Currently genome IDs should only contain alphanumeric characters and underscores due to KMC requirements.
+If you have multiple annotation files per sample you can concatenate them into one gff file. 
+
+Currently genome IDs should only contain alphanumeric characters and underscores due to KMC requirements. 
+
+Picking an acceptable k-mer length for the data set can be tricky. For samples that are very similar, a larger k may be more approperiate. While samples that are more diverged may benefit from a smaller k-mer length. These two papers give some detail on picking "good" k-mer length (https://www.cell.com/iscience/fulltext/S2589-0042(24)00275-X?uuid=uuid%3A8d061319-27f8-49ca-b7ee-0d33ec846225 and https://pubmed.ncbi.nlm.nih.gov/39890468/), but if in doubt, k=21 usually works fine. 
+
+Once the preparation step is run, you can run snakemake and specify the number of threads you want to use. 
+
+```
+snakemake --verbose --cores 12 all
+```
 
 # View
 
@@ -147,7 +166,7 @@ until panagram view --ndebug .; do echo "restarting"; sleep 1; done
 
 We will optimize this process in future releases.
 
-# Example samples.tsv file
+# Another example samples.tsv file
 
 ```
 name    fasta   gff     id      anchor
@@ -157,7 +176,6 @@ Tanz_1     FASTAS/wlod_Tanz-1.patch.scaffold.Chr.fa     GFFS/wlod_Tanz-1.patch.s
 The above example would be a comparison with just two genomes 
 
 # Known issues
-- Right now, there is a bug (issue #7) when indexing very large genomes with very large chromosomes. We are activley working to fix this. 
 - Mash dendogram leaf placement is not always perfect
 - Installing on a mac can be tricky. Will need to include a more detailed list of dependancies
 
