@@ -1,4 +1,5 @@
 import sys
+import signal
 from pathlib import Path
 import shutil
 import subprocess
@@ -77,10 +78,10 @@ def parse_config(config_path):
             f"--cmp {' '.join(call_cmp)}",
             f"--bin {bin_size}",
             f"--stp {call_stp}",
-            f"--gnm {call_gnm}" if call_gnm else None,
-            f"--trm {call_trm}" if call_trm else None,
-            f"--sft {call_sft}" if call_sft else None,
-            f"--ssz {call_ssz}" if call_ssz else None,
+            f"--gnm {call_gnm}" if call_gnm is not None else None,
+            f"--trm {call_trm}" if call_trm is not None else None,
+            f"--sft {call_sft}" if call_sft is not None else None,
+            f"--ssz {call_ssz}" if call_ssz is not None else None,
             f"--urf" if call_urf else None,
             f"--rmu {' '.join(call_rmu)}" if call_rmu else None,
             f"--ogrp {' '.join(call_ogrp)}" if call_ogrp else None,
@@ -98,8 +99,8 @@ def parse_config(config_path):
             f"--idx {index_dir}",
             f"--act {' '.join(post_act)}" if post_act else None,
             f"--bin {bin_size}",
-            f"--min {post_min}" if post_min else None,
-            f"--gap {post_gap}" if post_gap else None,
+            f"--min {post_min}" if post_min is not None else None,
+            f"--gap {post_gap}" if post_gap is not None else None,
             f"--map {post_map}" if post_map else None,
             f"--paf {post_paf}" if post_paf else None,
             f"--ref {ref}",
@@ -111,18 +112,18 @@ def parse_config(config_path):
         score_flags = [
             f"--idx {index_dir}",
             f"--gdt {score_gdt_dir}",
-            f"--thr {score_thr}" if score_thr else None,
+            f"--thr {score_thr}" if score_thr is not None else None,
             f"--cmp {' '.join(score_cmp)}" if score_cmp else None,
             f"--act {' '.join(score_act)}" if score_act else None,
             f"--bin {bin_size}",
-            f"--min {score_min}" if score_min else None,
-            f"--gap {score_gap}" if score_gap else None,
+            f"--min {score_min}" if score_min is not None else None,
+            f"--gap {score_gap}" if score_gap is not None else None,
             f"--ref {ref}",
             "--vis" if score_vis else None,
             f"--grp {tsv}" if score_vis else None,
         ]
         score_flags = [f for f in score_flags if f]
-    return call_flags, postprocess_flags, score_flags, output_dir, call_thr
+    return call_flags, postprocess_flags, score_flags, output_dir, call_thr, call_cmp
 
 
 def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, output_dir, call_thr):
@@ -164,7 +165,7 @@ def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, outpu
     return
 
 
-def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_dir):
+def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_dir, call_cmp):
     """Run the introgression pipeline through several threshold values.
 
     Args:
@@ -172,6 +173,7 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
         postprocess_flags (list): flags for the postprocessing step
         score_flags (list): flags for the scoring step
         output_dir (Path): directory for output files
+        call_cmp (list): comparison groups for the calling step
 
     Raises:
         ValueError: if PAF file is not provided during sweep and liftover is attempted.
@@ -187,10 +189,7 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
                 "PAF file/folder must be provided when using liftover during a sweep. Try running the pipeline with a single threshold first to generate the PAF files, or run alignment manually and specify the PAF files."
             )
 
-    comp_groups = [flag.split()[1:] for flag in call_flags if flag.startswith("--cmp")]
-    comp_groups = comp_groups[0] if comp_groups else []
-
-    if call_flags and comp_groups == ["REF"]:
+    if call_cmp == ["REF"]:
         print("Running sweep for 2-way comparison. Thresholds will be between 0 and 1.")
         thresholds = [
             0.1,
@@ -236,6 +235,26 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
             0.68,
         ]
 
+    screen_names = []
+
+    # handle Ctrl+C
+    def cleanup_screens():
+        """Kill all screen sessions we created"""
+        for session in screen_names:
+            try:
+                subprocess.run(["screen", "-S", session, "-X", "quit"], stderr=subprocess.DEVNULL)
+                print(f"Killed screen session: {session}")
+            except:
+                pass
+
+    def signal_handler(sig, frame):
+        print("\nCleaning up screen sessions...")
+        cleanup_screens()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     for thr in thresholds:
         thr_call_flags = call_flags.copy() if call_flags else None
         thr_postprocess_flags = postprocess_flags.copy() if postprocess_flags else None
@@ -273,6 +292,7 @@ def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_d
         # Wrap cmd in single quotes so the full command is executed in the screen session
         screen_cmd = f"screen -d -m -L -Logfile {log_file} -S {screen_name} bash -c '{cmd}'"
         subprocess.run(screen_cmd, shell=True, check=False)
+        screen_names.append(screen_name)
 
     # Wait for all done.marker files to exist
     for thr in thresholds:
@@ -302,7 +322,9 @@ if __name__ == "__main__":
     if not config_path.is_file():
         print(f"Config file {config_path} does not exist.")
         sys.exit(1)
-    call_flags, postprocess_flags, score_flags, output_dir, call_thr = parse_config(config_path)
+    call_flags, postprocess_flags, score_flags, output_dir, call_thr, call_cmp = parse_config(
+        config_path
+    )
 
     # Check if the output directory already exists
     if output_dir.exists() and len(list(output_dir.iterdir())) > 1:
@@ -325,7 +347,9 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 2:
         if sys.argv[2] == "--sweep":
-            run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_dir)
+            run_introgression_sweep(
+                call_flags, postprocess_flags, score_flags, output_dir, call_cmp
+            )
         else:
             print(
                 "Unknown command. Use '--sweep' to run pipeline for various thresholds or no argument to run the pipeline with one threshold."
