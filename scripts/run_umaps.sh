@@ -20,6 +20,10 @@ do
 
 done < $fasta.fai
 
+#Run the whole genome umap 
+python plot_umap.py $anchor ALL $window "$eps" "$n_neighbor" "$md" "$skips" > anchor/$anchor/umap_clusters_ALL_"$window"_"$eps"_"$n_neighbor"_"$md"_"$skips".txt
+
+
 while read col1 col2 colmore
 do 
 	python pairwise_comp.py "$col1" "$working_dir" > "$working_dir"/anchor/"$col1"/perc_shared."$col1".txt
