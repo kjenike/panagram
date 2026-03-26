@@ -25,6 +25,8 @@ The introgression caller requires the following to be available on the command l
 - [screen](https://www.gnu.org/software/screen/) (if using --sweep flag)
 - [minimap2 and paftools.js](https://github.com/lh3/minimap2?tab=readme-ov-file#install) (if using 'lift' action during postprocessing)
 
+Additionally, run `pip install reportlab==4.4.1` if using scoring
+
 Panagram must be run as usual before the introgression caller can be used. Note that the
 introgression caller was tested on plant genomes with k = 31 for the initial Panagram
 assembly step. You may want to try running Panagram with a similar value of k. If you have several
@@ -227,7 +229,7 @@ parameters for each section are as follows:
 | sft       | string/null          | choose either 'mean' or 'median' smoothing filter; might help even out small differences in kmer sim between bins; null disables |
 | ssz       | int/null             | number of bins in sft filter window; smaller numbers have a weaker smoothing effect |
 | urf       | boolean              | use reference coordinate system; cmp must be set to '[REF]' |
-| rmf       | boolean              | remove fixed kmers shared by all accessions; should almost always be set to True   |
+| rmf       | boolean              | remove fixed kmers shared by all accessions; use to increase contrast |
 | rmu       | list[string]/null    | remove kmers not in REF or ogrp for these noisy accessions; forces urf=false for these accessions |
 | ogrp      | list[string]/null    | outgroup accessions; remove kmers not present in these groups for rmu accessions |
 | edg       | boolean              | highlight edges and dampen center kmer similarities for genomes with many SVs near chromosome edges  |

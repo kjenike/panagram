@@ -393,11 +393,10 @@ def visualize(
             zmin=0,
             zmax=1,
         )
-    # TODO: make auto-size formatting more robust (especially text and dtick sizes and bin sizes)
+
+    genome_size = binned_bitmap.columns[-1]
     height = 12 * binned_bitmap.shape[0] + 200
-    width = 10 * binned_bitmap.shape[1] + 200
-    height = max(height, 900)
-    width = max(width, 900)
+    width = int(700 * (genome_size / 100_000_000))
 
     fig.update_layout(
         plot_bgcolor="white",
