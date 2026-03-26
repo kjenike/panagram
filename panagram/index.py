@@ -17,10 +17,11 @@ import yaml
 import multiprocessing as mp
 from types import SimpleNamespace
 import shutil
-import snakemake
+import snakemake.cli
 import re
 import logging
-
+import umap
+from sklearn.cluster import DBSCAN
 import dataclasses
 from simple_parsing import field
 from simple_parsing.helpers import Serializable
@@ -68,6 +69,15 @@ class KMC(Serializable):
     use_existing: bool = field(action="store_true", default=False)
 
 @dataclasses.dataclass
+class UMAP(Serializable):
+    """UMAP Parameters"""
+    neighbors: int = 4
+    dist: float = 0
+    eps: float = 1
+    samples: int = 1
+    bin_size: int = 100000
+
+@dataclasses.dataclass
 class Index(Serializable):
     """Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap"""
 
@@ -103,6 +113,22 @@ class Index(Serializable):
     prepare: bool = field(alias=["-p"], default=False, action="store_true")
 
     kmc: KMC = field(default_factory=lambda:KMC())
+
+    genome_umap: UMAP = field(default_factory=lambda:UMAP(
+        neighbors = 4,
+        dist = 0,
+        eps = 1,
+        samples = 1,
+        bin_size = 100000
+    ))
+
+    chrom_umap: UMAP = field(default_factory=lambda:UMAP(
+        neighbors = 4,
+        dist = 0,
+        eps = 1,
+        samples = 1,
+        bin_size = 100000
+    ))
 
     #Dummy parameters to force KMC params to be in "kmc.*" format
     use_existing: int = field(default=1,help=argparse.SUPPRESS)
@@ -158,7 +184,7 @@ class Index(Serializable):
             print(f"Prepared. Run 'snakemake {argstr}' to build index")
         else:
             print(f"Running 'snakemake {argstr}'")
-            snakemake.main(args)
+            snakemake.cli.main(args)
 
         self.close()
 
@@ -397,8 +423,12 @@ class Index(Serializable):
     def bitmap_to_pancount(self, bitmap):
         return pd.Series(bitmap.to_numpy().sum(axis=1),index=bitmap.index)
     
-    def bitmap_to_paircount(self, bitmap):
-        return pd.Series(bitmap.to_numpy().sum(axis=1),index=bitmap.index)
+    def bitmap_to_paircount_bins(self, bitmap, binlen):
+        df = bitmap.set_index(bitmap.index // binlen)#.groupby(level=1)
+        paircount_bins = df.groupby(level=0).sum()
+        paircount_bins = paircount_bins.set_index(paircount_bins.index*binlen).T
+        paircount_bins = paircount_bins.div(paircount_bins.max(axis=0),axis=1)
+        return paircount_bins
     
     def pancount_to_bins(self, pancnts, binlen):
         bin_counts = pd.DataFrame({
@@ -954,6 +984,10 @@ class Genome:
 
         self.bitmaps = {s : bgzip.BGZipWriter(open(self.bitmap_gz_fname(s), "wb"))for s in self.steps}
         bin_occs = dict()
+
+        chrom_umaps = list()
+        genome_umap_paircounts = list()
+
         logger.info(f"Anchoring Started")
 
         for i,rec in enumerate(self.iter_fasta()):
@@ -993,6 +1027,49 @@ class Genome:
             subprocess.check_call([
                 "bgzip", "-rI", self.bitmap_gzi_fname(step), self.bitmap_gz_fname(step)])
 
+        self.init_read()
+        self.write_umaps()
+
+    def write_umaps(self):
+        genome_paircounts = {}
+        chrom_umaps = list()
+        for chrom in self.chrs.index:
+            bitmap = self.query(chrom, step=self.index.lowres_step)
+            paircounts = self.index.bitmap_to_paircount_bins(bitmap,self.index.chrom_umap.bin_size).T.fillna(0)
+            chrom_paircounts = pd.concat({chrom : paircounts},names=["chrom","start"])
+            print(chrom_paircounts)
+            chrom_umaps.append(self.run_umap(chrom_paircounts, self.index.chrom_umap))
+
+            genome_paircounts[chrom] = self.index.bitmap_to_paircount_bins(bitmap,self.index.genome_umap.bin_size).T.fillna(0)
+
+        print(chrom_umaps)
+        chrom_umaps = pd.concat(chrom_umaps)
+        chrom_umaps.to_csv(os.path.join(self.prefix,"chrom_umaps.csv"),index=False)
+
+        genome_umap = self.run_umap(pd.concat(genome_paircounts,names=["chrom","start"]), self.index.genome_umap)
+        genome_umap.to_csv(os.path.join(self.prefix,"genome_umap.csv"),index=False)
+
+    def run_umap(self, paircounts, args):
+        reducer = umap.UMAP(n_neighbors=args.neighbors, min_dist=args.dist, n_components=2, random_state=42)
+
+        try:
+            embedding = reducer.fit_transform(paircounts.to_numpy())
+        except:
+            embedding = None
+            print(paircounts)
+            logger.warning(f"{self.name} UMAP failed for at least one chromosome")
+
+        if embedding is not None:
+            clusters = DBSCAN(eps = args.eps, min_samples = args.samples).fit_predict(embedding)
+            out = pd.DataFrame(embedding, index=paircounts.index, columns=["umap1","umap2"]).reset_index()
+            out["cluster"] = clusters
+        else:
+            out = pd.DataFrame({"umap1":0,"umap2":0,"cluster":0}, index=paircounts.index).reset_index()
+
+        out["end"] = out["start"] + args.bin_size
+
+        return out[["chrom","start","end","umap1","umap2","cluster"]]
+
     def bin_bitsum(self, bitsum):
         binlen = self.params["max_bin_kbp"]*1000
         if len(bitsum) / binlen < self.params["min_bin_count"]:
@@ -1002,7 +1079,7 @@ class Genome:
         ends = np.clip(starts+binlen, 0, len(bitsum))
         coords = pd.MultiIndex.from_arrays([starts, ends])
         return pd.DataFrame([
-            pd.value_counts(bitsum[st:en]).reindex(self.bitsum_index, fill_value=0) for st,en in coords
+            pd.Series(bitsum[st:en]).value_counts().reindex(self.bitsum_index, fill_value=0) for st,en in coords
         ], index=coords).astype(int)
 
     def close(self):
