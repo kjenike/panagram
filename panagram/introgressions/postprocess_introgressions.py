@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pandas as pd
 from panagram.index import Index
-from call_introgressions import bins_to_bed
+from panagram.introgressions.call_introgressions import bins_to_bed
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 

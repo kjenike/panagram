@@ -3,8 +3,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from panagram.index import Index
-from call_introgressions import bins_to_bed
-import postprocess_introgressions as post
+from panagram.introgressions.call_introgressions import bins_to_bed
+import panagram.introgressions.postprocess_introgressions as post
 import plotly.express as px
 
 
