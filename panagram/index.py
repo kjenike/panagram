@@ -223,6 +223,7 @@ class Index(Serializable):
             if not os.path.isdir(self.input):
                 raise ValueError("Index input must be directory mode='r'")
             self.prefix = self.input
+            self.load_config()
 
         os.chdir(self.prefix)
         self.prefix = ""
