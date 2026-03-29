@@ -223,6 +223,8 @@ class Index(Serializable):
             if not os.path.isdir(self.input):
                 raise ValueError("Index input must be directory mode='r'")
             self.prefix = self.input
+            self.load_config()
+
 
         os.chdir(self.prefix)
         self.prefix = ""
@@ -273,8 +275,6 @@ class Index(Serializable):
 
 
     def _init_read(self):
-        self.load_config()
-
         self.ngenomes = len(self.samples)
 
         self.chrs = pd.concat({
@@ -311,6 +311,7 @@ class Index(Serializable):
             "length" : g.sum(),
             "chr_count" : g.count()
         })
+
 
     def __getitem__(self, genome):
         return self.genomes[genome]
@@ -599,6 +600,10 @@ class Genome:
             self.bitfreq_genes = sum2freq(self.bitsum_genes)
         else:
             self.bitfreq_genes = self.bitsum_genes = pd.DataFrame(0, index=self.chrs.index, columns=self.gene_tabix_cols)
+
+        self.total_paircounts = pd.read_csv(os.path.join(self.prefix,"total_paircounts.csv"),index_col="name")
+
+        self.load_umaps()
 
     def _load_tabix(self, type_):
         fname = self.tabix_fname(type_)
@@ -985,8 +990,7 @@ class Genome:
         self.bitmaps = {s : bgzip.BGZipWriter(open(self.bitmap_gz_fname(s), "wb"))for s in self.steps}
         bin_occs = dict()
 
-        chrom_umaps = list()
-        genome_umap_paircounts = list()
+        paircount_sums = pd.Series(0,index=self.index.genome_names)
 
         logger.info(f"Anchoring Started")
 
@@ -996,6 +1000,8 @@ class Genome:
 
             bitsum = bitmap.sum(axis=1)
             bin_occs[i] = self.bin_bitsum(bitsum) 
+
+            paircount_sums += bitmap.sum(axis=0)
 
             logger.info(f"Anchored {chrom}")
 
@@ -1009,6 +1015,13 @@ class Genome:
                 logger.info(f"Annotated {chrom}")
 
             t = time()
+
+        
+        self.total_paircounts = pd.DataFrame({
+            "count" : paircount_sums,
+            "frac" : paircount_sums / paircount_sums[self.name],
+        })
+        self.total_paircounts.to_csv(os.path.join(self.prefix,"total_paircounts.csv"))
 
         if self.annotated:
             gene_tabix = gene_df.reset_index()[self.gene_tabix_cols]
@@ -1030,6 +1043,14 @@ class Genome:
         self.init_read()
         self.write_umaps()
 
+    @property
+    def chrom_umaps_filename(self):
+        return os.path.join(self.prefix,"chrom_umaps.csv")
+
+    @property
+    def genome_umap_filename(self):
+        return os.path.join(self.prefix,"genome_umap.csv")
+
     def write_umaps(self):
         genome_paircounts = {}
         chrom_umaps = list()
@@ -1042,12 +1063,11 @@ class Genome:
 
             genome_paircounts[chrom] = self.index.bitmap_to_paircount_bins(bitmap,self.index.genome_umap.bin_size).T.fillna(0)
 
-        print(chrom_umaps)
-        chrom_umaps = pd.concat(chrom_umaps)
-        chrom_umaps.to_csv(os.path.join(self.prefix,"chrom_umaps.csv"),index=False)
+        self.chrom_umaps = pd.concat(chrom_umaps).set_index("chrom")
+        self.chrom_umaps.to_csv(self.chrom_umaps_filename)
 
-        genome_umap = self.run_umap(pd.concat(genome_paircounts,names=["chrom","start"]), self.index.genome_umap)
-        genome_umap.to_csv(os.path.join(self.prefix,"genome_umap.csv"),index=False)
+        self.genome_umap = self.run_umap(pd.concat(genome_paircounts,names=["chrom","start"]), self.index.genome_umap)
+        self.genome_umap.to_csv(self.genome_umap_filename,index=False)
 
     def run_umap(self, paircounts, args):
         reducer = umap.UMAP(n_neighbors=args.neighbors, min_dist=args.dist, n_components=2, random_state=42)
@@ -1069,6 +1089,17 @@ class Genome:
         out["end"] = out["start"] + args.bin_size
 
         return out[["chrom","start","end","umap1","umap2","cluster"]]
+
+    def load_umaps(self):
+        if os.path.exists(self.chrom_umaps_filename):
+            self.chrom_umaps = pd.read_csv(self.chrom_umaps_filename,index_col="chrom")
+        else:
+            self.chrom_umaps = None
+
+        if os.path.exists(self.chrom_umaps_filename):
+            self.genome_umap = pd.read_csv(self.genome_umap_filename)
+        else:
+            self.genome_umap = None
 
     def bin_bitsum(self, bitsum):
         binlen = self.params["max_bin_kbp"]*1000

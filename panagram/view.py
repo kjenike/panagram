@@ -25,9 +25,7 @@ from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import pdist, squareform
 from .index import Index 
 from . import figs
-import dash_bootstrap_components as dbc
 
-tmpdir=params.index_dir
 def view(params):
     index = Index(params.index_dir) #Directory that contains the anchor direcotry
 
@@ -56,14 +54,18 @@ def view(params):
             t=10  # top margin
         )
     )
-    image_path = '/home/kjenike1/scratch4-mschatz1/kjenike/PANAGRAM/panagram/panagram/assets/panagram.png'
+
+    ROOT = os.path.dirname(os.path.realpath(__file__))
+        
+
+    image_path = ROOT+'/assets/panagram.png'
     pil_img = Image.open(image_path)
     def b64_image(image_filename):
         with open(image_filename, 'rb') as f:
             image = f.read()
         return 'data:image/png;base64,' + base64.b64encode(image).decode('utf-8')
 
-    whole_genome_hists_fig   = figs.read_genome_comp(index,anchor_name) #TODO update on anchor change
+    whole_genome_hists_fig   = figs.read_genome_comp(index,anchor_name) 
     whole_genome_hists_fig.update_layout(
             hoverlabel=dict(
                 bgcolor="white",
@@ -724,21 +726,10 @@ def view(params):
         #        r=10))
         return line_shapes,annotations,node,label_legend,kmer_num #fig,label_legend
     
-    def get_umap_genome_hist(chrom,anchor_name):
-        umap_f = tmpdir+"/anchor/"+anchor_name+"/umap_clusters_"+chrom+"_100000_2_3_0_100.txt"
-        color,cluster_size = [],[]
-        with open(umap_f,"r") as f:
-            line = f.readline()
-            while line:
-                tmp = line.strip().split("\t")
-                cluster_size.append(int(tmp[2])-int(tmp[1]))
-                #X.append(float(tmp[4]))
-                #Y.append(float(tmp[5]))
-                color.append(int(tmp[3]))
-                #chrom_stop.append(tmp[2])
-                #chrom_start.append(tmp[1])
-                line = f.readline()
-        f.close()
+    def get_umap_chrom_hist(anchor_name,chrom):
+        umap = index.genomes[anchor_name].chrom_umaps.loc[chrom]
+        color = list(umap["cluster"])
+        cluster_size = umap["end"] - umap["start"]
         x,y,z=[],[],[]
 
         for i in range(0,max(color)+1):
@@ -749,13 +740,6 @@ def view(params):
         hist_fig = go.Figure([go.Bar(x=y, y=x, marker_color=z, orientation='h',marker={'colorscale': 'Portland',})])
         hist_fig.update_xaxes(title_text="Base pairs per cluster")
         hist_fig.update_xaxes(type="log")
-        #hist_fig.update_layout(
-        #    title={"text":"Base pairs per cluster",
-        #        "xanchor": "center",
-        #        "x":0.5,
-        #        "y":0.85,
-        #        "yanchor": "top"
-        #        })
         hist_fig.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)',  font=dict(size=25),
                 hoverlabel=dict(
@@ -766,34 +750,14 @@ def view(params):
         return hist_fig
 
     def get_umap_from_file(chrom, anchor):
-        umap_f = tmpdir+"/anchor/"+anchor+"/umap_clusters_"+chrom+"_100000_2_3_0_100.txt"
-        X,Y,color,chrom_stop,chrom_start = [],[],[],[],[]
-        with open(umap_f,"r") as f:
-            line = f.readline()
-            while line:
-                tmp = line.strip().split("\t")
-                X.append(float(tmp[4]))
-                Y.append(float(tmp[5]))
-                color.append(int(tmp[3]))
-                chrom_stop.append(tmp[2])
-                chrom_start.append(tmp[1])
-                line = f.readline()
-        f.close()
-        #fig = make_subplots(
-        #    rows=1, cols=1,)
-        #node = dict(type='scatter',
-        #            x=X, y=Y,
-        #            #xaxis="x",yaxis="y7",
-        #            mode='markers',
-        #            marker=dict(color=color,
-        #                colorscale="Portland",        
-        #                ),
-        #            #coloraxis="coloraxis3",
-        #            #colorscale="Viridis",
-        #            #text=text,  # vignet information of each node
-        #            #hoverinfo='',
-        #            showlegend=False
-        #        )
+        umap = index.genomes[anchor_name].chrom_umaps.loc[chrom]
+
+        X = umap["umap1"]
+        Y = umap["umap2"]
+        color = umap["cluster"]
+        chrom_start = umap["start"]
+        chrom_stop = umap["end"]
+
         hover_text = [f"Cluster: {color[i]}<br>Chromosome: {chrom}:{chrom_start[i]}-{chrom_stop[i]}"for i in range(len(X))]#<br>X: {X[i]}<br>Y: {Y[i]}" for i in range(len(X))]
         fig = go.Figure(data=go.Scatter(x=X, y=Y,
             mode='markers',
@@ -849,29 +813,20 @@ def view(params):
         return fig
 
     def read_clusters(anchor,chrom):
-        cluster_file = tmpdir+"/anchor/"+anchor+"/umap_clusters_"+chrom+"_100000_2_3_0_100.txt"
+        umap = index.genomes[anchor_name].chrom_umaps.loc[chrom]
+        
+        
         data = {"x":[],"y":[],"z":[]}
-        with open(cluster_file,"r") as f:
-            line = f.readline()
-            while line:
-                tmp = line.strip().split("\t")
-                data["x"].append(int(tmp[1]))
-                data["y"].append(1)
-                data["z"].append(int(tmp[3]))
-                data["x"].append(int(tmp[1]))
-                data["y"].append(2)
-                data["z"].append(int(tmp[3]))
-                line = f.readline()
-        f.close()
+        data["x"] = list(umap["start"]) + list(umap["start"])
+        data["y"] = []
+        for i in range(0,len(umap["start"])):
+            data["y"].append(1)
+        for i in range(0,len(umap["start"])):
+            data["y"].append(2)
+        data["z"] = list(umap["end"]) + list(umap["end"])
         return data
+
     def get_local_info_just_one(bar_sum_regional, anchor_name, chrs):
-        #fig = make_subplots(
-        #    rows=1, cols=1,
-        #    #specs=[[{"type": "bar", "colspan": 2}, None],
-        #    #   [{"type": "bar"}, {"type": "bar"}]],
-        #    subplot_titles=("Pan-k-mers in this region" ),
-        #    vertical_spacing=0.1,
-        #)
         x = []
         for i in range(1,index.ngenomes+1):
             x.append(i)
@@ -1193,7 +1148,6 @@ def view(params):
         #fig.update_yaxes(title_text="# of k-mers", range=[0,bin_size]  , row=3, col=1)
         fig.update_yaxes(showticklabels=True, title_text="# of k-mers", range=[0,adjusted_bin_size]  , row=pan_row, col=2)
 
-        #TODO don't use template, manually set background to white
         pan_cax = {
             "colorscale" : "viridis",
             "colorbar" : {"title":"Pangenome Conservation","y":0.72,"len":0.35,"yanchor":"top","title_side":"right"}
@@ -1492,8 +1446,8 @@ def view(params):
             x = list(index.bitsum_bins.loc[(anchor_name, chrom)].index)
             if len(x)!=1:
                 if chrom in umap_data.keys():
-                    wg_fig.append_trace(go.Heatmap(x=umap_data[chrom]["X"], z=umap_data[chrom]["Z"],
-                        y=[1]*(len(umap_data[chrom]["X"])), type = 'heatmap', 
+                    wg_fig.append_trace(go.Heatmap(x=umap_data[chrom]["umap1"], z=umap_data[chrom]["cluster"],
+                        y=[1]*(len(umap_data[chrom]["umap1"])), type = 'heatmap', 
                         hovertemplate = "Coord: %{x}<br>Cluster: %{z}",
                         colorscale='Portland', zmin=0, zmax=zmax,
                         showlegend=False, showscale=False,),
@@ -1688,40 +1642,23 @@ def view(params):
         return fig
     def anchor_umaps_per_chr(anchor_name):
         data = {}
-        umap_f = tmpdir+"/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
-        with open(umap_f,"r") as f:
-            line = f.readline()
-            zmax = 0
-            while line:
-                tmp = line.strip().split("\t")
-                this_chr = tmp[0]
-                if this_chr not in data.keys():
-                    data[this_chr] = {"X":[],"Y":[],"Z":[]}
-                data[this_chr]["X"].append(int(tmp[1]))
-                #data[this_chr]["Y"].append(float(tmp[5]))
-                this_z = int(tmp[3])
-                if this_z > zmax:
-                    zmax = this_z
-                data[this_chr]["Z"].append(this_z)
-                line = f.readline()
-            f.close()
+        umap = index.genomes[anchor_name].genome_umap
+        
+        chroms = index.genomes[anchor_name].chrs.index
+        data = {c : umap.query("chrom == @c")[["umap1","umap2","cluster"]] for c in chroms}
+        zmax = umap["cluster"].max()
+        
         return data,zmax
 
     def make_genome_umap(anchor_name):
-        umap_f = tmpdir+"/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
-        umap_x,umap_y,color,chroms,chrom_start,chrom_stop = [],[],[],[],[],[]
-        with open(umap_f,"r") as f:
-            line = f.readline()
-            while line:
-                tmp = line.strip().split("\t")
-                umap_x.append(float(tmp[4]))
-                umap_y.append(float(tmp[5]))
-                color.append(int(tmp[3]))
-                chroms.append(tmp[0])
-                chrom_start.append(tmp[1])
-                chrom_stop.append(tmp[2])
-                line = f.readline()
-        f.close()
+        umap = index.genomes[anchor_name].genome_umap
+        umap_x = umap["umap1"]
+        umap_y = umap["umap2"]
+        color  = umap["cluster"]
+        chroms = umap["chrom"]
+        chrom_start  = umap["start"]
+        chrom_stop   = umap["end"]
+
         umap_cax = {
             "colorscale":"Portland",
             "colorbar": {
@@ -1758,34 +1695,20 @@ def view(params):
         
         return umap_fig
 
-    def make_genome_umap_hist(anchor_name):
-        umap_f = tmpdir+"/anchor/"+anchor_name+"/"+anchor_name+"_all_umap_clusters.txt"
-        color,cluster_size = [],[]
-        with open(umap_f,"r") as f:
-            line = f.readline()
-            while line:
-                tmp = line.strip().split("\t")
-                color.append(int(tmp[3]))
-                cluster_size.append(int(tmp[2])-int(tmp[1]))
-                line = f.readline()
-        f.close()
+    def get_genome_umap_hist(anchor_name):
+        umap = index.genomes[anchor_name].genome_umap
+        color = umap["cluster"]
+        cluster_size = umap["end"] - umap["start"]
         x,y,z=[],[],[]
 
         for i in range(0,max(color)+1):
             x.append(i)
             z.append(i)
-            y.append(color.count(i)*cluster_size[0])
+            y.append((color==i).sum()*cluster_size[0])
 
         hist_fig = go.Figure([go.Bar(x=y, y=x, marker_color=z,orientation='h',marker={'colorscale': 'Portland',})])
         hist_fig.update_xaxes(title_text="Base pairs per cluster")
         hist_fig.update_xaxes(type="log")
-        #hist_fig.update_layout(
-        #    title={"text":"Base pairs per cluster",
-        #        "xanchor": "center",
-        #        "x":0.5,
-        #        "y":0.85,
-        #        "yanchor": "top"
-        #        })
         hist_fig.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)',  font=dict(size=25),
                 hoverlabel=dict(
@@ -1836,19 +1759,20 @@ def view(params):
                 ])
             ),])
         return fig
-    def plot_perc_shared(perc_shared, perc_shared_file):
-        df = pd.read_csv(perc_shared_file,header=None,index_col=0)#np.loadtxt(perc_shared_file, delimiter=",")
+    def plot_perc_shared(perc_shared, anchor):
+        df = index.genomes[anchor].total_paircounts #pd.read_csv(perc_shared_file,index_col="name") #np.loadtxt(perc_shared_file, delimiter=",")
+
+
         #print(data.loc["Pandan_hap1"][2])
         #print(perc_shared)
-        df = df.sort_values(by=[2])
-        print(df)
+        df = df.sort_values(by="frac")
         names, data, colors = [], [], []
 
         #for k in perc_shared.keys():
         for row in df.iterrows():
             k = row[0]
             names.append(k)
-            tmp = perc_shared[k]-df.loc[k][2]
+            tmp = perc_shared[k]-(df.loc[k]["frac"]*100)
             if tmp > 0:
                 colors.append("#00b4d8")
             elif tmp == 0:
@@ -2192,7 +2116,7 @@ def view(params):
         if tab == "anchor":
             figs = (plot_whole_genome(anchor_name), #make_anchor_tab_legends(anchor_name),#make_gene_per_genome_fig(anchor_name), 
                     #make_genes_per_chr_fig(anchor_name), make_avg_kmer_fig(anchor_name),
-                    make_genome_umap(anchor_name), make_genome_umap_hist(anchor_name))
+                    make_genome_umap(anchor_name), get_genome_umap_hist(anchor_name))
         else:
             figs = ({},)*3 #Changed May 21 2025
         triggered_id = ctx.triggered_id
@@ -2280,11 +2204,11 @@ def view(params):
         toc_tmp_2 = time.perf_counter()
         print(f"main fig in {toc_tmp_2 - toc_tmp_1:0.4f} seconds")
         
-        #perc_shared_fig = plot_perc_shared(perc_shared)
-        fig2 = plot_perc_shared(perc_shared,tmpdir+"/anchor/"+anchor_name+"/perc_shared."+anchor_name+".txt")
+        fig2 = plot_perc_shared(perc_shared,anchor_name)
+
         #UMAP figure 
         umap_fig = get_umap_from_file(chrom,anchor_name)
-        umap_genome_hist = get_umap_genome_hist(chrom,anchor_name)
+        umap_genome_hist = get_umap_chrom_hist(anchor_name,chrom)
         #sys.stderr.write("Quering genes 9\n")
         #sys.stderr.write(anchor_name+"\t"+chrom+"\t"+str(start_coord) + "\t"+str(end_coord)+"\n")
         #sys.stderr.flush()

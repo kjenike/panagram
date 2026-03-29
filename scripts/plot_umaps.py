@@ -37,9 +37,9 @@ start_coord = 0#int(sys.argv[3])#0
 max_bins = int(sys.argv[3])#100000
 eps = float(sys.argv[4])#1
 step = 100
-#print("Getting index")
+
 index  = Index("/home/kjenike1/data-mschatz1/kjenike/PANAGRAM/DOGS/K51_WILD_DOGS/")
-#print(index[anchor_name])
+
 n_neighbors = int(sys.argv[5])#4
 md = float(sys.argv[6])#0.0 is good
 n_skips = int(sys.argv[7])#100 
@@ -47,13 +47,13 @@ first_chrom = "chr1_RagTag"
 chr_ider = "chr"
 colors = mcp.gen_color(cmap="viridis_r",n=index.ngenomes)
 colors_heatmap = mcp.gen_color(cmap="viridis_r",n=index.ngenomes)
-#print(index[anchor_name].chrs.index)
+
 def one_loc(chrom):
     end_coord = index[anchor_name].chrs.loc[chrom,"size"]
     bitmap = index.query_bitmap(anchor_name, chrom, start_coord, end_coord, n_skips)
-    #print(bitmap)
+    
     bin_size = max_bins#((end_coord - start_coord) // max_bins) + 1
-    #print(bin_size)
+    
     pancounts, paircounts = index.bitmap_to_bins(bitmap, bin_size)
     chrom_list = []
     starts = []
@@ -66,24 +66,24 @@ def one_loc(chrom):
 if chrom_in != "ALL":
     bins = {}
     paircounts, chrom_list, starts,bi = one_loc(chrom_in)
-    #print("One loc finished")
+    
     bins[chrom_in] = bi
 else:
     bins = {}
     chroms = list(index[anchor_name].chrs.index)
     paircounts, chrom_list, starts,bi = one_loc(first_chrom)
     paircounts = paircounts.fillna(0)
-    #print("One done!")
+    
     bins[first_chrom] = bi
     for i in range(1,len(chroms)):
         c = chroms[i]
-        #print(c)
-        if c.count(chr_ider) > 0:# and int(c.split("-")[1]) > 5000000: #print(c)
-            #print(c)
+        
+        if c.count(chr_ider) > 0:# and int(c.split("-")[1]) > 5000000: 
+            
             paircounts_1, chrom_list_1, starts_1,bins_1 = one_loc(c)
             paircounts_1 = paircounts_1.fillna(0)
-            #print(c)
-            #print(paircounts_1)
+            
+            
             paircounts = np.concatenate((paircounts_1, paircounts), axis=1)
             chrom_list = chrom_list + chrom_list_1
             starts = starts + starts_1
@@ -95,9 +95,9 @@ else:
     #paircounts = np.concatenate((paircounts_1, paircounts_2, paircounts_3, paircounts_4, paircounts_5), axis=1)  
     #chrom_list = chrom_list_1 + chrom_list_2 + chrom_list_3 + chrom_list_4 + chrom_list_5
     #starts = starts_1 + starts_2 + starts_3 + starts_4 + starts_5
-#print(paircounts.T)
-#print(len(chrom_list))
-#print(len(paircounts.T))
+
+
+
 
 id_colors = {"Eurasian":1,"Non_Iberian_relict":2,"Iberian_relict":3,"Iberian_non_relict":4}
 #ids = []
@@ -122,12 +122,12 @@ def make_pca(clusters):
     #sns.set_palette("hls", 4)
     pca = PCA(n_components=3)
     principalComponents = pca.fit_transform(paircounts.T)
-    #print(len(principalComponents))
+    
     principalDf = pd.DataFrame(data = principalComponents,
                  columns = ['principal component 1', 'principal component 2', 'principal component 3'])
 
     fig, ax = plt.subplots()
-    #print(len(principalDf['principal component 1']))
+    
     scatter = ax.scatter(principalDf['principal component 1'],principalDf['principal component 2'],cmap='rainbow',c=clusters,alpha=0.5)
     ax.set_xlabel("PC 1: " + str(pca.explained_variance_ratio_[0]))
     ax.set_ylabel("PC 2: " + str(pca.explained_variance_ratio_[1]))
@@ -143,18 +143,18 @@ def make_pca(clusters):
 #    color=df.species, labels={'color': 'species'}
 #)
 
-#print(pca.explained_variance_ratio_)
+
 
 
 #Now make a umap
 #n_neighbors = int(sys.argv[6])#10
 #md = float(sys.argv[7])
 reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=md, n_components=2, random_state=42)
-#print(paircounts)
-#print("UMAP reducer done")
+
+
 #paircounts = paircounts.fillna(0)
 embedding = reducer.fit_transform(paircounts.T)
-#print("Embedding done")
+
 #adjusted_ids = []
 #end_coord = index[anchor_name].chrs.loc[chrom,"size"]
 bin_size  = max_bins #int(end_coord/max_bins)
@@ -164,11 +164,11 @@ bin_size  = max_bins #int(end_coord/max_bins)
 
 #clusters = cluster.KMeans(n_clusters=10).fit_predict(embedding)
 clusters = DBSCAN(eps = eps, min_samples = 1).fit_predict(embedding)
-#print(len(clusters))
-#print(set(clusters))
-#print(Counter(clusters))
+
+
+
 make_pca(clusters)
-#print(embedding)
+
 fig_2d = px.scatter(
     embedding, x=0, y=1,
     color=clusters,#adjusted_ids, 
@@ -195,7 +195,7 @@ fig_2d.write_image(filename+".svg")
 #plt.close()
 
 #Print a bed like file
-#print(clusters)
+
 def print_stuff():
     for i in range(0,len(clusters)):
         print(chrom_list[i]+"\t"+str(starts[i])+"\t"+str(starts[i]+bins[chrom_list[i]]-1)+"\t"+str(clusters[i])+"\t"+str(embedding[i
@@ -254,7 +254,7 @@ def plot_interactive(anchor_name, chrom, start_coord, end_coord, step, pancounts
             ), row=2, col=1 )
 
         #t1 = time.perf_counter()
-        #print(f"\tConserved k-mers (grey) {t1 - t0:0.4f} seconds")
+        
         #t0 = t1
 
         fig.add_trace(go.Scattergl(
@@ -291,7 +291,7 @@ def plot_interactive(anchor_name, chrom, start_coord, end_coord, step, pancounts
             row=3, col=1 )
         fig.update_coloraxes(showscale=False)
         #t1 = time.perf_counter()
-        #print(f"\tConserved kmers, non-grey {t1 - t0:0.4f} seconds")
+        
         #t0 = t1
 
         #Now we add the reference sequence:
@@ -303,7 +303,7 @@ def plot_interactive(anchor_name, chrom, start_coord, end_coord, step, pancounts
             marker = dict(size=5, symbol='line-ns')), row=1, col=1)
         #fig.update_coloraxes(showscale=False)
         #t1 = time.perf_counter()
-        #print(f"\tFinishing touches {t1 - t0:0.4f} seconds")
+        
         #t0 = t1
 
         fig.update_yaxes(visible=False, range=[0.9,4], row=1, col=1)
