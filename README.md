@@ -1,6 +1,6 @@
 # Panagram: Interactive, alignment-free pan-genome browser  
 
-#### Katie Jenike, Nicole Brown, Sam Kovaka, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Elinor Karlsson, Zach Lippman, Ian R. Henderson, Michael C. Schatz
+#### Katie Jenike, Nicole Brown, Sam Kovaka, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Zach Lippman, Ian R Henderson, Michael C Schatz
 
 
 [An alignment-free pan-genome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf)
@@ -25,24 +25,45 @@ pip install --upgrade setuptools
 Please use the dev branch now. This is the most up-to-date. 
 ## Dependencies
 
-Requires python version >=3.7, pip, samtools, and tabix. All other dependencies should be automatically installed via pip.
+Requires python version >=3.7, pip, samtools, and tabix. All other dependencies should be automatically installed via pip. Bgzip is also required. 
 
 Panagram relies on [KMC](https://github.com/refresh-bio/KMC) to build its kmer index. This should be installed automatically, however it is possible that the KMC installation will fail but panagram will successfully install. In this case `panagram view` can be run, but `panagram index` will return an error. You may be able to debug the KMC installation by running `make -C KMC py_kmc_api` and attempting to fix any errors, then re-run `pip install -v .` after the errors are fixed.
 
 # Running
-Panagram runs in two steps, the pre-processing step (index command) and the viewing (view command). 
+Panagram runs in two steps, the anchoring step (index command) and viewing (view command). 
 
-# Preprocessing
+# Anchoring
 Usage:
 Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap
-```
-usage: panagram index [-h] <config.toml>
-```
-See example config.toml file for more details on the layout. Must include paths to all of the fasta files and optionally any annotations in gff format. 
+Start by preparing the panagram index. For this, you will need a tsv file with a list of the samples. 
 
-Panagram may fail to index datasets with more than 32 genomes. This is **not** a fundamental limitation, and we are working on fixing it.
+```
+panagram 
+usage: panagram index <samples.tsv> -k <k> --prepare
+```
+The samples.tsv file should contain one sample per line. On each line include the sample name and minimally the fasta file location. See below for an example. 
 
-Currently genome IDs should only contain alphanumeric characters and underscores due to KMC requirements.
+```
+name	fasta	gff	id	anchor
+sample1	FASTAS/sample1.fasta	GFFS/sample1.gff	0	True
+sample2	FASTAS/sample2.fasta	GFFS/sample2.gff	1	True
+sample3	FASTAS/sample3.fasta	GFFS/sample3.gff	2	True
+sample4	FASTAS/sample4.fasta	GFFS/sample4.gff	3	True
+sample5	FASTAS/sample5.fasta	GFFS/sample5.gff	4	True
+sample6	FASTAS/sample6.fasta	GFFS/sample6.gff	5	True
+```
+
+If you have multiple annotation files per sample you can concatenate them into one gff file. 
+
+Currently genome IDs should only contain alphanumeric characters and underscores due to KMC requirements. 
+
+Picking an acceptable k-mer length for the data set can be tricky. For samples that are very similar, a larger k may be more approperiate. While samples that are more diverged may benefit from a smaller k-mer length. These two papers give some detail on picking "good" k-mer length (https://www.cell.com/iscience/fulltext/S2589-0042(24)00275-X?uuid=uuid%3A8d061319-27f8-49ca-b7ee-0d33ec846225 and https://pubmed.ncbi.nlm.nih.gov/39890468/), but if in doubt, k=21 usually works fine. 
+
+Once the preparation step is run, you can run snakemake and specify the number of threads you want to use. 
+
+```
+snakemake --verbose --cores 12 all
+```
 
 # View
 
@@ -98,7 +119,8 @@ To run, first index the genomes:
 
 ```
 cd example_data
-panagram index conf.toml
+panagram index samples.tsv -k 21 --prepare
+snakemake --verbose --cores 30 all 
 ```
 It is super important that any gff files are in the correct format. GFF format is supported. We strongly suggest that if you run into any problems you first check the format annotation format. This can be done with command line tools like gff3validator or online here: https://genometools.org/cgi-bin/gff3validator.cgi 
 
@@ -145,37 +167,14 @@ until panagram view --ndebug .; do echo "restarting"; sleep 1; done
 
 We will optimize this process in future releases.
 
-# Example config.toml file
+# Another example samples.tsv file
 
 ```
-k = 12
-prefix = "."
-processes = 5
-
-lowres_step = 100
-chr_bin_kbp = 200
-
-gff_anno_types = ["exon", "CDS"]
-
-[kmc]
-memory = 10
-processes = 5
-threads = 4
-
-[fasta]
-ecoli = "FASTAS/ecoli_GCF_001612495.1_ASM161249v1_genomic.fna"
-ecoli_k12 = "FASTAS/ecoli_k12_GCF_000005845.2_ASM584v2_genomic.fna"
-klebsiella = "FASTAS/klebsiella_GCF_000240185.1_ASM24018v2_genomic.fna"
-salmonella = "FASTAS/salmonella_GCF_016117835.1_ASM1611783v1_genomic.fna"
-shigella = "FASTAS/shigella_GCF_000006925.2_ASM692v2_genomic.fna"
-
-[gff]
-ecoli = "gffs/ecoli_GCF_001612495.1_ASM161249v1_genomic.gff"
-ecoli_k12 = "gffs/ecoli_k12_GCF_000005845.2_ASM584v2_genomic.gff"
-klebsiella = "gffs/klebsiella_GCF_000240185.1_ASM24018v2_genomic.gff"
-salmonella = "gffs/salmonella_GCF_016117835.1_ASM1611783v1_genomic.gff"
-shigella = "gffs/shigella_GCF_000006925.2_ASM692v2_genomic.gff"
+name    fasta   gff     id      anchor
+Col_0      FASTAS/wlod_Col-0.ragtag_scaffolds.fa        GFFS/wlod_Col-0.ragtag_scaffolds.gff       0       True
+Tanz_1     FASTAS/wlod_Tanz-1.patch.scaffold.Chr.fa     GFFS/wlod_Tanz-1.patch.scaffold.Chr.gff       1       True
 ```
+The above example would be a comparison with just two genomes 
 
 # Using Snakemake (dev branch)
 The dev branch, while actively being developed, currently utilizes Snakemake. This is straightforward to use, you just need a tsv file with a list of samples and corresponding fasta files. 
@@ -191,8 +190,6 @@ shigella	FASTAS/shigella_GCF_000006925.2_ASM692v2_genomic.fna	ANNO/shigella_GCF_
 ```
 
 # Known issues
-- Right now, there is a bug (issue #7) when indexing very large genomes with very large chromosomes. We are activley working to fix this. 
-- Indexing sometimes fails when working with more than 32 genomes 
 - Mash dendogram leaf placement is not always perfect
 - Installing on a mac can be tricky. Will need to include a more detailed list of dependancies
 
