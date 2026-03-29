@@ -11,6 +11,10 @@ from urllib.request import urlretrieve
 import shutil
 import tarfile
 
+about = {}
+with open("panagram/__about__.py") as fp:
+    exec(fp.read(), about)
+
 ROOT_DIR = os.getcwd()
 KMC_DIR = os.path.join(ROOT_DIR, "KMC")
 
@@ -97,4 +101,9 @@ if __name__ == "__main__":
     setup(
         cmdclass={'build_py': pre_build},
         packages=["panagram", "panagram.extra"],
+        version = about["__version__"],
+        description = about["__summary__"][0],
+        author = about["__author__"],
+        url = about["__uri__"],
+
     )
