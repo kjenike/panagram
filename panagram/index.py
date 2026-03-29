@@ -225,7 +225,6 @@ class Index(Serializable):
             self.prefix = self.input
             self.load_config()
 
-
         os.chdir(self.prefix)
         self.prefix = ""
 

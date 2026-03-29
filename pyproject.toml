@@ -20,8 +20,8 @@ dependencies = [
     "mycolorpy",
     "seaborn",
     "umap-learn",
-    "sklearn",
-    "snakemake>=9"
+    "snakemake>=9",
+    "scikit-learn",
 ]
 
 [project.scripts]
