@@ -1,9 +1,0 @@
-name	fasta	gff
-Reference	FASTAS/athaliana_chr1.fasta
-WildRelative	FASTAS/athaliana_chr1_wildrelative.fasta
-OffspringGen1	FASTAS/athaliana_chr1_0_offspring.fasta
-OffspringGen2	FASTAS/athaliana_chr1_1_offspring.fasta
-OffspringGen3	FASTAS/athaliana_chr1_2_offspring.fasta
-OffspringGen4	FASTAS/athaliana_chr1_3_offspring.fasta
-OffspringGen5	FASTAS/athaliana_chr1_4_offspring.fasta
-OffspringGen6	FASTAS/athaliana_chr1_5_offspring.fasta
