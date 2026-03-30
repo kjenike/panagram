@@ -10,55 +10,57 @@ from typing import Any, List, Tuple, Type, Union
 
 from .index import Index
 
-#TODO add view parameters
-#prefix: required positional
-#rest are optional arguments?
-#genome
-#coords
-#max_chr_bins
-#bookmarks
+# TODO add view parameters
+# prefix: required positional
+# rest are optional arguments?
+# genome
+# coords
+# max_chr_bins
+# bookmarks
+
 
 @dataclasses.dataclass
 class View:
     """Display panagram viewer"""
 
-    #Panagram index directory
+    # Panagram index directory
     index_dir: str = field(positional=True, metavar="index_dir")
 
-    #Initial anchor genome (optional)
+    # Initial anchor genome (optional)
     genome: str = field(positional=True, nargs="?", metavar="genome")
 
-    #Initial chromosome (optional)
+    # Initial chromosome (optional)
     chrom: str = field(positional=True, nargs="?", metavar="chrom")
 
-    #Initial start coordinate (optional)
+    # Initial start coordinate (optional)
     start: int = field(positional=True, nargs="?", metavar="start")
 
-    #Initial end coordinate (optional)
+    # Initial end coordinate (optional)
     end: int = field(positional=True, nargs="?", metavar="end")
 
     order: list = field(default=None)
 
-    #Run server in production mode (important for a public-facing server)
+    # Run server in production mode (important for a public-facing server)
     ndebug: bool = field(action="store_true")
 
-    #Server port
+    # Server port
     port: str = field(default="8050")
 
-    #Server address
+    # Server address
     host: str = field(default="127.0.0.1")
 
-    #A local URL prefix to use app-wide (passed to Dash.dash(url_base_pathname=...))
+    # A local URL prefix to use app-wide (passed to Dash.dash(url_base_pathname=...))
     url_base: str = field(default="/")
 
-    #Max number of bins on chromosome tab
+    # Max number of bins on chromosome tab
     max_chr_bins: int = field(default=350)
 
-    #Bed file with bookmarked regions 
+    # Bed file with bookmarked regions
     bookmarks: str = field(default=None)
 
     def run(self):
         from .view import view
+
         view(self)
 
 
@@ -93,9 +95,10 @@ class Bitdump:
 
         idx.close()
 
+
 @dataclasses.dataclass
 class Annotate:
-    """(Re-)annotate an existing anchored genome using a GFF file """
+    """(Re-)annotate an existing anchored genome using a GFF file"""
 
     index_dir: str = field(positional=True, metavar="index_dir")
     """Panagram index directory"""
@@ -104,21 +107,22 @@ class Annotate:
 
     gff_file: str = field(positional=True, metavar="gff_file")
     nogene: bool = field(action="store_true")
-    
+
     def run(self):
         idx = Index(self.index_dir)
-        idx[self.genome].run_annotate(self.gff_file,nogene=self.nogene)
+        idx[self.genome].run_annotate(self.gff_file, nogene=self.nogene)
         idx.close()
+
 
 @dataclasses.dataclass
 class Main:
     """Alignment-free pan-genome viewer
 
-Subcommands:
-    index    Anchor KMC bitvectors to reference FASTA files
-    view     Display panagram viewer in a browser window
-    annotate Create or replace GFF annotation for anchored genome
-    bitdump  Query pan-kmer bitmap via the commandline"""
+    Subcommands:
+        index    Anchor KMC bitvectors to reference FASTA files
+        view     Display panagram viewer in a browser window
+        annotate Create or replace GFF annotation for anchored genome
+        bitdump  Query pan-kmer bitmap via the commandline"""
 
     cmd: Union[View, Index, Bitdump, Annotate]
     cprof: str = field(default=None, help=argparse.SUPPRESS)
@@ -126,13 +130,16 @@ Subcommands:
     def run(self):
         return self.cmd.run()
 
+
 def parse_coords(coords):
     genome, chrom, coords = coords.split(":")
     start, end = map(int, coords.split("-"))
     return genome, chrom, start, end
 
+
 def comma_split(s):
     return s.split(",")
+
 
 def main():
     parser = ArgumentParser(add_config_path_arg=True)
@@ -141,7 +148,4 @@ def main():
     if args.main.cprof is None:
         args.main.run()
     else:
-        cProfile.runctx("args.run()",
-             {},{"args" : args},
-             args.main.cprof)
-
+        cProfile.runctx("args.run()", {}, {"args": args}, args.main.cprof)
