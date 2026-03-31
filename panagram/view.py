@@ -756,6 +756,10 @@ def view(params):
         # We need to sum up the number of times that kmers occur in each column (aka, each sample)
         kmer_num_tmp = bitmap.sum(axis=0)
 
+        # Convert to numpy array if it's a pandas Series
+        if hasattr(kmer_num_tmp, "values"):
+            kmer_num_tmp = kmer_num_tmp.values
+
         matrix = linkage(bitmap.transpose(), method="ward", metric="euclidean")
         tree_tmp2 = hierarchy.to_tree(matrix, False)
         treedata = get_newick(tree_tmp2, tree_tmp2.dist, index.genome_names)
@@ -768,7 +772,7 @@ def view(params):
         # cntr = 0
         for k in range(0, len(kmer_num_tmp)):  # kmer_num_tmp.keys():
             kmer_num[index.genome_names[k]] = float(((kmer_num_tmp[k]) / total_kmers) * 100)
-            kmer_num_raw[index.genome_names[k]] = kmer_num_tmp[k]
+            kmer_num_raw[index.genome_names[k]] = int(kmer_num_tmp[k])
             color_code[index.genome_names[k]] = palette[
                 int(((kmer_num_tmp[k]) / total_kmers) * 100) + 10
             ]
@@ -919,6 +923,9 @@ def view(params):
         umap = index.genomes[anchor_name].chrom_umaps.loc[chrom]
         color = list(umap["cluster"])
         cluster_size = umap["end"] - umap["start"]
+        # Convert to numpy array if it's a pandas Series
+        if hasattr(cluster_size, "values"):
+            cluster_size = cluster_size.values
         x, y, z = [], [], []
 
         for i in range(0, max(color) + 1):
@@ -951,11 +958,11 @@ def view(params):
     def get_umap_from_file(chrom, anchor):
         umap = index.genomes[anchor_name].chrom_umaps.loc[chrom]
 
-        X = umap["umap1"]
-        Y = umap["umap2"]
-        color = umap["cluster"]
-        chrom_start = umap["start"]
-        chrom_stop = umap["end"]
+        X = umap["umap1"].values if hasattr(umap["umap1"], "values") else umap["umap1"]
+        Y = umap["umap2"].values if hasattr(umap["umap2"], "values") else umap["umap2"]
+        color = umap["cluster"].values if hasattr(umap["cluster"], "values") else umap["cluster"]
+        chrom_start = umap["start"].values if hasattr(umap["start"], "values") else umap["start"]
+        chrom_stop = umap["end"].values if hasattr(umap["end"], "values") else umap["end"]
 
         hover_text = [
             f"Cluster: {color[i]}<br>Chromosome: {chrom}:{chrom_start[i]}-{chrom_stop[i]}"
@@ -2218,23 +2225,21 @@ def view(params):
         ]
         umap_fig = go.Figure(
             data=[
-                (
-                    go.Scattergl(
-                        x=umap_x,
-                        y=umap_y,
-                        ids=color,
-                        hoverinfo="text",
-                        hovertext=hover_text,  # hovertemplate = "%{ids}: <br>Popularity: %{umap_x} </br> %{umap_y}",
-                        mode="markers",
-                        marker=dict(
-                            color=color,
-                            # colorscale="Portland",
-                            coloraxis="coloraxis",
-                            showscale=True,
-                            size=14,
-                            opacity=0.7,
-                        ),
-                    )
+                go.Scattergl(
+                    x=umap_x,
+                    y=umap_y,
+                    ids=color,
+                    hoverinfo="text",
+                    hovertext=hover_text,  # hovertemplate = "%{ids}: <br>Popularity: %{umap_x} </br> %{umap_y}",
+                    mode="markers",
+                    marker=dict(
+                        color=color,
+                        # colorscale="Portland",
+                        coloraxis="coloraxis",
+                        showscale=True,
+                        size=14,
+                        opacity=0.7,
+                    ),
                 )
             ]
         )
@@ -2263,6 +2268,9 @@ def view(params):
         umap = index.genomes[anchor_name].genome_umap
         color = umap["cluster"]
         cluster_size = umap["end"] - umap["start"]
+        # Convert to numpy array if it's a pandas Series
+        if hasattr(cluster_size, "values"):
+            cluster_size = cluster_size.values
         x, y, z = [], [], []
 
         for i in range(0, max(color) + 1):
@@ -2312,7 +2320,7 @@ def view(params):
         #    except :
         #        print("failed", anchor_name + "\t" + this_chrom)
         chrs = index[anchor_name].chrs
-        fig = go.Figure(data=[(go.Scattergl(x=chrs.index, y=chrs["gene_count"]))])
+        fig = go.Figure(data=[go.Scattergl(x=chrs.index, y=chrs["gene_count"])])
         fig.update_yaxes(
             title_text="Gene density",
         )

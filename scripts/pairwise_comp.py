@@ -2,7 +2,6 @@ import sys
 from panagram.index import Index
 from panagram import figs
 
-
 anchor_name = sys.argv[1]
 wd = sys.argv[2]
 start_coord = 0
