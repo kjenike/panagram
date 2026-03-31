@@ -351,7 +351,7 @@ def main():
     # input checking
     gt_intros = Path(args.gdt)
     if not gt_intros.is_dir() and not gt_intros.is_file():
-        raise ValueError(f"Ground truth file/directory not found. Check --gdt path.")
+        raise ValueError("Ground truth file/directory not found. Check --gdt path.")
 
     ref_accession = args.ref
     bin_size = args.bin
@@ -375,7 +375,7 @@ def main():
     if bed_files.is_file():
         bed_files = [bed_files]
     elif bed_files.is_dir():
-        bed_files = list(bed_files.glob(f"*.bed"))
+        bed_files = list(bed_files.glob("*.bed"))
     else:
         raise ValueError("Bed file/folder not found. Check --bed path.")
 
@@ -427,7 +427,7 @@ def main():
                         gt_intro_files += list(gt_intros.glob(f"{chr}_{intro_group}.txt"))
                     if len(gt_intro_files) != len(intro_groups):
                         raise ValueError(
-                            f"--gt directory specified does not contain all files needed for REF/merged scoring."
+                            "--gt directory specified does not contain all files needed for REF/merged scoring."
                         )
                     gt_df = merge_text_files(gt_intro_files)
                 else:

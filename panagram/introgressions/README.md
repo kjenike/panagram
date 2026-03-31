@@ -21,11 +21,12 @@ and introgressions.
 
 ## Usage and Anchoring Requirements
 
+Install base Panagram before trying to run the introgression caller. It relies on Panagram's bitmap.
 The introgression caller requires the following to be available on the command line:
 - [screen](https://www.gnu.org/software/screen/) (if using --sweep flag)
 - [minimap2 and paftools.js](https://github.com/lh3/minimap2?tab=readme-ov-file#install) (if using 'lift' action during postprocessing)
 
-Additionally, run `pip install reportlab==4.4.1` if using scoring
+Additionally, run `plotly_get_chrome -y` to install Chrome on your system (a plotly dependency) if you don't already have it.
 
 Panagram must be run as usual before the introgression caller can be used. Note that the
 introgression caller was tested on plant genomes with k = 31 for the initial Panagram

@@ -705,7 +705,7 @@ def main():
     )
 
     # write offspring fasta
-    print(f"Writing mutation rate 0, generation 0 introgressed offspring FASTA...", flush=True)
+    print("Writing mutation rate 0, generation 0 introgressed offspring FASTA...", flush=True)
     write_fasta(offspring_seqs, output_folder / f"{reference.stem}_0_offspring.fasta")
     write_bed(introgressions, output_folder / f"{reference.stem}_0_introgressions.bed")
 

@@ -1,21 +1,17 @@
 import sys
 import os
 import os.path
-from os import path
 import subprocess
 import numpy as np
 import pandas as pd
 import bgzip
 import gzip
-import csv
 import glob
 import pysam
-from collections import defaultdict, Counter
+from collections import defaultdict
 from time import time
 from Bio import bgzf, SeqIO
 import yaml
-import multiprocessing as mp
-from types import SimpleNamespace
 import shutil
 import snakemake.cli
 import re
@@ -25,7 +21,7 @@ from sklearn.cluster import DBSCAN
 import dataclasses
 from simple_parsing import field
 from simple_parsing.helpers import Serializable
-from typing import Any, List, Tuple, Type, Union
+from typing import List
 import argparse
 
 logger = logging.getLogger(__name__)
@@ -261,9 +257,9 @@ class Index(Serializable):
     def init_config(self):
 
         samples = pd.read_table(self.input)  # [["name","fasta","gff"]].set_index("name")
-        if not "name" in samples.columns or not "fasta" in samples.columns:
+        if "name" not in samples.columns or "fasta" not in samples.columns:
             raise ValueError("Input samples must contain 'name' and 'fasta' column headers")
-        if not "gff" in samples:
+        if "gff" not in samples:
             samples["gff"] = pd.NA
 
         invalid = ~samples["name"].str.fullmatch(NAME_REGEX)
@@ -518,11 +514,11 @@ class Genome:
 
     @property
     def bins_fname(self):
-        return os.path.join(self.prefix, f"bitsum.bins.tsv")
+        return os.path.join(self.prefix, "bitsum.bins.tsv")
 
     @property
     def chr_genes_fname(self):
-        return os.path.join(self.prefix, f"bitsum.genes.tsv")
+        return os.path.join(self.prefix, "bitsum.genes.tsv")
 
     @property
     def anno_types_fname(self):
@@ -586,7 +582,7 @@ class Genome:
 
     def set_chrs(self, chrs):
         self.chrs = chrs
-        if not "gene_count" in self.chrs.columns:
+        if "gene_count" not in self.chrs.columns:
             self.chrs["gene_count"] = 0
         self.sizes = chrs["size"]
 
@@ -975,7 +971,7 @@ class Genome:
 
         # for chrom,df in gene_df.groupby(level="chr"):
         for chrom in gene_df.index.unique("chr"):
-            if not chrom in self.sizes.index:
+            if chrom not in self.sizes.index:
                 logger.warning(f"Skipping gene at {chrom}:{start}-{end}, chromosome not found")
                 continue
             df = gene_df.loc[chrom]
@@ -1014,12 +1010,12 @@ class Genome:
             return
 
         self.kmc_dbs = self._load_kmc(bitvecs)
-        logger.info(f"KMC Database Loaded")
+        logger.info("KMC Database Loaded")
 
         if self.annotated:
             gene_df = self.init_gff()  # .groupby("chr")
             chr_genes = gene_df.index.get_level_values(0).value_counts()
-            logger.info(f"Annotation pre-processed")
+            logger.info("Annotation pre-processed")
         else:
             chr_genes = pd.Series([0])
         self.chrs["gene_count"] = chr_genes.reindex(self.chrs.index, fill_value=0)
@@ -1031,7 +1027,7 @@ class Genome:
 
         paircount_sums = pd.Series(0, index=self.index.genome_names)
 
-        logger.info(f"Anchoring Started")
+        logger.info("Anchoring Started")
 
         for i, rec in enumerate(self.iter_fasta()):
             chrom = rec.id
@@ -1105,7 +1101,7 @@ class Genome:
                 bitmap, self.index.chrom_umap.bin_size
             ).T.fillna(0)
             chrom_paircounts = pd.concat({chrom: paircounts}, names=["chrom", "start"])
-            print(chrom_paircounts)
+            # print(chrom_paircounts)
             chrom_umaps.append(self.run_umap(chrom_paircounts, self.index.chrom_umap))
 
             genome_paircounts[chrom] = self.index.bitmap_to_paircount_bins(

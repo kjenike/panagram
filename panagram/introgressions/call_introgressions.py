@@ -397,6 +397,8 @@ def visualize(
     genome_size = binned_bitmap.columns[-1]
     height = 12 * binned_bitmap.shape[0] + 200
     width = int(700 * (genome_size / 100_000_000))
+    height = max(height, 500)
+    width = max(width, 500)
 
     fig.update_layout(
         plot_bgcolor="white",

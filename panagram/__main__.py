@@ -1,12 +1,9 @@
-import sys
 import argparse
-import os
 import cProfile
 
-import toml
 from simple_parsing import ArgumentParser, field
 import dataclasses
-from typing import Any, List, Tuple, Type, Union
+from typing import Union
 
 from .index import Index
 

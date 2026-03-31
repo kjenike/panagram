@@ -33,7 +33,6 @@ snakemake --cores 1 all
 anchors=("Reference" "OffspringGen1" "OffspringGen2" "OffspringGen3" "OffspringGen4" "OffspringGen5" "OffspringGen6")
 
 for anchor in "${anchors[@]}"; do
-    echo "Creating heatmap for $anchor..."
     python ../create_heatmap.py \
         --index-dir "$(pwd)" \
         --anchor "$anchor" \

@@ -92,7 +92,7 @@ def bed_file_is_empty(bed_file):
             sep="\t",
             header=None,
         )
-    except pd.errors.EmptyDataError as e:
+    except pd.errors.EmptyDataError:
         return True
     return False
 

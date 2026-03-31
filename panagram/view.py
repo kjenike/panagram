@@ -1,12 +1,7 @@
 import sys
-import csv
-import pysam
 import os.path
-from os import path
 from mycolorpy import colorlist as mcp
-from matplotlib.colors import hex2color
 from plotly.subplots import make_subplots
-import plotly.figure_factory as ff
 import seaborn as sns
 import pandas as pd
 import numpy as np
@@ -17,12 +12,10 @@ import time
 import base64
 from PIL import Image
 from Bio import Phylo
-from scipy import signal
-from dash import Dash, dcc, html, Input, Output, ctx, State, no_update
+from dash import dcc, html, Input, Output, ctx, State, no_update
 from scipy.cluster import hierarchy
 from io import StringIO
 from scipy.cluster.hierarchy import linkage
-from scipy.spatial.distance import pdist, squareform
 from .index import Index
 from . import figs
 
@@ -2622,7 +2615,7 @@ def view(params):
 
         # Chromosome top plot, triggers CHROMOSOME
         elif triggered_id == "chromosome":
-            if not "range" in chrtab_chr_select:
+            if "range" not in chrtab_chr_select:
                 return (no_update,) * 12
             if "x2" in chrtab_chr_select["range"].keys():
                 start_coord = int(chrtab_chr_select["range"]["x2"][0])

@@ -82,7 +82,7 @@ def parse_config(config_path):
             f"--trm {call_trm}" if call_trm is not None else None,
             f"--sft {call_sft}" if call_sft is not None else None,
             f"--ssz {call_ssz}" if call_ssz is not None else None,
-            f"--urf" if call_urf else None,
+            "--urf" if call_urf else None,
             f"--rmu {' '.join(call_rmu)}" if call_rmu else None,
             f"--ogrp {' '.join(call_ogrp)}" if call_ogrp else None,
             f"--ref {ref}",

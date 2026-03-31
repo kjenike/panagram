@@ -1,22 +1,10 @@
-from matplotlib.colors import hex2color
 from plotly.subplots import make_subplots
 from mycolorpy import colorlist as mcp
 import plotly.figure_factory as ff
-import seaborn as sns
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
-import dash
-import time
-from Bio import Phylo
-from scipy import signal
-from dash import Dash, dcc, html, Input, Output, ctx, State, no_update
-from scipy.cluster import hierarchy
-from io import StringIO
-from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import pdist, squareform
-from .index import Index
 
 
 def genome_colors(index, cmap="viridis_r"):

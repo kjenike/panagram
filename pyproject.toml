@@ -2,7 +2,6 @@
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
-
 [project]
 name = "panagram"
 dynamic=["version"]
@@ -16,12 +15,13 @@ dependencies = [
     "Bio",
     "scipy",
     "toml",
-    "bgzip",
     "mycolorpy",
     "seaborn",
     "umap-learn",
     "snakemake>=9",
     "scikit-learn",
+    "kaleido",
+    "reportlab==4.4.1",
 ]
 
 [project.scripts]

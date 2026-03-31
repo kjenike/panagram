@@ -76,7 +76,7 @@ def panagram_heatmap_general(
             output_dir / f"{anchor}_{chr_name}_heatmap.svg",
             inverse=True,
             groups=groups,
-            title=f"{anchor.capitalize()} - {chr_name.capitalize()}",
+            title=f"{anchor} - {chr_name.capitalize()}",
         )
     return
 

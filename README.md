@@ -1,11 +1,11 @@
-# Panagram: Interactive, alignment-free pan-genome browser  
+# Panagram: Interactive, alignment-free pan-genome browser
 
 #### Katie Jenike, Nicole Brown, Sam Kovaka, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Zach Lippman, Ian R Henderson, Michael C Schatz
 
 
 [An alignment-free pan-genome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf)
 
-Please note: installation instructions and pre-processing scripts are a work in progress. 
+Please note: installation instructions and pre-processing scripts are a work in progress.
 
 # Installation
 
@@ -17,31 +17,36 @@ pip install .
 
 The `--recursive` option is required to install the KMC dependency. If you forget to include it, you can update the repository with the command `git submodule update --init`.
 
-Installation may fail if pip is not up-to-date or if setuptools is not up-to-date. In order to update pip and setuptools run: 
+Installation may fail if pip is not up-to-date or if setuptools is not up-to-date. In order to update pip and setuptools run:
 ```
 pip install --upgrade pip
 pip install --upgrade setuptools
 ```
-Please use the dev branch now. This is the most up-to-date. 
+
 ## Dependencies
 
-Requires python version >=3.7, pip, samtools, and tabix. All other dependencies should be automatically installed via pip. Bgzip is also required. 
+Requires python version >=3.11, pip, samtools, bgzip, and tabix. All other dependencies should be automatically installed via pip.
 
-Panagram relies on [KMC](https://github.com/refresh-bio/KMC) to build its kmer index. This should be installed automatically, however it is possible that the KMC installation will fail but panagram will successfully install. In this case `panagram view` can be run, but `panagram index` will return an error. You may be able to debug the KMC installation by running `make -C KMC py_kmc_api` and attempting to fix any errors, then re-run `pip install -v .` after the errors are fixed.
+Panagram relies on [KMC](https://github.com/refresh-bio/KMC) to build its kmer index.
+This should be installed automatically, however it is possible that the KMC installation will fail
+but panagram will successfully install. In this case `panagram view` can be run, but
+`panagram index` will return an error. You may be able to debug the KMC installation by running
+`make -C KMC py_kmc_api` and attempting to fix any errors, then re-run `pip install -v .` after the
+ errors are fixed.
 
 # Running
-Panagram runs in two steps, the anchoring step (index command) and viewing (view command). 
+Panagram runs in two steps, the anchoring step (index command) and viewing (view command).
 
 # Anchoring
 Usage:
 Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap
-Start by preparing the panagram index. For this, you will need a tsv file with a list of the samples. 
+Start by preparing the panagram index. For this, you will need a tsv file with a list of the samples.
 
 ```
-panagram 
+panagram
 usage: panagram index <samples.tsv> -k <k> --prepare
 ```
-The samples.tsv file should contain one sample per line. On each line include the sample name and minimally the fasta file location. See below for an example. 
+The samples.tsv file should contain one sample per line. On each line include the sample name and minimally the fasta file location. See below for an example.
 
 ```
 name	fasta	gff	id	anchor
@@ -53,13 +58,13 @@ sample5	FASTAS/sample5.fasta	GFFS/sample5.gff	4	True
 sample6	FASTAS/sample6.fasta	GFFS/sample6.gff	5	True
 ```
 
-If you have multiple annotation files per sample you can concatenate them into one gff file. 
+If you have multiple annotation files per sample you can concatenate them into one gff file.
 
-Currently genome IDs should only contain alphanumeric characters and underscores due to KMC requirements. 
+Currently genome IDs should only contain alphanumeric characters and underscores due to KMC requirements.
 
-Picking an acceptable k-mer length for the data set can be tricky. For samples that are very similar, a larger k may be more approperiate. While samples that are more diverged may benefit from a smaller k-mer length. These two papers give some detail on picking "good" k-mer length (https://www.cell.com/iscience/fulltext/S2589-0042(24)00275-X?uuid=uuid%3A8d061319-27f8-49ca-b7ee-0d33ec846225 and https://pubmed.ncbi.nlm.nih.gov/39890468/), but if in doubt, k=21 usually works fine. 
+Picking an acceptable k-mer length for the data set can be tricky. For samples that are very similar, a larger k may be more approperiate. While samples that are more diverged may benefit from a smaller k-mer length. These two papers give some detail on picking "good" k-mer length (https://www.cell.com/iscience/fulltext/S2589-0042(24)00275-X?uuid=uuid%3A8d061319-27f8-49ca-b7ee-0d33ec846225 and https://pubmed.ncbi.nlm.nih.gov/39890468/), but if in doubt, k=21 usually works fine.
 
-Once the preparation step is run, you can run snakemake and specify the number of threads you want to use. 
+Once the preparation step is run, you can run snakemake and specify the number of threads you want to use.
 
 ```
 snakemake --verbose --cores 12 all
@@ -72,9 +77,9 @@ Usage:
 ```
 usage: panagram view [-h] <index_dir/> [genome] [chrom] [start] [end]
   index_dir           Panagram index directory
-  genome              Initial anchor genome (optional) 
-  chrom               Initial chromosome (optional) 
-  start               Initial start coordinate (optional) 
+  genome              Initial anchor genome (optional)
+  chrom               Initial chromosome (optional)
+  start               Initial start coordinate (optional)
   end                 Initial end coordinate (optional)
   --ndebug            Run server in production mode (important for a public-
                       facing server)
@@ -105,7 +110,7 @@ usage: panagram bitdump [-h] [-v bool] index_dir coords step
 
 # Example run
 
-First download the example_data.zip bacterial data from: 
+First download the example_data.zip bacterial data from:
 [http://data.schatz-lab.org/panagram/](http://data.schatz-lab.org/panagram/)
 
 [Direct link](https://bx.bio.jhu.edu/data/panagram/example_data.zip)
@@ -120,13 +125,13 @@ To run, first index the genomes:
 ```
 cd example_data
 panagram index samples.tsv -k 21 --prepare
-snakemake --verbose --cores 30 all 
+snakemake --verbose --cores 30 all
 ```
-It is super important that any gff files are in the correct format. GFF format is supported. We strongly suggest that if you run into any problems you first check the format annotation format. This can be done with command line tools like gff3validator or online here: https://genometools.org/cgi-bin/gff3validator.cgi 
+It is super important that any gff files are in the correct format. GFF format is supported. We strongly suggest that if you run into any problems you first check the format annotation format. This can be done with command line tools like gff3validator or online here: https://genometools.org/cgi-bin/gff3validator.cgi
 
 Then you can panagram to visualize (from the example_data directory):
 ```
-panagram view . 
+panagram view .
 ```
 
 From there, you can view the results in your webbrowser at [http://127.0.0.1:8050/](http://127.0.0.1:8050)
@@ -134,11 +139,11 @@ From there, you can view the results in your webbrowser at [http://127.0.0.1:805
 
 # Hosting and Proxies
 
-Panagram uses [Dash](https://dash.plotly.com/introduction) to serve the plotly visualizations. 
-By default the dedicated webserver runs on localhost (127.0.0.1) on port 8050, but you can reverse proxy to a different port and path using a web engine 
+Panagram uses [Dash](https://dash.plotly.com/introduction) to serve the plotly visualizations.
+By default the dedicated webserver runs on localhost (127.0.0.1) on port 8050, but you can reverse proxy to a different port and path using a web engine
 such as [nginx](https://www.nginx.com/)
 
-For nginx, first reconfigure your nginx configuration file to add (note to be very careful 
+For nginx, first reconfigure your nginx configuration file to add (note to be very careful
 with the use of the slash ('/') character):
 
 ```
@@ -147,14 +152,14 @@ with the use of the slash ('/') character):
     }
 ```
 
-The retart nginx with 
+The retart nginx with
 
 ```
 systemctl stop nginx
 systemctl start nginx
 ```
 
-For a secure public-facing server, be sure to run with the option `panagram view --ndebug` to disable debug mode. 
+For a secure public-facing server, be sure to run with the option `panagram view --ndebug` to disable debug mode.
 
 You may also wish to change the base URL path with the `--url_base` option, for example to something like `--url_base /panagram/`. The port and host name can be specified by the `--port` and `--host` options.
 
@@ -174,12 +179,12 @@ name    fasta   gff     id      anchor
 Col_0      FASTAS/wlod_Col-0.ragtag_scaffolds.fa        GFFS/wlod_Col-0.ragtag_scaffolds.gff       0       True
 Tanz_1     FASTAS/wlod_Tanz-1.patch.scaffold.Chr.fa     GFFS/wlod_Tanz-1.patch.scaffold.Chr.gff       1       True
 ```
-The above example would be a comparison with just two genomes 
+The above example would be a comparison with just two genomes
 
 # Using Snakemake (dev branch)
-The dev branch, while actively being developed, currently utilizes Snakemake. This is straightforward to use, you just need a tsv file with a list of samples and corresponding fasta files. 
+The dev branch, while actively being developed, currently utilizes Snakemake. This is straightforward to use, you just need a tsv file with a list of samples and corresponding fasta files.
 
-Example tsv file: 
+Example tsv file:
 ```
 name	fasta	gff	id	anchor
 ecoli	FASTAS/ecoli_GCF_001612495.1_ASM161249v1_genomic.fna	ANNO/ecoli_GCF_001612495.1_ASM161249v1_genomic.gff	0	True
@@ -196,6 +201,6 @@ shigella	FASTAS/shigella_GCF_000006925.2_ASM692v2_genomic.fna	ANNO/shigella_GCF_
 # Ideas for improvement
 - Add a row for gene coverage (rather than just gene density) for the third tab.
 - Update the step size in the control panel.
-- Add the actual sequence. 
+- Add the actual sequence.
 
 ## More information coming soon!
