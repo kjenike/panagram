@@ -2549,7 +2549,7 @@ def view(params):
     ):
         triggered_id = ctx.triggered_id
 
-        n_skips = 100
+        n_skips = index.lowres_step
         anchor_init = anchor
         chrom_init = chrom
         start_init = start_coord
@@ -2802,7 +2802,7 @@ def view(params):
 
         triggered_id = ctx.triggered_id
 
-        n_skips = 100
+        n_skips = index.lowres_step
         chr_num = (
             index[anchor_name].chrs.loc[chrs, "id"] + 1
         )  # chrs_list[anchor_name].get_loc(chrs)+1
