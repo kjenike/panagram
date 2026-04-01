@@ -9,7 +9,6 @@
 
 Welcome to Panagram! Panagram is [an alignment-free pan-genome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf).
 
-
 # Installation
 
 ```
@@ -18,9 +17,12 @@ cd panagram
 pip install .
 ```
 
-The `--recursive` option is required to install the KMC dependency. If you forget to include it, you can update the repository with the command `git submodule update --init`.
+The `--recursive` option is required to install the KMC dependency. If you forget to include it,
+you can update the repository with the command `git submodule update --init`.
 
-Installation may fail if pip is not up-to-date or if setuptools is not up-to-date. In order to update pip and setuptools run:
+Installation may fail if pip is not up-to-date or if setuptools is not up-to-date. In order to
+update pip and setuptools run:
+
 ```
 pip install --upgrade pip
 pip install --upgrade setuptools
@@ -28,7 +30,8 @@ pip install --upgrade setuptools
 
 ## Dependencies
 
-Requires python version >=3.11, pip, samtools, bgzip, and tabix. All other dependencies should be automatically installed via pip.
+Requires python version >=3.11, pip, samtools, bgzip, and tabix. All other dependencies should be
+automatically installed via pip.
 
 Panagram relies on [KMC](https://github.com/refresh-bio/KMC) to build its kmer index.
 This should be installed automatically, however it is possible that the KMC installation will fail
@@ -47,7 +50,7 @@ To prepare Panagram for anchoring, run:
 panagram index <samples.tsv> -k <k> --prepare
 ```
 To choose which genomes will act as anchors, use `--anchor_genomes <one or more space-separated names>`.
-A common choice is to use one or more reference genomes as anchor(s).
+A common choice is to use one or more reference genomes as anchors.
 
 To run the indexing step,
 start by preparing the panagram index. It is best to create an empty folder that will act as Panagram's
@@ -57,7 +60,7 @@ have any annotation files in GFF3 format, you can place them in here. Next, you 
 Panagram where your FASTAS and GFFs are. For this, you will need a tsv file with a list of the samples.
 
 The samples.tsv file should contain one sample per line. You need the name, fasta, and gff columns.
-On each line include the sample name and minimally the fasta file location. Currently genome IDs
+On each line include the sample name and minimally the fasta file location. Currently genome names
 should only contain alphanumeric characters and underscores due to KMC requirements. If you have no
 annotations for a file, leave the gff column blank. If you have multiple annotation files per sample,
 you can concatenate them into one gff file. The id and anchor columns will be created by Panagram. See
@@ -83,7 +86,8 @@ Tanz_1	FASTAS/wlod_Tanz-1.patch.scaffold.Chr.fa	GFFS/wlod_Tanz-1.patch.scaffold.
 
 It is super important that any gff files are in the correct format.
 We strongly suggest that if you run into any problems, you first check the format annotation format.
-This can be done with command line tools like gff3validator or online [here](https://genometools.org/cgi-bin/gff3validator.cgi).
+This can be done with command line tools like gff3validator or online
+[here](https://genometools.org/cgi-bin/gff3validator.cgi).
 
 
 Picking an acceptable k-mer length for the data set can be tricky. For samples that are very similar,
@@ -155,11 +159,10 @@ usage: panagram bitdump [-h] [-v bool] index_dir coords step
 # Example Run
 
 First download the example_data.zip bacterial data from:
-[http://data.schatz-lab.org/panagram/](http://data.schatz-lab.org/panagram/)
+[http://data.schatz-lab.org/panagram/](http://data.schatz-lab.org/panagram/) or use this
+[direct link](https://bx.bio.jhu.edu/data/panagram/example_data.zip).
 
-[Direct link](https://bx.bio.jhu.edu/data/panagram/example_data.zip)
-
-Unzip the archive and you will find 5 bacterial genomes plus their annotations
+Unzip the archive and you will find 5 bacterial genomes plus their annotations:
 ```
 unzip example_data.zip
 ```
@@ -177,13 +180,13 @@ Then you can panagram to visualize (from the example_data directory):
 panagram view .
 ```
 
-From there, you can view the results in your browser at [http://127.0.0.1:8050/](http://127.0.0.1:8050)
+From there, you can view the results in your browser at [http://127.0.0.1:8050/](http://127.0.0.1:8050).
 
 # Hosting and Proxies
 
 Panagram uses [Dash](https://dash.plotly.com/introduction) to serve the plotly visualizations.
-By default the dedicated webserver runs on localhost (127.0.0.1) on port 8050, but you can reverse proxy to a different port and path using a web engine
-such as [nginx](https://www.nginx.com/)
+By default the dedicated webserver runs on localhost (127.0.0.1) on port 8050, but you can reverse
+proxy to a different port and path using a web engine such as [nginx](https://www.nginx.com/).
 
 For nginx, first reconfigure your nginx configuration file to add (note to be very careful
 with the use of the slash ('/') character):
@@ -194,23 +197,28 @@ with the use of the slash ('/') character):
     }
 ```
 
-The retart nginx with
+The retart nginx with:
 
 ```
 systemctl stop nginx
 systemctl start nginx
 ```
 
-For a secure public-facing server, be sure to run with the option `panagram view --ndebug` to disable debug mode.
+For a secure public-facing server, be sure to run with the option `panagram view --ndebug` to
+disable debug mode.
 
-You may also wish to change the base URL path with the `--url_base` option, for example to something like `--url_base /panagram/`. The port and host name can be specified by the `--port` and `--host` options.
+You may also wish to change the base URL path with the `--url_base` option, for example to something
+like `--url_base /panagram/`. The port and host name can be specified by the `--port` and `--host`
+options.
 
-Finally you will need to run panagram using `panagram view <dir>`. You will probably want to run this in a loop
-in case it needs to be restarted, such as:
+Finally you will need to run panagram using `panagram view <dir>`. You will probably want to run
+this in a loop in case it needs to be restarted, such as:
 
 ```
 until panagram view --ndebug .; do echo "restarting"; sleep 1; done
 ```
 
-We will optimize this process in future releases.
+# Contributing and Support
+
+Have a question or found a bug? [Open an issue](https://github.com/kjenike/panagram/issues)!
 
