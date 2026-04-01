@@ -1,11 +1,14 @@
+<div align="center">
+  <img src="./panagram/assets/panagram.png" alt="Panagram" width="300"/>
+</div>
+
 # Panagram: Interactive, alignment-free pan-genome browser
 
 #### Katie Jenike, Nicole Brown, Sam Kovaka, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Zach Lippman, Ian R Henderson, Michael C Schatz
 
 
-[An alignment-free pan-genome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf)
+Welcome to Panagram! Panagram is [an alignment-free pan-genome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf).
 
-Please note: installation instructions and pre-processing scripts are a work in progress.
 
 # Installation
 
@@ -37,16 +40,28 @@ but panagram will successfully install. In this case `panagram view` can be run,
 # Running
 Panagram runs in two steps, the anchoring step (index command) and viewing (view command).
 
-# Anchoring
-Usage:
-Anchor KMC bitvectors to reference FASTA files to create pan-kmer bitmap
-Start by preparing the panagram index. For this, you will need a tsv file with a list of the samples.
+## Anchoring
 
+To prepare Panagram for anchoring, run:
 ```
-panagram
-usage: panagram index <samples.tsv> -k <k> --prepare
+panagram index <samples.tsv> -k <k> --prepare
 ```
-The samples.tsv file should contain one sample per line. On each line include the sample name and minimally the fasta file location. See below for an example.
+To choose which genomes will act as anchors, use `--anchor_genomes <one or more space-separated names>`.
+A common choice is to use one or more reference genomes as anchor(s).
+
+To run the indexing step,
+start by preparing the panagram index. It is best to create an empty folder that will act as Panagram's
+index folder. Within this folder, create a subfolder called FASTAS; this is where you can place any
+FASTAS that you want to include in your pangenome. You can also create a folder called GFFs; if you
+have any annotation files in GFF3 format, you can place them in here. Next, you will need to tell
+Panagram where your FASTAS and GFFs are. For this, you will need a tsv file with a list of the samples.
+
+The samples.tsv file should contain one sample per line. You need the name, fasta, and gff columns.
+On each line include the sample name and minimally the fasta file location. Currently genome IDs
+should only contain alphanumeric characters and underscores due to KMC requirements. If you have no
+annotations for a file, leave the gff column blank. If you have multiple annotation files per sample,
+you can concatenate them into one gff file. The id and anchor columns will be created by Panagram. See
+below for an example.
 
 ```
 name	fasta	gff	id	anchor
@@ -58,22 +73,42 @@ sample5	FASTAS/sample5.fasta	GFFS/sample5.gff	4	True
 sample6	FASTAS/sample6.fasta	GFFS/sample6.gff	5	True
 ```
 
-If you have multiple annotation files per sample you can concatenate them into one gff file.
-
-Currently genome IDs should only contain alphanumeric characters and underscores due to KMC requirements.
-
-Picking an acceptable k-mer length for the data set can be tricky. For samples that are very similar, a larger k may be more approperiate. While samples that are more diverged may benefit from a smaller k-mer length. These two papers give some detail on picking "good" k-mer length (https://www.cell.com/iscience/fulltext/S2589-0042(24)00275-X?uuid=uuid%3A8d061319-27f8-49ca-b7ee-0d33ec846225 and https://pubmed.ncbi.nlm.nih.gov/39890468/), but if in doubt, k=21 usually works fine.
-
-Once the preparation step is run, you can run snakemake and specify the number of threads you want to use.
+As another example, this samples.tsv would be a comparison with just two genomes.
 
 ```
-snakemake --verbose --cores 12 all
+name	fasta	gff	id	anchor
+Col_0	FASTAS/wlod_Col-0.ragtag_scaffolds.fa	GFFS/wlod_Col-0.ragtag_scaffolds.gff	0	True
+Tanz_1	FASTAS/wlod_Tanz-1.patch.scaffold.Chr.fa	GFFS/wlod_Tanz-1.patch.scaffold.Chr.gff	1	True
 ```
 
-# View
+It is super important that any gff files are in the correct format.
+We strongly suggest that if you run into any problems, you first check the format annotation format.
+This can be done with command line tools like gff3validator or online [here](https://genometools.org/cgi-bin/gff3validator.cgi).
 
-Usage:
-  Display panagram viewer
+
+Picking an acceptable k-mer length for the data set can be tricky. For samples that are very similar,
+a larger k may be more approperiate. While samples that are more diverged may benefit from a smaller
+k-mer length. The papers [here](https://www.cell.com/iscience/fulltext/S2589-0042(24)00275-X?uuid=uuid%3A8d061319-27f8-49ca-b7ee-0d33ec846225)
+and [here](https://pubmed.ncbi.nlm.nih.gov/39890468/) give some detail on picking "good" k-mer length,
+but if in doubt, k=21 usually works fine.
+
+Once the preparation step is run, you can run Panagram's anchoring via snakemake and specify the
+number of threads you want to use with this command:
+
+```
+snakemake --cores <num. threads> all
+```
+
+This step anchors KMC bitvectors to FASTA files to create a pan-kmer bitmap.
+
+## View
+
+Once anchoring is complete, navigate to the index folder and view your pangenome with
+`panagram view .` This runs a local Dash server. The pan-genome browser can be viewed at
+ http://127.0.0.1:8050/ by default.
+
+Here is the full set of flags you can choose:
+
 ```
 usage: panagram view [-h] <index_dir/> [genome] [chrom] [start] [end]
   index_dir           Panagram index directory
@@ -91,11 +126,20 @@ usage: panagram view [-h] <index_dir/> [genome] [chrom] [start] [end]
 
 ```
 
-Runs a local Dash server. Browser can be viewed at http://127.0.0.1:8050/ by default.
+# Introgression Calling
+
+<div align="center">
+  <img src="./panagram/introgressions/assets/introgressions.svg" alt="Panagram" width="200"/>
+</div>
+
+Panagram's bitmap also enables calling introgressions between members of your pan-genome. For all
+information on the introgression calling module, see the README [here](./panagram/introgressions).
+
 
 # Bitdump
 
-Usage:
+If you want to see the bitmap generated by Panagram, you can use the following:
+
 ```
 usage: panagram bitdump [-h] [-v bool] index_dir coords step
   Query pan-kmer bitmap generated by "panagram index"/
@@ -108,7 +152,7 @@ usage: panagram bitdump [-h] [-v bool] index_dir coords step
                         Output the full bitmap (default: False)
 ```
 
-# Example run
+# Example Run
 
 First download the example_data.zip bacterial data from:
 [http://data.schatz-lab.org/panagram/](http://data.schatz-lab.org/panagram/)
@@ -127,15 +171,13 @@ cd example_data
 panagram index samples.tsv -k 21 --prepare
 snakemake --verbose --cores 30 all
 ```
-It is super important that any gff files are in the correct format. GFF format is supported. We strongly suggest that if you run into any problems you first check the format annotation format. This can be done with command line tools like gff3validator or online here: https://genometools.org/cgi-bin/gff3validator.cgi
 
 Then you can panagram to visualize (from the example_data directory):
 ```
 panagram view .
 ```
 
-From there, you can view the results in your webbrowser at [http://127.0.0.1:8050/](http://127.0.0.1:8050)
-
+From there, you can view the results in your browser at [http://127.0.0.1:8050/](http://127.0.0.1:8050)
 
 # Hosting and Proxies
 
@@ -172,35 +214,3 @@ until panagram view --ndebug .; do echo "restarting"; sleep 1; done
 
 We will optimize this process in future releases.
 
-# Another example samples.tsv file
-
-```
-name    fasta   gff     id      anchor
-Col_0      FASTAS/wlod_Col-0.ragtag_scaffolds.fa        GFFS/wlod_Col-0.ragtag_scaffolds.gff       0       True
-Tanz_1     FASTAS/wlod_Tanz-1.patch.scaffold.Chr.fa     GFFS/wlod_Tanz-1.patch.scaffold.Chr.gff       1       True
-```
-The above example would be a comparison with just two genomes
-
-# Using Snakemake (dev branch)
-The dev branch, while actively being developed, currently utilizes Snakemake. This is straightforward to use, you just need a tsv file with a list of samples and corresponding fasta files.
-
-Example tsv file:
-```
-name	fasta	gff	id	anchor
-ecoli	FASTAS/ecoli_GCF_001612495.1_ASM161249v1_genomic.fna	ANNO/ecoli_GCF_001612495.1_ASM161249v1_genomic.gff	0	True
-ecoli_k12	FASTAS/ecoli_k12_GCF_000005845.2_ASM584v2_genomic.fna	ANNO/ecoli_k12_GCF_000005845.2_ASM584v2_genomic.gff	1	True
-klebsiella	FASTAS/klebsiella_GCF_000240185.1_ASM24018v2_genomic.fna	ANNO/klebsiella_GCF_000240185.1_ASM24018v2_genomic.gff	True
-salmonella	FASTAS/salmonella_GCF_016117835.1_ASM1611783v1_genomic.fna	ANNO/salmonella_GCF_016117835.1_ASM1611783v1_genomic.gfTrue
-shigella	FASTAS/shigella_GCF_000006925.2_ASM692v2_genomic.fna	ANNO/shigella_GCF_000006925.2_ASM692v2_genomic.gff  4  True
-```
-
-# Known issues
-- Mash dendogram leaf placement is not always perfect
-- Installing on a mac can be tricky. Will need to include a more detailed list of dependancies
-
-# Ideas for improvement
-- Add a row for gene coverage (rather than just gene density) for the third tab.
-- Update the step size in the control panel.
-- Add the actual sequence.
-
-## More information coming soon!
