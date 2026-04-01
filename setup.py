@@ -30,17 +30,16 @@ KMC_BINS = ["kmc", "kmc_tools", "kmc_dump"]
 KMC_URLS = {
     "Linux" : "https://github.com/refresh-bio/KMC/releases/download/v3.2.1/KMC3.2.1.linux.tar.gz",
     "Darwin" : "https://github.com/refresh-bio/KMC/releases/download/v3.2.1/KMC3.2.1.mac.tar.gz",
-    #"Windows" : "https://github.com/refresh-bio/KMC/releases/download/v3.2.1/KMC3.2.1.windows.tar.gz"
 }
 
-MASH_URLS = { 
+MASH_URLS = {
     "Linux" : "https://github.com/marbl/Mash/releases/download/v2.3/mash-Linux64-v2.3.tar",
     "Darwin" : "https://github.com/marbl/Mash/releases/download/v2.3/mash-OSX64-v2.3.tar",
 }
 
 class pre_build(build_py):
     bulid_lib = ROOT_DIR
-    
+
     def run(self):
         call_cmd("make", "-C", KMC_DIR, "clean")
         make_cmd = ["make", "-C", KMC_DIR, "py_kmc_api"]
