@@ -22,13 +22,15 @@ and introgressions.
 ## Usage and Anchoring Requirements
 
 Install base Panagram before trying to run the introgression caller. It relies on Panagram's bitmap.
-The introgression caller requires the following to be available on the command line:
-- [screen](https://www.gnu.org/software/screen/) (if using --sweep flag)
-- [minimap2 and paftools.js](https://github.com/lh3/minimap2?tab=readme-ov-file#install) (if using 'lift' action during postprocessing)
+Additionally, run `plotly_get_chrome -y` to install Chrome on your system (a plotly dependency)
+if you don't already have it.
 
-Additionally, run `plotly_get_chrome -y` to install Chrome on your system (a plotly dependency) if you don't already have it.
+The introgression caller requires [minimap2 and paftools.js](https://github.com/lh3/minimap2?tab=readme-ov-file#install)
+to be available on the command line if using the 'lift' action during postprocessing. Otherwise,
+alignment tools are not required.
 
-Panagram must be run as usual before the introgression caller can be used. Note that the
+
+Panagram's anchoring must be run as usual before the introgression caller can be used. Note that the
 introgression caller was tested on plant genomes with k = 31 for the initial Panagram
 assembly step. You may want to try running Panagram with a similar value of k. If you have several
 contigs in your genome assemblies, you may want to either omit these before running Panagram, or
@@ -64,8 +66,10 @@ group for each recipent and mark introgressions that potentially came from each 
 regions may be marked for different groups; the caller doesn't yet attempt to predict which accession
 was the most likely introgression donor.
 
-Add the `--sweep` flag to try a range of kmer similarity thresholds. Note that this
-kicks off a number of threads equal to `18 * num. threads chosen in config file`.
+Add the `--sweep` flag to try a preset range of kmer similarity thresholds.
+
+The caller will take a couple minutes to run, depending primarily on the number of genomes
+(and their size) and the kmer step size.
 
 ## Helper Visuals
 
@@ -223,7 +227,7 @@ parameters for each section are as follows:
 | anc       | list[string]/null    | accessions to run introgression caller for (set grp to null to use this list instead)|
 | chr       | list[string]/null    | chromosomes to check for introgressions (null = all); you should specify a list of these if your assemblies contain contigs, unless you also want to call introgressions on all contigs |
 | cmp       | list[string]         | REF and/or groups of suspected introgression donors to compare against       |
-| thr       | float                | bins below threshold are introgressions for 2-way; bins more similar to grp than REF by threshold are introgressions for 3-way |
+| thr       | list[float]          | bins below threshold are introgressions for 2-way; bins more similar to grp than REF by threshold are introgressions for 3-way; the caller will run independently for every threshold specified |
 | stp       | int                  | kmer step size when sampling from bitmap; this should match the step size used when running Panagram (almost always 100) |
 | gnm       | float/-1/null        | shift kmer sims to this mean; -1 auto-calc; null disables                     |
 | trm       | int/null             | omit values outside this many stdevs from gnm calculations                      |
@@ -283,6 +287,7 @@ change kmer similarity. For 2-way calling, try to determine what the
 kmer similarity value is for large regions that are noticibly different from the reference (like in
 the example above). In testing, for 2-way calling, thresholds between 0.7-0.8 worked best. For
 3-way calling, the threshold is a bit less important. Smaller thresholds, between 0-0.2 worked best.
+You can always specify multiple thresholds in your config file to try a few different options.
 
 - *gnm*: Normally, this should be kept on. This can especially help if you have very different
 genomes together in the same pangenome. Try setting
