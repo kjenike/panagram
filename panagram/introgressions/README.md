@@ -69,7 +69,7 @@ was the most likely introgression donor.
 Add the `--sweep` flag to try a preset range of kmer similarity thresholds.
 
 The caller will take a couple minutes to run, depending primarily on the number of genomes
-(and their size) and the kmer step size.
+(and their size), the kmer step size, and the number of threads provided.
 
 ## Helper Visuals
 

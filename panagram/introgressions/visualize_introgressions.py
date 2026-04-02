@@ -505,7 +505,7 @@ def main():
         ],
     )
 
-    print("Visualizing results...")
+    print("Visualizing results...", flush=True)
     args = parser.parse_args()
 
     input_dir = Path(args.dir)

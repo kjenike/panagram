@@ -192,6 +192,7 @@ def run_introgression_pipeline(
 
     # Call already runs chromosomes in parallel, so no additional parallelization is needed
     # Call also internally handles multiple thresholds
+    call_thr = [float(thr) for thr in call_thr]  # ensure thresholds are in their float form
     if call_flags:
         call_flags += [f"--thr {' '.join(str(thr) for thr in call_thr)}"]
         subprocess.run(
@@ -235,6 +236,7 @@ def run_introgression_pipeline(
     # Run postprocessing and scoring steps for each threshold in parallel
     if postprocess_flags or score_flags:
         print("Running postprocessing and/or scoring steps for each threshold...")
+        threads = min(threads, len(call_thr))
         try:
             with ThreadPoolExecutor(max_workers=threads) as executor:
                 list(executor.map(run_postprocess_and_score, call_thr))

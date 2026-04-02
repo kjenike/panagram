@@ -776,14 +776,14 @@ def main():
             )
 
     # get preprocessing arguments
-    preprocessing_args = {}
-    preprocessing_args["similarity_normalization_mean"] = args.gnm
+    preprocessing_args_base = {}
+    preprocessing_args_base["similarity_normalization_mean"] = args.gnm
     if args.sft not in (None, "mean", "median"):
         raise ValueError("Invalid smoothing filter selected. Can be mean, median, or None.")
-    preprocessing_args["smoothing_filter"] = args.sft
-    preprocessing_args["smoothing_filter_size"] = args.ssz
-    preprocessing_args["edge_normalization"] = args.edg
-    preprocessing_args["omit_fixed_kmers"] = omit_fixed_kmers
+    preprocessing_args_base["smoothing_filter"] = args.sft
+    preprocessing_args_base["smoothing_filter_size"] = args.ssz
+    preprocessing_args_base["edge_normalization"] = args.edg
+    preprocessing_args_base["omit_fixed_kmers"] = omit_fixed_kmers
     trim_std = args.trm
 
     # determine if we have a single anchor or multiple to run
@@ -832,50 +832,53 @@ def main():
 
     output_dir = Path(args.out)
 
-    for anchor in anchors:
-        print("Now running introgression analysis for", anchor)
-        loop_comp_groups = comp_groups
-        anchor_group = groups.loc[anchor, "group"]
+    futures = []
+    with ProcessPoolExecutor(max_workers=n_threads) as executor:
+        for anchor in anchors:
+            print("Now running introgression analysis for", anchor)
+            anchor_group = groups.loc[anchor, "group"]
 
-        # don't compare anchor against its group
-        if anchor_group in loop_comp_groups:
-            loop_comp_groups.remove(anchor_group)
+            # don't compare anchor against its own group
+            loop_comp_groups = [group for group in comp_groups if group != anchor_group]
+            if not loop_comp_groups:
+                print(
+                    f"Skipping {anchor}: no comparison groups left after removing {anchor_group}."
+                )
+                continue
 
-        # determine whether or not omit_unique_kmers overrides using the reference view for this anchor
-        if omit_unique_for and (anchor in omit_unique_for):
-            print("Note that this accession will output REFA files to allow rmu to run.")
-            loop_using_ref_space = False
-            preprocessing_args["omit_unique_kmers"] = True
-            preprocessing_args["ref_genome_name"] = args.ref
-            preprocessing_args["outgroup_accessions"] = outgroup_accessions
-        else:
-            loop_using_ref_space = using_ref_space
-            preprocessing_args["omit_unique_kmers"] = False
-            preprocessing_args["ref_genome_name"] = None
-            preprocessing_args["outgroup_accessions"] = None
+            # determine whether or not omit_unique_kmers overrides using the reference view for this anchor
+            preprocessing_args = dict(preprocessing_args_base)
+            if omit_unique_for and (anchor in omit_unique_for):
+                print("Note that this accession will output REFA files to allow rmu to run.")
+                loop_using_ref_space = False
+                preprocessing_args["omit_unique_kmers"] = True
+                preprocessing_args["ref_genome_name"] = args.ref
+                preprocessing_args["outgroup_accessions"] = outgroup_accessions
+            else:
+                loop_using_ref_space = using_ref_space
+                preprocessing_args["omit_unique_kmers"] = False
+                preprocessing_args["ref_genome_name"] = None
+                preprocessing_args["outgroup_accessions"] = None
 
-        genome = index.genomes[anchor]
+            genome = index.genomes[anchor]
 
-        genome_similarities = None
-        if args.gnm and not loop_using_ref_space:
-            genome_similarities = get_genome_similarities(
-                genome,
-                bitmap_step,
-                bin_size,
-                omit_fixed_kmers,
-                preprocessing_args["omit_unique_kmers"],
-                preprocessing_args["ref_genome_name"],
-                preprocessing_args["outgroup_accessions"],
-                trim_std,
-            )
+            genome_similarities = None
+            if args.gnm and not loop_using_ref_space:
+                genome_similarities = get_genome_similarities(
+                    genome,
+                    bitmap_step,
+                    bin_size,
+                    omit_fixed_kmers,
+                    preprocessing_args["omit_unique_kmers"],
+                    preprocessing_args["ref_genome_name"],
+                    preprocessing_args["outgroup_accessions"],
+                    trim_std,
+                )
 
-        chromosomes = args.chr
-        if chromosomes is None:
-            chromosomes = genome.sizes.keys()
+            chromosomes = args.chr
+            if chromosomes is None:
+                chromosomes = list(genome.sizes.keys())
 
-        # Parallel execution for chromosomes
-        with ProcessPoolExecutor(max_workers=n_threads) as executor:
-            futures = []
             for chr_name in chromosomes:
                 futures.append(
                     executor.submit(
@@ -897,9 +900,10 @@ def main():
                         group_tsv,
                     )
                 )
-            # Optionally wait for all to finish and raise exceptions if any
-            for future in as_completed(futures):
-                future.result()
+
+        # Wait for all jobs across all anchors/chromosomes and raise exceptions if any
+        for future in as_completed(futures):
+            future.result()
     print("Done.")
     return
 
