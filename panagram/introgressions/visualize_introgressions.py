@@ -161,7 +161,10 @@ def calculate_pr_auc(input_dir, intro_type, thresholds):
 
     results_df = results_df.sort_values("threshold", ascending=True)
 
-    auc_pr = np.trapz(results_df["precision"].values, results_df["recall"].values)
+    if hasattr(np, "trapezoid"):
+        auc_pr = np.trapezoid(results_df["precision"].values, results_df["recall"].values)
+    else:
+        auc_pr = np.trapz(results_df["precision"].values, results_df["recall"].values)
     print(f"PR AUC {intro_type}:", auc_pr)
     print(f"Max MCC {intro_type}:", results_df["MCC"].max())
     return results_df

@@ -1,9 +1,8 @@
 import sys
-import signal
 from pathlib import Path
 import shutil
 import subprocess
-import time
+from concurrent.futures import ThreadPoolExecutor
 import yaml
 
 
@@ -70,6 +69,7 @@ def parse_config(config_path):
     call_flags = None
     if call_run:
         call_flags = [
+            f"--out {output_dir}",
             f"--idx {index_dir}",
             f"--tsv {tsv}",
             f"--grp {call_grp}" if call_grp else None,
@@ -123,10 +123,13 @@ def parse_config(config_path):
             f"--grp {tsv}" if score_vis else None,
         ]
         score_flags = [f for f in score_flags if f]
-    return call_flags, postprocess_flags, score_flags, output_dir, call_thr, call_cmp
+
+    return call_flags, postprocess_flags, score_flags, output_dir, call_thr, call_cmp, threads
 
 
-def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, output_dir, call_thr):
+def run_introgression_pipeline(
+    call_flags, postprocess_flags, score_flags, output_dir, call_thr, call_cmp, threads, sweep
+):
     """Run the introgression pipeline.
 
     Args:
@@ -134,181 +137,120 @@ def run_introgression_pipeline(call_flags, postprocess_flags, score_flags, outpu
         postprocess_flags (list): flags for the postprocessing step
         score_flags (list): flags for the scoring step
         output_dir (Path): directory for output files
-        call_thr (float): threshold for calling introgressions
+        call_thr (list): list of thresholds to run for the calling step
+        call_cmp (list): comparison groups for the calling step
+        threads (int): number of threads to use
+        sweep (bool): whether to run a sweep of thresholds
     """
+    # decide what set if thresholds to use
+    if sweep:
+        if call_cmp == ["REF"]:
+            print("Running sweep for 2-way comparison. Thresholds will be between 0 and 1.")
+            call_thr = [
+                0.1,
+                0.15,
+                0.2,
+                0.25,
+                0.3,
+                0.35,
+                0.4,
+                0.45,
+                0.5,
+                0.55,
+                0.6,
+                0.65,
+                0.7,
+                0.75,
+                0.8,
+                0.85,
+                0.9,
+                0.95,
+            ]
 
-    # Create output directories
-    call_dir = output_dir / f"{output_dir.name}_{call_thr}"
-    call_dir.mkdir(parents=True, exist_ok=True)
-    postprocess_dir = call_dir / "postprocessed"
+        else:
+            print("Running sweep for 3-way comparison. Thresholds will be between 0 and 0.7.")
+            call_thr = [
+                0.0,
+                0.04,
+                0.08,
+                0.12,
+                0.16,
+                0.2,
+                0.24,
+                0.28,
+                0.32,
+                0.36,
+                0.4,
+                0.44,
+                0.48,
+                0.52,
+                0.56,
+                0.6,
+                0.64,
+                0.68,
+            ]
 
-    # Run pipeline
+    # Call already runs chromosomes in parallel, so no additional parallelization is needed
+    # Call also internally handles multiple thresholds
     if call_flags:
-        call_flags += [f"--out {call_dir}", f"--thr {call_thr}"]
+        call_flags += [f"--thr {' '.join(str(thr) for thr in call_thr)}"]
         subprocess.run(
             f"python call_introgressions.py {' '.join(call_flags)}", shell=True, check=True
         )
-    if postprocess_flags:
-        postprocess_flags += [f"--bed {call_dir / 'raw'}", f"--out {postprocess_dir}"]
-        subprocess.run(
-            f"python postprocess_introgressions.py {' '.join(postprocess_flags)}",
-            shell=True,
-            check=True,
-        )
-    if score_flags:
-        score_dir = call_dir / "scored"
-        score_flags += [f"--pre {postprocess_dir}", f"--out {score_dir}"]
-        subprocess.run(
-            f"python score_introgressions.py {' '.join(score_flags)}", shell=True, check=True
-        )
-    print("Introgressions analysis complete.")
-    return
 
-
-def run_introgression_sweep(call_flags, postprocess_flags, score_flags, output_dir, call_cmp):
-    """Run the introgression pipeline through several threshold values.
-
-    Args:
-        call_flags (list): flags for the calling step
-        postprocess_flags (list): flags for the postprocessing step
-        score_flags (list): flags for the scoring step
-        output_dir (Path): directory for output files
-        call_cmp (list): comparison groups for the calling step
-
-    Raises:
-        ValueError: if PAF file is not provided during sweep and liftover is attempted.
-    """
-
-    # throw error if paf is not provided during sweep and the user is trying to perform liftover
-    # this is to prevent spawning multiple screens with duplicate minimap processes
-    if postprocess_flags and any(
-        flag.startswith("--act") and "lift" in flag for flag in postprocess_flags
-    ):
-        if not any(flag.startswith("--paf") for flag in postprocess_flags):
-            raise ValueError(
-                "PAF file/folder must be provided when using liftover during a sweep. Try running the pipeline with a single threshold first to generate the PAF files, or run alignment manually and specify the PAF files."
-            )
-
-    if call_cmp == ["REF"]:
-        print("Running sweep for 2-way comparison. Thresholds will be between 0 and 1.")
-        thresholds = [
-            0.1,
-            0.15,
-            0.2,
-            0.25,
-            0.3,
-            0.35,
-            0.4,
-            0.45,
-            0.5,
-            0.55,
-            0.6,
-            0.65,
-            0.7,
-            0.75,
-            0.8,
-            0.85,
-            0.9,
-            0.95,
-        ]
-
-    else:
-        print("Running sweep for 3-way comparison. Thresholds will be between 0 and 0.7.")
-        thresholds = [
-            0.0,
-            0.04,
-            0.08,
-            0.12,
-            0.16,
-            0.2,
-            0.24,
-            0.28,
-            0.32,
-            0.36,
-            0.4,
-            0.44,
-            0.48,
-            0.52,
-            0.56,
-            0.6,
-            0.64,
-            0.68,
-        ]
-
-    screen_names = []
-
-    # handle Ctrl+C
-    def cleanup_screens():
-        """Kill all screen sessions we created"""
-        for session in screen_names:
-            try:
-                subprocess.run(["screen", "-S", session, "-X", "quit"], stderr=subprocess.DEVNULL)
-                print(f"Killed screen session: {session}")
-            except:
-                pass
-
-    def signal_handler(sig, frame):
-        print("\nCleaning up screen sessions...")
-        cleanup_screens()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    for thr in thresholds:
-        thr_call_flags = call_flags.copy() if call_flags else None
+    def run_postprocess_and_score(thr):
         thr_postprocess_flags = postprocess_flags.copy() if postprocess_flags else None
         thr_score_flags = score_flags.copy() if score_flags else None
 
         call_dir = output_dir / f"{output_dir.name}_{thr}"
-        call_dir.mkdir(parents=True, exist_ok=True)
-
-        # Build the command to run the pipeline for this threshold
-        cmd = []
-        postprocess_dir = call_dir / "postprocessed"
-        if thr_call_flags:
-            thr_call_flags += [f"--out {call_dir}", f"--thr {thr}"]
-            cmd += [f"python call_introgressions.py {' '.join(thr_call_flags)}"]
-        if thr_postprocess_flags:
-            thr_postprocess_flags += [f"--bed {call_dir / 'raw'}", f"--out {postprocess_dir}"]
-            cmd += [f"python postprocess_introgressions.py {' '.join(thr_postprocess_flags)}"]
-        if thr_score_flags:
-            score_dir = call_dir / "scored"
-            thr_score_flags += [f"--pre {postprocess_dir}", f"--out {score_dir}"]
-            cmd += [f"python score_introgressions.py {' '.join(thr_score_flags)}"]
-        if not cmd:
+        if not call_dir.exists():
             raise ValueError(
-                "No steps to run in the pipeline. Please check the configuration file."
+                f"Expected call output directory {call_dir} does not exist. Check if the calling step completed successfully before running postprocessing."
             )
 
-        cmd = " && ".join(cmd)
-        cmd += f"; touch {call_dir / 'done.marker'}"
+        postprocess_dir = call_dir / "postprocessed"
+        log_file = call_dir / "caller.log"
 
-        log_file = call_dir / "sweep.log"
-        screen_name = f"thr_{thr}"
+        with log_file.open("w") as log_handle:
+            if thr_postprocess_flags:
+                thr_postprocess_flags += [f"--bed {call_dir / 'raw'}", f"--out {postprocess_dir}"]
+                subprocess.run(
+                    f"python postprocess_introgressions.py {' '.join(thr_postprocess_flags)}",
+                    shell=True,
+                    check=True,
+                    stdout=log_handle,
+                    stderr=subprocess.STDOUT,
+                )
+            if thr_score_flags:
+                score_dir = call_dir / "scored"
+                thr_score_flags += [f"--pre {postprocess_dir}", f"--out {score_dir}"]
+                subprocess.run(
+                    f"python score_introgressions.py {' '.join(thr_score_flags)}",
+                    shell=True,
+                    check=True,
+                    stdout=log_handle,
+                    stderr=subprocess.STDOUT,
+                )
 
-        # Add a screen wrapper for the command
-        # This allows the command to run in a detached screen session in parallel
-        # Wrap cmd in single quotes so the full command is executed in the screen session
-        screen_cmd = f"screen -d -m -L -Logfile {log_file} -S {screen_name} bash -c '{cmd}'"
-        subprocess.run(screen_cmd, shell=True, check=False)
-        screen_names.append(screen_name)
-
-    # Wait for all done.marker files to exist
-    for thr in thresholds:
-        call_dir = output_dir / f"{output_dir.name}_{thr}"
-        done_marker = call_dir / "done.marker"
-        while not done_marker.exists():
-            print(f"Waiting for {thr}...")
-            time.sleep(15)
-    print("All screens completed.")
+    # Run postprocessing and scoring steps for each threshold in parallel
+    if postprocess_flags or score_flags:
+        print("Running postprocessing and/or scoring steps for each threshold...")
+        try:
+            with ThreadPoolExecutor(max_workers=threads) as executor:
+                list(executor.map(run_postprocess_and_score, call_thr))
+        except subprocess.CalledProcessError as e:
+            print(f"An error occurred while running postprocessing or scoring steps: {e}")
+            print(
+                "Check the caller.log files in each threshold's output directory for more details."
+            )
+            sys.exit(1)
 
     # Run visualization step after all thresholds are done
-    if score_flags and any(flag == "--vis" for flag in score_flags):
-        vis_cmd = f"python visualize_introgressions.py -v prc prcc prca mcc shtmp --dir {output_dir} --thresholds {' '.join(str(thr) for thr in thresholds)}"
+    if score_flags and any(flag == "--vis" for flag in score_flags) and sweep:
+        vis_cmd = f"python visualize_introgressions.py -v prc prcc prca mcc shtmp --dir {output_dir} --thresholds {' '.join(str(thr) for thr in call_thr)}"
         subprocess.run(vis_cmd, shell=True, check=True)
 
-    print("Sweep complete.")
+    print("Introgressions analysis complete.")
     return
 
 
@@ -316,14 +258,23 @@ if __name__ == "__main__":
     # Get config file path from command line argument
     if len(sys.argv) < 2:
         print("Usage: python introgression_runner.py <config.yaml> [--sweep]")
-        sys.exit(1)
+        sys.exit(0)
+
+    sweep = False
+    if len(sys.argv) > 2:
+        if sys.argv[2] == "--sweep":
+            sweep = True
+        else:
+            print(
+                "Unknown command. Use '--sweep' to run pipeline for a preset list of thresholds or no argument to run the pipeline with your list of thresholds."
+            )
 
     config_path = Path(sys.argv[1])
     if not config_path.is_file():
         print(f"Config file {config_path} does not exist.")
         sys.exit(1)
-    call_flags, postprocess_flags, score_flags, output_dir, call_thr, call_cmp = parse_config(
-        config_path
+    call_flags, postprocess_flags, score_flags, output_dir, call_thr, call_cmp, threads = (
+        parse_config(config_path)
     )
 
     # Check if the output directory already exists
@@ -345,14 +296,16 @@ if __name__ == "__main__":
     config_copy_path = output_dir / "intro_config.yaml"
     shutil.copy(config_path, config_copy_path)
 
-    if len(sys.argv) > 2:
-        if sys.argv[2] == "--sweep":
-            run_introgression_sweep(
-                call_flags, postprocess_flags, score_flags, output_dir, call_cmp
+    if (
+        postprocess_flags
+        and (len(call_thr) > 1 or sweep)
+        and any(flag.startswith("--act") and "lift" in flag for flag in postprocess_flags)
+    ):
+        if not any(flag.startswith("--paf") for flag in postprocess_flags):
+            raise ValueError(
+                "PAF folder must be provided when using liftover with multiple thresholds. Try running the pipeline with a single threshold first to generate the PAF folder, or run alignment manually and specify the PAF folder."
             )
-        else:
-            print(
-                "Unknown command. Use '--sweep' to run pipeline for various thresholds or no argument to run the pipeline with one threshold."
-            )
-    else:
-        run_introgression_pipeline(call_flags, postprocess_flags, score_flags, output_dir, call_thr)
+
+    run_introgression_pipeline(
+        call_flags, postprocess_flags, score_flags, output_dir, call_thr, call_cmp, threads, sweep
+    )

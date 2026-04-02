@@ -451,7 +451,7 @@ def run_introgression_finder(
     chr_name,
     groups,
     comp_groups,
-    threshold,
+    thresholds,
     bitmap_step,
     bin_size,
     using_ref_space,
@@ -470,7 +470,7 @@ def run_introgression_finder(
         chr_name (str): the chromosome name
         groups (pd.Series): the groups for each accession
         comp_groups (list): the groups of accessions to compare against
-        threshold (float): the similarity threshold for introgression detection
+        thresholds (list): the similarity thresholds for introgression detection
         bitmap_step (int): step size for sampling kmers in the bitmap (e.g., every 100th kmer)
         bin_size (int): the size of the bins for bitmap creation
         using_ref_space (bool): whether to use the reference genome space instead of accession space
@@ -478,11 +478,10 @@ def run_introgression_finder(
         genome_similarities (pd.DataFrame): the genome similarities (None if not used for preprocessing)
         ref_genome_similarities (pd.DataFrame): the reference genome similarities (None if not used for preprocessing)
         render_vis (bool): whether to render visualizations
-        output_dir (str): the output directory
+        output_dir (Path): the output directory
     """
 
     # Step 1 - choose an anchor and re-create pairwise correlation matrix for it
-    # get an entire chr's bitmap
     chr_size = genome.sizes[chr_name]
     chr_bitmap = genome.query(chr_name, 0, chr_size, step=bitmap_step)
     omit_fixed_kmers = preprocessing_args.pop("omit_fixed_kmers")
@@ -490,106 +489,124 @@ def run_introgression_finder(
     ref_genome_name = preprocessing_args.pop("ref_genome_name")
     outgroup_accessions = preprocessing_args.pop("outgroup_accessions")
 
-    binned_bitmap = bitmap_to_bins(
-        chr_bitmap,
-        bin_size,
-        omit_fixed_kmers,
-        omit_unique_kmers,
-        ref_genome_name,
-        outgroup_accessions,
-    )
+    if using_ref_space:
+        # get reference bitmap
+        ref_chr_size = ref_genome.sizes[chr_name]
+        ref_chr_bitmap = ref_genome.query(chr_name, 0, ref_chr_size, step=bitmap_step)
+        # Note omit unique kmers doesn't make sense here since we are using REF's view
+        ref_binned_bitmap = bitmap_to_bins(ref_chr_bitmap, bin_size, omit_fixed_kmers)
 
-    # preprocess bitmap
-    binned_bitmap = preprocess_binned_bitmap(
-        binned_bitmap, genome_similarities, **preprocessing_args
-    )
+        # preprocess
+        ref_binned_bitmap = preprocess_binned_bitmap(
+            ref_binned_bitmap, ref_genome_similarities, **preprocessing_args
+        )
 
-    # get group information for the anchor's group and the comparison group
-    binned_bitmap = binned_bitmap.merge(groups, left_index=True, right_index=True, how="left")
+        ref_binned_bitmap = ref_binned_bitmap.merge(
+            groups, left_index=True, right_index=True, how="left"
+        )
+        bitmap_for_visualization = ref_binned_bitmap
+
+    else:
+        # get bitmap for anchor
+        binned_bitmap = bitmap_to_bins(
+            chr_bitmap,
+            bin_size,
+            omit_fixed_kmers,
+            omit_unique_kmers,
+            ref_genome_name,
+            outgroup_accessions,
+        )
+
+        # preprocess
+        binned_bitmap = preprocess_binned_bitmap(
+            binned_bitmap, genome_similarities, **preprocessing_args
+        )
+
+        # get group information for the anchor's group and the comparison group
+        binned_bitmap = binned_bitmap.merge(groups, left_index=True, right_index=True, how="left")
+        bitmap_for_visualization = binned_bitmap
 
     # Step 2 - identify potential introgressions by thresholding kmer similarities
-    merged_introgressions = None
-    for comp_group in comp_groups:
-        use_reference = (comp_group == "REF") and using_ref_space
-        if use_reference:
-            # get reference bitmap
-            ref_chr_size = ref_genome.sizes[chr_name]
-            ref_chr_bitmap = ref_genome.query(chr_name, 0, ref_chr_size, step=bitmap_step)
-            # Note omit unique kmers doesn't make sense here since we are using REF's view
-            ref_binned_bitmap = bitmap_to_bins(ref_chr_bitmap, bin_size, omit_fixed_kmers)
+    for threshold in thresholds:
+        merged_introgressions = None
+        threshold_dir = output_dir / f"{output_dir.name}_{threshold}"
+        threshold_dir.mkdir(parents=True, exist_ok=True)
 
-            # preprocess ref_pair in the same way as pair
-            ref_binned_bitmap = preprocess_binned_bitmap(
-                ref_binned_bitmap, ref_genome_similarities, **preprocessing_args
-            )
+        threshold_dir_raw = threshold_dir / "raw"
+        threshold_dir_raw.mkdir(parents=True, exist_ok=True)
 
-            ref_binned_bitmap = ref_binned_bitmap.merge(
-                groups, left_index=True, right_index=True, how="left"
-            )
-            bitmap_for_visualization = ref_binned_bitmap
+        if render_vis:
+            output_dir_vis = threshold_dir / "heatmaps"
+            output_dir_vis.mkdir(parents=True, exist_ok=True)
 
-            # get introgressions by looking at differences with REF
-            introgressions = threshold_introgressions_simple(ref_binned_bitmap, anchor, threshold)
-
-        else:
-            introgressions = threshold_introgressions(binned_bitmap, anchor, comp_group, threshold)
-            bitmap_for_visualization = binned_bitmap
-            # change comp_group to REFA (REF in accession space) for vis and for liftover purposes
-            if comp_group == "REF":
-                comp_group = "REFA"
-
-        # don't allow merged_introgressions to include results from REF when using_ref_space
-        if len(comp_groups) > 1 and not use_reference:
-            if merged_introgressions is None:
-                merged_introgressions = introgressions
+        for comp_group in comp_groups:
+            if using_ref_space:
+                # get introgressions by looking at differences with REF
+                introgressions = threshold_introgressions_simple(
+                    ref_binned_bitmap, anchor, threshold
+                )
             else:
-                merged_introgressions += introgressions
+                # get introgressions by looking at REF and comparison groups if applicable
+                introgressions = threshold_introgressions(
+                    binned_bitmap, anchor, comp_group, threshold
+                )
+                # change comp_group to REFA (REF in accession space) for vis and for liftover purposes
+                if comp_group == "REF":
+                    comp_group = "REFA"
 
-        # Step 3 - visualization
-        # show user introgressions labeled on the original heatmap from panagram
-        if render_vis:
-            # invert values for figure so that introgressions = 0
-            bitmap_for_visualization.loc["Introgressions"] = (
-                ~(introgressions["introgression"].astype(bool))
-            ).astype(int)
-            output_vis = output_dir / "heatmaps"
-            output_vis = output_vis / f"{anchor}_{chr_name}_{comp_group}_heatmap.svg"
-            title = f"{anchor} {chr_name} Introgressions Called with {comp_group}"
-            visualize(
-                bitmap_for_visualization.drop(columns=["group"]),
-                output_vis,
-                inverse=True,
-                title=title,
-                groups=groups,
-            )
+            # merge introgressions from different comparison groups when not using REF
+            if len(comp_groups) > 1:
+                if merged_introgressions is None:
+                    merged_introgressions = introgressions
+                else:
+                    merged_introgressions += introgressions
 
-        # Step 4 - save introgressions to bed file
-        output_bed = output_dir / "raw" / f"{anchor}_{chr_name}_{comp_group}.bed"
-        introgressions = bins_to_bed(introgressions, bin_size, chr_name, comp_group)
-        introgressions.to_csv(output_bed, header=False, index=False, sep="\t")
+            # Step 3 - visualization
+            # show user introgressions labeled on the original heatmap from panagram
+            if render_vis:
+                # invert values for figure so that introgressions = 0
+                bitmap_for_visualization.loc["Introgressions"] = (
+                    ~(introgressions["introgression"].astype(bool))
+                ).astype(int)
+                output_vis = (
+                    threshold_dir / "heatmaps" / f"{anchor}_{chr_name}_{comp_group}_heatmap.svg"
+                )
+                title = f"{anchor} {chr_name} Introgressions Called with {comp_group}"
+                visualize(
+                    bitmap_for_visualization.drop(columns=["group"]),
+                    output_vis,
+                    inverse=True,
+                    title=title,
+                    groups=groups,
+                )
 
-    # Step 5 - repeat analysis one more time with merged introgressions from all comp_groups
-    if merged_introgressions is not None:
-        if render_vis:
-            # divide by the max to get between 0 and 1, do 1 - x to invert
-            bitmap_for_visualization.loc["Introgressions"] = 1 - (
-                merged_introgressions["introgression"]
-                / merged_introgressions["introgression"].max()
-            )
-            output_vis = output_dir / "heatmaps" / f"{anchor}_{chr_name}_merged_heatmap.svg"
-            title = f"{anchor} {chr_name} Merged Introgressions"
-            visualize(
-                bitmap_for_visualization.drop(columns=["group"]),
-                output_vis,
-                inverse=True,
-                title=title,
-                groups=groups,
-            )
+            # Step 4 - save introgressions to bed file
+            output_bed = threshold_dir / "raw" / f"{anchor}_{chr_name}_{comp_group}.bed"
+            introgressions = bins_to_bed(introgressions, bin_size, chr_name, comp_group)
+            introgressions.to_csv(output_bed, header=False, index=False, sep="\t")
 
-        # save introgressions to bed file
-        output_bed = output_dir / "raw" / f"{anchor}_{chr_name}_merged.bed"
-        introgressions = bins_to_bed(merged_introgressions, bin_size, chr_name, "merged")
-        introgressions.to_csv(output_bed, header=False, index=False, sep="\t")
+        # Step 5 - repeat analysis one more time with merged introgressions from all comp_groups
+        if merged_introgressions is not None:
+            if render_vis:
+                # divide by the max to get between 0 and 1, do 1 - x to invert
+                bitmap_for_visualization.loc["Introgressions"] = 1 - (
+                    merged_introgressions["introgression"]
+                    / merged_introgressions["introgression"].max()
+                )
+                output_vis = threshold_dir / "heatmaps" / f"{anchor}_{chr_name}_merged_heatmap.svg"
+                title = f"{anchor} {chr_name} Merged Introgressions"
+                visualize(
+                    bitmap_for_visualization.drop(columns=["group"]),
+                    output_vis,
+                    inverse=True,
+                    title=title,
+                    groups=groups,
+                )
+
+            # save introgressions to bed file
+            output_bed = threshold_dir / "raw" / f"{anchor}_{chr_name}_merged.bed"
+            introgressions = bins_to_bed(merged_introgressions, bin_size, chr_name, "merged")
+            introgressions.to_csv(output_bed, header=False, index=False, sep="\t")
     return
 
 
@@ -598,7 +615,7 @@ def run_introgression_finder_worker(
     ref_genome_name,
     chr_name,
     comp_groups,
-    threshold,
+    thresholds,
     bitmap_step,
     bin_size,
     using_ref_space,
@@ -618,7 +635,7 @@ def run_introgression_finder_worker(
         ref_genome (panagram.index.Genome): the reference genome (None if not using ref space)
         chr_name (str): the chromosome name
         comp_groups (list): the groups of accessions to compare against
-        threshold (float): the similarity threshold for introgression detection
+        thresholds (list): the similarity thresholds for introgression detection
         bitmap_step (int): step size for sampling kmers in the bitmap (e.g., every 100th kmer)
         bin_size (int): size of bitmap bin in bases
         using_ref_space (bool): whether to use the reference genome space instead of accession space
@@ -645,7 +662,7 @@ def run_introgression_finder_worker(
         chr_name,
         groups,
         comp_groups,
-        threshold,
+        thresholds,
         bitmap_step,
         bin_size,
         using_ref_space,
@@ -663,12 +680,6 @@ def main():
     parser.add_argument("--threads", type=int, default=1, help="number of threads to use")
     parser.add_argument("--stp", type=int, default=100, help="bitmap kmer step size")
     parser.add_argument("--bin", type=int, default=1000000, help="size of bitmap bin in bases")
-    parser.add_argument(
-        "--thr",
-        type=float,
-        default=0.75,
-        help="introgressions marked as regions with kmer similarity lower than this threshold",
-    )
     parser.add_argument(
         "--gnm",
         type=float,
@@ -714,6 +725,12 @@ def main():
     parser.add_argument(
         "--cmp", nargs="+", help="group(s) to compare against anchor(s)", required=True
     )
+    parser.add_argument(
+        "--thr",
+        type=float,
+        nargs="+",
+        help="threshold for 2-way or 3-way introgression calling (see threshold_introgressions function for logic)",
+    )
     parser.add_argument("--idx", type=str, help="path to Panagram index folder", required=True)
     parser.add_argument("--tsv", type=str, help="path to accession group TSV file", required=True)
     parser.add_argument("--out", type=str, help="path to folder to save all outputs", required=True)
@@ -722,12 +739,16 @@ def main():
     # input checking
     bitmap_step = args.stp
     bin_size = args.bin
-    threshold = args.thr
+    thresholds = args.thr
     omit_fixed_kmers = args.rmf
     omit_unique_for = args.rmu
     outgroups = args.ogrp
     render_vis = args.vis
     n_threads = args.threads
+    using_ref_space = args.urf
+
+    if not thresholds:
+        raise ValueError("At least one threshold must be provided with --thr.")
 
     group_tsv = Path(args.tsv)
     if not group_tsv.is_file():
@@ -788,17 +809,15 @@ def main():
 
     # set up ref genome if using its view for intro calling
     ref_genome = None
-    using_ref_space = False
     reference = args.ref
 
     ref_genome_similarities = None
-    if args.urf:
+    if using_ref_space:
         if comp_groups != ["REF"]:
             raise ValueError(
                 "REF must be the only comparison group specified with --cmp if using --urf"
             )
         ref_genome = index.genomes[reference]
-        using_ref_space = True
         if args.gnm:
             ref_genome_similarities = get_genome_similarities(
                 ref_genome,
@@ -812,14 +831,6 @@ def main():
             )
 
     output_dir = Path(args.out)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    output_dir_raw = output_dir / "raw"
-    output_dir_raw.mkdir(parents=True, exist_ok=True)
-
-    if render_vis:
-        output_dir_vis = output_dir / "heatmaps"
-        output_dir_vis.mkdir(parents=True, exist_ok=True)
 
     for anchor in anchors:
         print("Now running introgression analysis for", anchor)
@@ -846,7 +857,7 @@ def main():
         genome = index.genomes[anchor]
 
         genome_similarities = None
-        if args.gnm:
+        if args.gnm and not loop_using_ref_space:
             genome_similarities = get_genome_similarities(
                 genome,
                 bitmap_step,
@@ -873,7 +884,7 @@ def main():
                         reference,
                         chr_name,
                         loop_comp_groups,
-                        threshold,
+                        thresholds,
                         bitmap_step,
                         bin_size,
                         loop_using_ref_space,
