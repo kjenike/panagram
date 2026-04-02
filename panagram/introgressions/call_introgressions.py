@@ -224,11 +224,10 @@ def preprocess_binned_bitmap(
         # Add delta to each row only where binned bitmap < 1
         for idx in binned_bitmap.index:
             row = binned_bitmap.loc[idx]
-            mask = row <= 0.98  # don't change bins that are already 1
+            mask = row <= 0.98  # don't change bins that are already close to 1
             row[mask] += delta[idx]
             binned_bitmap.loc[idx] = row.clip(0, 1)
 
-    # TODO: allow edge normalization to be parameterized
     if edge_normalization:
         binned_bitmap = edge_tapered_row_normalization(binned_bitmap)
 
@@ -849,7 +848,8 @@ def main():
             # determine whether or not omit_unique_kmers overrides using the reference view for this anchor
             preprocessing_args = dict(preprocessing_args_base)
             if omit_unique_for and (anchor in omit_unique_for):
-                print("Note that this accession will output REFA files to allow rmu to run.")
+                if loop_using_ref_space:
+                    print("Note that this accession will output REFA files to allow rmu to run.")
                 loop_using_ref_space = False
                 preprocessing_args["omit_unique_kmers"] = True
                 preprocessing_args["ref_genome_name"] = args.ref
