@@ -235,7 +235,7 @@ parameters for each section are as follows:
 | ssz       | int/null             | number of bins in sft filter window; smaller numbers have a weaker smoothing effect |
 | urf       | boolean              | use reference coordinate system; cmp must be set to '[REF]' |
 | rmf       | boolean              | remove fixed kmers shared by all accessions; use to increase contrast |
-| rmu       | list[string]/null    | remove kmers not in REF or ogrp for these noisy accessions; forces urf=false for these accessions |
+| rmu       | list[string]/true/null | remove kmers not in REF or ogrp for these noisy accessions; forces urf=false for these accessions; set to true to remove these kmers for all accessions |
 | ogrp      | list[string]/null    | outgroup accessions; remove kmers not present in these groups for rmu accessions |
 | edg       | boolean              | highlight edges and dampen center kmer similarities for genomes with many SVs near chromosome edges  |
 | vis       | boolean              | visualize binned bitmap and detected introgressions                          |

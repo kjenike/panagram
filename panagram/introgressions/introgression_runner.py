@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 import shutil
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import yaml
 
 
@@ -68,6 +68,11 @@ def parse_config(config_path):
     # Build flags for each step
     call_flags = None
     if call_run:
+        if call_rmu is True:
+            call_rmu = "--rmu true"
+        else:
+            call_rmu = f"--rmu {' '.join(call_rmu)}" if call_rmu else None
+
         call_flags = [
             f"--out {output_dir}",
             f"--idx {index_dir}",
@@ -83,7 +88,7 @@ def parse_config(config_path):
             f"--sft {call_sft}" if call_sft is not None else None,
             f"--ssz {call_ssz}" if call_ssz is not None else None,
             "--urf" if call_urf else None,
-            f"--rmu {' '.join(call_rmu)}" if call_rmu else None,
+            call_rmu,
             f"--ogrp {' '.join(call_ogrp)}" if call_ogrp else None,
             f"--ref {ref}",
             "--rmf" if call_rmf else None,
@@ -215,37 +220,66 @@ def run_introgression_pipeline(
         with log_file.open("w") as log_handle:
             if thr_postprocess_flags:
                 thr_postprocess_flags += [f"--bed {call_dir / 'raw'}", f"--out {postprocess_dir}"]
-                subprocess.run(
+                result = subprocess.run(
                     f"python postprocess_introgressions.py {' '.join(thr_postprocess_flags)}",
                     shell=True,
-                    check=True,
-                    stdout=log_handle,
+                    check=False,
+                    stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
+                    text=True,
                 )
+                log_handle.write(result.stdout)
+                log_handle.write("\n")
+                log_handle.flush()
+
+                if result.returncode != 0:
+                    raise subprocess.CalledProcessError(
+                        result.returncode, result.args, result.stdout, result.stderr
+                    )
+
             if thr_score_flags:
                 score_dir = call_dir / "scored"
                 thr_score_flags += [f"--pre {postprocess_dir}", f"--out {score_dir}"]
-                subprocess.run(
+                result = subprocess.run(
                     f"python score_introgressions.py {' '.join(thr_score_flags)}",
                     shell=True,
-                    check=True,
-                    stdout=log_handle,
+                    check=False,
+                    stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
+                    text=True,
                 )
+
+                log_handle.write(result.stdout)
+                log_handle.write(result.stdout)
+                log_handle.write("\n")
+                log_handle.flush()
+
+                if result.returncode != 0:
+                    raise subprocess.CalledProcessError(
+                        result.returncode, result.args, result.stdout, result.stderr
+                    )
 
     # Run postprocessing and scoring steps for each threshold in parallel
     if postprocess_flags or score_flags:
         print("Running postprocessing and/or scoring steps for each threshold...")
         threads = min(threads, len(call_thr))
-        try:
-            with ThreadPoolExecutor(max_workers=threads) as executor:
-                list(executor.map(run_postprocess_and_score, call_thr))
-        except subprocess.CalledProcessError as e:
-            print(f"An error occurred while running postprocessing or scoring steps: {e}")
-            print(
-                "Check the caller.log files in each threshold's output directory for more details."
-            )
-            sys.exit(1)
+
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            futures = {executor.submit(run_postprocess_and_score, thr): thr for thr in call_thr}
+
+            for future in as_completed(futures):
+                thr = futures[future]
+                try:
+                    future.result()  # raise any exception that occurred
+                except subprocess.CalledProcessError as e:
+                    print(f"An error occurred while processing threshold {thr}: {e}")
+                    print(
+                        "Check the caller.log files in each threshold's output directory for more details."
+                    )
+                    # Cancel remaining futures
+                    for f in futures:
+                        f.cancel()
+                    sys.exit(1)
 
     # Run visualization step after all thresholds are done
     if score_flags and any(flag == "--vis" for flag in score_flags) and sweep:
@@ -287,11 +321,11 @@ if __name__ == "__main__":
         if response.lower() == "y":
             shutil.rmtree(output_dir)
             print(f"Deleted existing output directory: {output_dir}")
-        else:
-            # remove done.marker files if they exist
-            for marker in output_dir.rglob("done.marker"):
-                marker.unlink()
+        elif response.lower() == "n":
             print("Running pipeline with existing output directory. Results may be overwritten.")
+        else:
+            print("Invalid response. Exiting.")
+            sys.exit(1)
 
     # Copy the config file into the output directory
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -8,6 +8,53 @@ import plotly.express as px
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
+def fill_snps(row, gap_size):
+    """Fill SNPs (gaps of zeros == gap_size) in a row of a DataFrame.
+
+    Args:
+        row (pd.Series): the row of the DataFrame to fill SNPs in
+        gap_size (int): the size of the gaps to fill
+
+    Returns:
+        np.ndarray: the modified row with SNPs filled
+    """
+
+    # convert row to numpy array
+    arr = row.values
+
+    # find the indices of the 1s
+    ones = np.where(arr == 1)[0]
+
+    starts = ones[:-1]
+    ends = ones[1:]
+
+    # Gap lengths
+    gaps = ends - starts - 1
+
+    # Save summary statistics
+    # unique_gaps, counts = np.unique(gaps, return_counts=True)
+    # gap_stats = pd.Series(counts, index=unique_gaps)
+    # row_name = row.name
+    # gap_stats.to_csv(f"./gap_stats_{row_name}.csv")
+
+    # Which gaps match the desired size
+    match = np.where(gaps == gap_size)[0]
+    for idx in match:
+        gap_start = starts[idx] + 1
+        gap_end = ends[idx]
+        arr[gap_start:gap_end] = 1
+
+    # handle edge case where gap is at the beginning
+    if arr[:gap_size].sum() == 0:
+        arr[:gap_size] = 1
+
+    # handle edge case where gap is at the end
+    if arr[-gap_size:].sum() == 0:
+        arr[-gap_size:] = 1
+
+    return arr
+
+
 def bitmap_to_bins(
     bitmap,
     binlen,
@@ -25,7 +72,7 @@ def bitmap_to_bins(
         omit_fixed_kmers (bool, optional): whether to omit fixed kmers, defaults to False
         omit_unique_kmers (bool, optional): whether to omit unique kmers (those not present in neither a reference nor outgroup), defaults to False
         ref_genome_name (str, optional): the name of the reference genome, defaults to None
-    outgroup_accessions (list, optional): the accessions of the introgression donor genomes, defaults to None
+        outgroup_accessions (list, optional): the accessions of the introgression donor genomes, defaults to None
 
     Returns:
         pd.DataFrame: the binned kmer similarities
@@ -38,12 +85,12 @@ def bitmap_to_bins(
 
     if omit_unique_kmers:
         # omit kmers that aren't present in the reference or the out groups
-        kmers_to_keep_columns = outgroup_accessions
+        kmers_to_keep_columns = outgroup_accessions.copy()
         kmers_to_keep_columns.append(ref_genome_name)
 
         # find kmers that aren't present in the reference or the wild accessions and set their reference column to 1
         bitmap_with_bin_idx.loc[
-            bitmap_with_bin_idx[kmers_to_keep_columns].sum(axis=1) == 0, ref_genome_name
+            bitmap_with_bin_idx[kmers_to_keep_columns].sum(axis=1) == 0, kmers_to_keep_columns
         ] = 1
 
     all_bins = bitmap_with_bin_idx.index.get_level_values(0).unique()
@@ -703,7 +750,11 @@ def main():
         help="perform edge tapered normalization on binned bitmap",
     )
     parser.add_argument("--rmf", action="store_true", help="remove fixed kmers from bitmap")
-    parser.add_argument("--rmu", nargs="+", help="remove unique kmers from given bitmaps")
+    parser.add_argument(
+        "--rmu",
+        nargs="+",
+        help="remove unique kmers from given genomes; use 'True' to apply to all anchors",
+    )
     parser.add_argument("--ogrp", nargs="+", help="group(s) to use as outgroup when using --rmu")
     parser.add_argument("--vis", action="store_true", help="save svgs of visualized results")
     parser.add_argument(
@@ -759,21 +810,6 @@ def main():
     index = Index(index_dir)
     groups = pd.read_csv(group_tsv, sep="\t", index_col=0)
 
-    outgroup_accessions = []
-    if omit_unique_for is not None:
-        if args.ref is None:
-            raise ValueError("Reference genome must be provided using --ref when using --rmu.")
-        # get list of outgroup accessions
-        outgroup_accessions = groups[groups.group.isin(outgroups)].index.tolist()
-        if "REF" in outgroup_accessions:
-            raise ValueError(
-                "REF cannot be used as an outgroup accession. Please remove REF from the groups specified in --ogrp."
-            )
-        if any(acc in outgroup_accessions for acc in omit_unique_for):
-            raise ValueError(
-                "Accessions specified in --rmu cannot be in the outgroup. Please remove any accessions specified in --rmu from the groups specified in --ogrp."
-            )
-
     # get preprocessing arguments
     preprocessing_args_base = {}
     preprocessing_args_base["similarity_normalization_mean"] = args.gnm
@@ -797,6 +833,26 @@ def main():
         if args.grp is not None:
             raise ValueError("Cannot use both --anc and --grp. Use one or the other.")
 
+    outgroup_accessions = []
+    if omit_unique_for is not None:
+        if args.ref is None:
+            raise ValueError("Reference genome must be provided using --ref when using --rmu.")
+        if len(omit_unique_for) == 1 and omit_unique_for[0] == "true":
+            omit_unique_for = anchors.copy()
+
+        # get list of outgroup accessions
+        if outgroups is None:
+            raise ValueError("Outgroup groups must be provided using --ogrp when using --rmu.")
+        outgroup_accessions = groups[groups.group.isin(outgroups)].index.tolist()
+        if "REF" in outgroup_accessions:
+            raise ValueError(
+                "REF cannot be used as an outgroup accession. Please remove REF from the groups specified in --ogrp."
+            )
+        if any(acc in outgroup_accessions for acc in omit_unique_for):
+            raise ValueError(
+                "Accessions specified in --rmu cannot be in the outgroup. Please remove any accessions specified in --rmu from the groups specified in --ogrp."
+            )
+
     comp_groups = args.cmp
     # ensure every element is only in there once
     comp_groups = list(set(comp_groups))
@@ -814,7 +870,7 @@ def main():
     if using_ref_space:
         if comp_groups != ["REF"]:
             raise ValueError(
-                "REF must be the only comparison group specified with --cmp if using --urf"
+                "REF must be the only comparison group specified with --cmp if using --urf."
             )
         ref_genome = index.genomes[reference]
         if args.gnm:
@@ -848,7 +904,7 @@ def main():
             # determine whether or not omit_unique_kmers overrides using the reference view for this anchor
             preprocessing_args = dict(preprocessing_args_base)
             if omit_unique_for and (anchor in omit_unique_for):
-                if loop_using_ref_space:
+                if using_ref_space:
                     print("Note that this accession will output REFA files to allow rmu to run.")
                 loop_using_ref_space = False
                 preprocessing_args["omit_unique_kmers"] = True
