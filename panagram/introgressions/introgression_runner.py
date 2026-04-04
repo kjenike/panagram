@@ -250,7 +250,6 @@ def run_introgression_pipeline(
                 )
 
                 log_handle.write(result.stdout)
-                log_handle.write(result.stdout)
                 log_handle.write("\n")
                 log_handle.flush()
 
