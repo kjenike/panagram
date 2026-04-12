@@ -4,7 +4,7 @@
 
 # Panagram: Interactive, alignment-free pan-genome browser
 
-#### Katie Jenike, Nicole Brown, Sam Kovaka, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Zach Lippman, Ian R Henderson, Michael C Schatz
+#### Katie Jenike, Nicole Brown, Sam Kovaka, Robin Burns, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Elinor Karlsson, Zach Lippman, Ian R Henderson, Michael C Schatz
 
 
 Welcome to Panagram! Panagram is [an alignment-free pan-genome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf).
@@ -38,7 +38,8 @@ This should be installed automatically, however it is possible that the KMC inst
 but panagram will successfully install. In this case `panagram view` can be run, but
 `panagram index` will return an error. You may be able to debug the KMC installation by running
 `make -C KMC py_kmc_api` and attempting to fix any errors, then re-run `pip install -v .` after the
- errors are fixed.
+ errors are fixed. An alternative fix is to manually update pybind11 in the KMC directory. You will need to replace the "panagram/KMC/py_kmc_api/libs/pybind11/include" directory with the latest version at https://github.com/pybind/pybind11/tree/master/include/pybind11.
+ We are activley working to fix this for a smoother installation. 
 
 # Running
 Panagram runs in two steps, the anchoring step (index command) and viewing (view command).
