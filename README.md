@@ -30,8 +30,8 @@ pip install --upgrade setuptools
 
 ## Dependencies
 
-Requires python version >=3.11, pip, samtools, bgzip, and tabix. All other dependencies should be
-automatically installed via pip.
+Requires python version >=3.11, pip, samtools, and bgzip from tabix/HTSlib. All other dependencies
+should be automatically installed via pip.
 
 Panagram relies on [KMC](https://github.com/refresh-bio/KMC) to build its kmer index. This should be
 installed automatically, however it is possible that the KMC installation will fail but panagram
