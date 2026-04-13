@@ -282,7 +282,7 @@ def view(params):
                     )
                 ]),
             html.Div(className="w3-quarter", children=[
-                #Control panel for the annotation tab plots 
+                #Control panel for the annotation tab plots
                 html.I("Color by: ", style={ "font-size": 40}),
                 html.Br(),
                 dcc.RadioItems(
@@ -294,8 +294,8 @@ def view(params):
                         {'label':' Selected region [FUTURE FEATURE]', 'value':' Selected region [FUTURE FEATURE]', 'disabled':True }
                     ], value = " Log2 gene length",
                     #[' Log2 gene length', ' Gene length', ' Chromosome', ' Bed file [FUTURE FEATURE]'],
-                    #' Log2 gene length', 
-                    labelStyle={"display":"block"}, style={'font-size' : 30, }, id="radios", 
+                    #' Log2 gene length',
+                    labelStyle={"display":"block"}, style={'font-size' : 30, }, id="radios",
                 ),
                 html.Br(),
                 html.I("", style={ "font-size": 30}, id="annotation_tab_clickdata_Name"),
@@ -307,7 +307,7 @@ def view(params):
                 html.I("", style={ "font-size": 30}, id="annotation_tab_clickdata_Color"),
                 html.Br(),
                 html.P("", style={ "font-size": 30, "overflow-wrap": "break-word"}, id="annotation_tab_clickdata_Attr"),
-                
+
                 ], style={'padding' : '1%', "height": 1250}),
             ])#"border":"2px grey solid"
         ])
@@ -1566,7 +1566,7 @@ def view(params):
                 continue
             if not isinstance(axis, go.layout.YAxis):
                 continue
-            
+
             if attr.startswith("yaxis"):
                 #yaxis = getattr(fig.layout, attr)
                 axis = getattr(fig.layout, attr)
@@ -1581,7 +1581,7 @@ def view(params):
             # Case 1: Numerical axis with defined range
             if getattr(axis, 'type', None) in (None, 'linear', 'log'):
                 print(f"Range: {getattr(axis, 'range', 'None')}")
-        
+
                 # Case 2: Categorical axis
             else: #axis.type == 'category':
                 categories = set()
@@ -2394,7 +2394,7 @@ def view(params):
         fig = go.Figure(
             data=[
                 go.Heatmap(
-                    
+
                     z=a,
                     colorscale="Portland",
                     showscale=True,
