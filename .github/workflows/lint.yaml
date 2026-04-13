@@ -1,26 +1,38 @@
-name: Python linting
+name: Linting and Type Checking
 on: [push, pull_request]
+
 jobs:
-  test:
-    name: Test
+  ruff:
+    name: Ruff Linting
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.11']
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.11'
       - name: Install ruff
         run: pip install ruff
       - name: Run linting
         run: ruff check panagram
+
+  mypy:
+    name: Type Checking
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
       - name: Install mypy
         run: pip install mypy
       - name: Run type checking
         run: mypy panagram
+
+  markdown:
+    name: Markdown Linting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
       - name: Lint Markdown
         uses: DavidAnson/markdownlint-cli2-action@v16
         with:
