@@ -12,7 +12,7 @@ calling:
   anc: null
   chr: null
   cmp: [WT]
-  thr: 0.2
+  thr: [0.2]
   stp: 100
   gnm: 0.9
   trm: 3

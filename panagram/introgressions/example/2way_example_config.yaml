@@ -12,7 +12,7 @@ calling:
   anc: null
   chr: null
   cmp: [REF]
-  thr: 0.8
+  thr: [0.8]
   stp: 100
   gnm: -1
   trm: 3
