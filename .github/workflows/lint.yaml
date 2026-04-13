@@ -21,4 +21,9 @@ jobs:
         run: pip install mypy
       - name: Run type checking
         run: mypy panagram
-
+      - name: Lint Markdown
+        uses: DavidAnson/markdownlint-cli2-action@v16
+        with:
+          globs: |
+            README.md
+            panagram/introgressions/README.md
