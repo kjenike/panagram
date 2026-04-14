@@ -1,4 +1,4 @@
-name: Linting and Type Checking
+name: Linting
 on: [push, pull_request]
 
 jobs:

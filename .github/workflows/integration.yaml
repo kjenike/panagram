@@ -1,4 +1,4 @@
-name: Introgression Example
+name: Integration
 
 on:
   push:

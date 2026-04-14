@@ -4,6 +4,9 @@
 
 # Panagram: Interactive, alignment-free pan-genome browser
 
+[![Release](https://img.shields.io/github/v/release/kjenike/panagram)](https://github.com/kjenike/panagram/releases)
+[![Integration](https://github.com/kjenike/panagram/actions/workflows/integration.yaml/badge.svg)](https://github.com/kjenike/panagram/actions/workflows/integration.yaml)
+
 #### Katie Jenike, Nicole Brown, Sam Kovaka, Robin Burns, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Elinor Karlsson, Zach Lippman, Ian R Henderson, Michael C Schatz
 
 Welcome to Panagram! Panagram is
