@@ -14,14 +14,8 @@ Welcome to Panagram! Panagram is
 
 # Installation
 
-```bash
-git clone --recursive https://github.com/kjenike/panagram.git
-cd panagram
-pip install .
-```
-
-The `--recursive` option is required to install the KMC dependency. If you forget to include it, you
-can update the repository with the command `git submodule update --init`.
+Requires python version >=3.11, pip, samtools, tabix, and bgzip from HTSlib. All other dependencies
+should be automatically installed via pip.
 
 Installation may fail if pip is not up-to-date or if setuptools is not up-to-date. In order to
 update pip and setuptools run:
@@ -31,10 +25,18 @@ pip install --upgrade pip
 pip install --upgrade setuptools
 ```
 
-## Dependencies
+Once dependencies are installed, run:
 
-Requires python version >=3.11, pip, samtools, and bgzip from tabix/HTSlib. All other dependencies
-should be automatically installed via pip.
+```bash
+git clone --recursive https://github.com/kjenike/panagram.git
+cd panagram
+pip install .
+```
+
+The `--recursive` option is required to install the KMC dependency. If you forget to include it, you
+can update the repository with the command `git submodule update --init`.
+
+## Notes
 
 Panagram relies on [KMC](https://github.com/refresh-bio/KMC) to build its kmer index. This should be
 installed automatically, however it is possible that the KMC installation will fail but panagram
@@ -102,8 +104,8 @@ line tools like gff3validator or online at
 Picking an acceptable k-mer length for the data set can be tricky. For samples that are very
 similar, a larger k may be more approperiate. While samples that are more diverged may benefit from
 a smaller k-mer length. The papers by
-[Camara et al. (2024)](<https://www.cell.com/iscience/fulltext/S2589-0042(24)00275-X?uuid=uuid%3A8d061319-27f8-49ca-b7ee-0d33ec846225>)
-and [Smith et al. (2025)](https://pubmed.ncbi.nlm.nih.gov/39890468/) give some detail on picking
+[Bonnie et al. (2024)](<https://www.cell.com/iscience/fulltext/S2589-0042(24)00275-X?uuid=uuid%3A8d061319-27f8-49ca-b7ee-0d33ec846225>)
+and [Jenike et al. (2025)](https://pubmed.ncbi.nlm.nih.gov/39890468/) give some detail on picking
 "good" k-mer length, but if in doubt, k=21 usually works fine.
 
 Once the preparation step is run, you can run Panagram's anchoring via snakemake and specify the
