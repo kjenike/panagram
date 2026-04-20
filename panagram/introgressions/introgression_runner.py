@@ -147,6 +147,9 @@ def run_introgression_pipeline(
         threads (int): number of threads to use
         sweep (bool): whether to run a sweep of thresholds
     """
+    # Get the directory where this script is located
+    runner_dir = Path(__file__).resolve().parent
+
     # decide what set if thresholds to use
     if sweep:
         if call_cmp == ["REF"]:
@@ -201,7 +204,9 @@ def run_introgression_pipeline(
     if call_flags:
         call_flags += [f"--thr {' '.join(str(thr) for thr in call_thr)}"]
         subprocess.run(
-            f"python call_introgressions.py {' '.join(call_flags)}", shell=True, check=True
+            f"python {runner_dir / 'call_introgressions.py'} {' '.join(call_flags)}",
+            shell=True,
+            check=True,
         )
 
     def run_postprocess_and_score(thr):
@@ -221,7 +226,7 @@ def run_introgression_pipeline(
             if thr_postprocess_flags:
                 thr_postprocess_flags += [f"--bed {call_dir / 'raw'}", f"--out {postprocess_dir}"]
                 result = subprocess.run(
-                    f"python postprocess_introgressions.py {' '.join(thr_postprocess_flags)}",
+                    f"python {runner_dir / 'postprocess_introgressions.py'} {' '.join(thr_postprocess_flags)}",
                     shell=True,
                     check=False,
                     stdout=subprocess.PIPE,
@@ -241,7 +246,7 @@ def run_introgression_pipeline(
                 score_dir = call_dir / "scored"
                 thr_score_flags += [f"--pre {postprocess_dir}", f"--out {score_dir}"]
                 result = subprocess.run(
-                    f"python score_introgressions.py {' '.join(thr_score_flags)}",
+                    f"python {runner_dir / 'score_introgressions.py'} {' '.join(thr_score_flags)}",
                     shell=True,
                     check=False,
                     stdout=subprocess.PIPE,
@@ -282,7 +287,7 @@ def run_introgression_pipeline(
 
     # Run visualization step after all thresholds are done
     if score_flags and any(flag == "--vis" for flag in score_flags) and sweep:
-        vis_cmd = f"python visualize_introgressions.py -v prc prcc prca mcc shtmp --dir {output_dir} --thresholds {' '.join(str(thr) for thr in call_thr)}"
+        vis_cmd = f"python {runner_dir / 'visualize_introgressions.py'} -v prc prcc prca mcc shtmp --dir {output_dir} --thresholds {' '.join(str(thr) for thr in call_thr)}"
         subprocess.run(vis_cmd, shell=True, check=True)
 
     print("Introgressions analysis complete.")

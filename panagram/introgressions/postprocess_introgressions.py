@@ -349,7 +349,9 @@ def run_liftovers(
         columns=["Chromosome", "Start", "End", "Notes", "Accession", "Introgression Type"]
     )
     for bed_file in bed_files:
-        bed_chr, bed_accession, bed_intro_type = get_bed_pieces(bed_file)
+        bed_chr, bed_accession, bed_intro_type = get_bed_pieces(
+            bed_file, accession_candidates=unique_accessions
+        )
 
         # find paf file with the same name of the bed file
         if paf_dir.is_dir():
@@ -551,21 +553,44 @@ def remove_small_regions(row, min_size):
     return row
 
 
-def get_bed_pieces(bed_file):
-    """Get the chromosome, accession, and introgression type from a bed file name. Assumes bed file
-    names are in the format "accession_chr_introgressiontype.bed".
+def get_bed_pieces(bed_file, accession_candidates):
+    """Get chromosome, accession, and introgression type from a bed filename.
+
+    Filename format is <accession>_<chromosome>_<intro_type>.bed. Accession is
+    resolved as the longest matching prefix from accession_candidates so both
+    accession and chromosome can contain underscores.
 
     Args:
         bed_file (str or Path): path to bed file
+        accession_candidates (iterable): known accession names for disambiguation
 
     Returns:
         tuple: chromosome, accession, and introgression type
     """
 
-    parts = bed_file.stem.split("_")
-    bed_intro_type = parts[-1]
-    bed_chr = parts[-2]
-    bed_accession = "_".join(parts[:-2])
+    stem = Path(bed_file).stem
+    parsed = False
+    bed_chr = None
+    bed_accession = None
+    bed_intro_type = None
+
+    if "_" in stem:
+        stem_no_intro, bed_intro_type = stem.rsplit("_", 1)
+        matches = [
+            accession
+            for accession in accession_candidates
+            if stem_no_intro == accession or stem_no_intro.startswith(f"{accession}_")
+        ]
+        if matches:
+            bed_accession = max(matches, key=len)
+            bed_chr = stem_no_intro[len(bed_accession) :].lstrip("_")
+            parsed = bool(bed_chr)
+
+    if not parsed:
+        raise ValueError(
+            f"Unable to parse bed file name '{stem}'. Expected '<accession>_<chromosome>_<intro_type>.bed'."
+        )
+
     return bed_chr, bed_accession, bed_intro_type
 
 
@@ -663,7 +688,9 @@ def postprocess_introgressions():
         # Get unique bed_accessions from bed_files
         unique_accessions = set()
         for bed_file in bed_files:
-            bed_accession = bed_file.name.split("_")[0]
+            _, bed_accession, _ = get_bed_pieces(
+                bed_file, accession_candidates=index.genomes.keys()
+            )
             unique_accessions.add(bed_accession)
 
         # perform alignment if needed
@@ -688,7 +715,9 @@ def postprocess_introgressions():
         )
 
     for bed_file in bed_files:
-        bed_chr, bed_accession, bed_intro_type = get_bed_pieces(bed_file)
+        bed_chr, bed_accession, bed_intro_type = get_bed_pieces(
+            bed_file, accession_candidates=index.genomes.keys()
+        )
         bed_genome = index.genomes[bed_accession]
         if "lift" in actions:
             bed_genome = index.genomes[args.ref]

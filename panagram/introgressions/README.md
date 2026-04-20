@@ -188,7 +188,8 @@ The group.tsv is a tab-separated file with 2 columns:
 - _group_: the group an accession is a part of. 'REF' denotes one accession as the reference. REF
   should be a genome suspected of having few to no introgressions with the suspected introgression
   donors. REF should also be closely related (preferably the same species) as the genomes that you
-  suspect to be introgression recipients. Other groups can have any name. Typically there are at
+  suspect to be introgression recipients. Other groups can have any name, although names cannot
+  include underscores. Typically there are at
   least 2 other groups - one for introgression donors and one for introgression recipients.
   Introgression donor groups should be listed in the cmp parameter. Introgression recipient groups
   should be listed in the grp parameter. You can also use the anc parameter to check a custom list

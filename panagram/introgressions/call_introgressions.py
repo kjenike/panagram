@@ -802,13 +802,15 @@ def main():
 
     group_tsv = Path(args.tsv)
     if not group_tsv.is_file():
-        raise ValueError("TSV file not found. Check --tsv path.")
+        raise ValueError(f"TSV file {group_tsv} not found. Check --tsv path.")
 
     index_dir = Path(args.idx)
     if not index_dir.is_dir():
-        raise ValueError("Index directory not found. Check --idx path.")
+        raise ValueError(f"Index directory {index_dir} not found. Check --idx path.")
     index = Index(index_dir)
     groups = pd.read_csv(group_tsv, sep="\t", index_col=0)
+    if groups["group"].astype("string").str.contains("_", na=False).any():
+        raise ValueError("Group names cannot contain underscores ('_').")
 
     # get preprocessing arguments
     preprocessing_args_base = {}
