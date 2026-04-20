@@ -2,13 +2,11 @@
 
 set -e
 
-bgzip -dc ./example/FASTAS/athaliana_chr1.fasta.gz > ./example/FASTAS/athaliana_chr1.fasta
-
 # create a simulated wild relative and offspring using chr1 from Arabidopsis thaliana
 echo "Simulating introgressions..."
 mkdir -p ./example/simulated_data
 python simulate_introgressions.py \
-  --ref ./example/FASTAS/athaliana_chr1.fasta \
+  --ref ./example/FASTAS/athaliana_chr1.fasta.gz \
   --out-folder ./example/simulated_data \
   --num-introgressions 2 \
   --introgression-size-min 3000000 \

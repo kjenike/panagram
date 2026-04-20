@@ -1,6 +1,7 @@
 from pathlib import Path
 import argparse
 from collections import OrderedDict
+import gzip
 import numpy as np
 from scipy.stats import beta
 
@@ -15,10 +16,13 @@ def parse_fasta(path):
         OrderedDict: keys are sequence names, values are sequences (str)
     """
 
+    path = Path(path)
+    opener = gzip.open if path.suffix.lower() == ".gz" else open
+
     seqs = OrderedDict()
     name = None
     seq_lines = []
-    with open(path) as f:
+    with opener(path, "rt") as f:
         for line in f:
             line = line.rstrip("\n")
             if not line:
@@ -661,6 +665,7 @@ def main():
 
     # read in reference as an ordered dict with each chr
     reference = Path(args.ref)
+    reference_basename = Path(reference.name.removesuffix(".gz")).stem
     ref_seqs = parse_fasta(reference)
     if not ref_seqs:
         raise ValueError("ERROR: no sequences read from", reference)
@@ -680,10 +685,10 @@ def main():
 
     # write wild relative to file
     print("Writing wild relative FASTA...", flush=True)
-    write_fasta(rel_seqs, output_folder / f"{reference.stem}_wildrelative.fasta")
+    write_fasta(rel_seqs, output_folder / f"{reference_basename}_wildrelative.fasta")
 
     # write mapper and available positions for debugging
-    # with open(output_folder / f"{reference.stem}_wildrelative.mapper", "w") as mapf:
+    # with open(output_folder / f"{reference_basename}_wildrelative.mapper", "w") as mapf:
     #     for chrom in ref_seqs:
     #         mapper = reverse_mappers[chrom]
     #         mapf.write(f">{chrom}_mapper\n")
@@ -706,8 +711,8 @@ def main():
 
     # write offspring fasta
     print("Writing mutation rate 0, generation 0 introgressed offspring FASTA...", flush=True)
-    write_fasta(offspring_seqs, output_folder / f"{reference.stem}_0_offspring.fasta")
-    write_bed(introgressions, output_folder / f"{reference.stem}_0_introgressions.bed")
+    write_fasta(offspring_seqs, output_folder / f"{reference_basename}_0_offspring.fasta")
+    write_bed(introgressions, output_folder / f"{reference_basename}_0_introgressions.bed")
 
     parent_seqs = offspring_seqs
     sub_rates = np.linspace(args.mut_rate_start, args.mut_sub_rate, args.rounds)
@@ -767,8 +772,11 @@ def main():
             new_introgressions.append(f"{intro_chrom}\t{new_start}\t{new_end}\tintrogression")
 
         # save per-gen FASTA
-        write_fasta(offspring_seqs, output_folder / f"{reference.stem}_{i+1}_offspring.fasta")
-        write_bed(new_introgressions, output_folder / f"{reference.stem}_{i+1}_introgressions.bed")
+        write_fasta(offspring_seqs, output_folder / f"{reference_basename}_{i+1}_offspring.fasta")
+        write_bed(
+            new_introgressions,
+            output_folder / f"{reference_basename}_{i+1}_introgressions.bed",
+        )
 
     print("Simulation finished.")
     return
