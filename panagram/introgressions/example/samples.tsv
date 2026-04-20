@@ -1,5 +1,5 @@
 name	fasta	gff
-Reference	FASTAS/athaliana_chr1.fasta
+Reference	FASTAS/athaliana_chr1.fasta.gz
 WildRelative	FASTAS/athaliana_chr1_wildrelative.fasta
 OffspringGen1	FASTAS/athaliana_chr1_0_offspring.fasta
 OffspringGen2	FASTAS/athaliana_chr1_1_offspring.fasta
