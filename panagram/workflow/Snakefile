@@ -42,7 +42,7 @@ rule anchor:
         log="logs/anchor.{sample}.log.txt"
     benchmark:
         "logs/anchor.{sample}.benchmark.txt"
-    resources:               
+    resources:
         mem_mb=get_anchor_mb,
     run:
         index[wildcards.sample].run_anchor(index.bitvec_prefixes, log.log)
@@ -84,7 +84,9 @@ rule kmc_count:
     output:
         expand("kmc/{{sample}}.{db}.{ext}", db=["count","onehot"], ext=KMC_EXTS)
     params:
-        tag = get_onehot_tag
+        tag = get_onehot_tag,
+        ci=lambda wc, input: "-ci2" if str(input[0]).endswith((".fastq", ".fastq.gz")) else "-ci1",
+        input_flag = lambda wc, input: "-fq" if str(input[0]).endswith((".fastq", ".fastq.gz")) else "-fm"
     log:
         "logs/kmc.{sample}.txt"
     benchmark:
@@ -93,15 +95,19 @@ rule kmc_count:
     resources:
         mem_mb=500+config["kmc"]["memory"]*1000,
     shell:
-        f"mkdir -p {TMPDIR}{{wildcards.sample}}; "
+        """
+        mkdir -p {TMPDIR}{wildcards.sample}
 
-        f"{EXTRA_DIR}/kmc -k{{config[k]}} -t{{threads}} -m{{config[kmc][memory]}} "
-        f"-ci1 -cs1000 -fm {{input}} kmc/{{wildcards.sample}}.count {TMPDIR}{{wildcards.sample}} "
-        "> {log} 2>&1;"
+        {EXTRA_DIR}/kmc -k{config[k]} -t{threads} -m{config[kmc][memory]} \
+            {params.ci} -cs1000 {params.input_flag} {input} \
+            kmc/{wildcards.sample}.count {TMPDIR}{wildcards.sample} \
+            > {log} 2>&1
 
-        f"{EXTRA_DIR}/kmc_tools -t{{threads}} transform kmc/{{wildcards.sample}}.count " 
-        f"set_counts {{params.tag}} kmc/{{wildcards.sample}}.onehot "
-        ">> {log} 2>&1;"
+        {EXTRA_DIR}/kmc_tools -t{threads} transform \
+            kmc/{wildcards.sample}.count set_counts {params.tag} \
+            kmc/{wildcards.sample}.onehot \
+            >> {log} 2>&1
+        """
 
 rule faidx:
     input:
@@ -141,7 +147,7 @@ rule mash_triangle:
     shell:
         "{EXTRA_DIR}/mash "
         "triangle -C -E {input} > {output} 2> {log}"
-        
+
 rule all:
     input:
         "genome_dist.tsv",
