@@ -85,8 +85,8 @@ rule kmc_count:
         expand("kmc/{{sample}}.{db}.{ext}", db=["count","onehot"], ext=KMC_EXTS)
     params:
         tag = get_onehot_tag,
-        ci=lambda wc, input: "-ci2" if str(input[0]).endswith((".fastq", ".fastq.gz")) else "-ci1",
-        input_flag = lambda wc, input: "-fq" if str(input[0]).endswith((".fastq", ".fastq.gz")) else "-fm"
+        ci=lambda wc, input: "-ci2" if str(input[0]).endswith((".fastq", ".fastq.gz", ".fq", ".fq.gz")) else "-ci1",
+        input_flag = lambda wc, input: "-fq" if str(input[0]).endswith((".fastq", ".fastq.gz", ".fq", ".fq.gz")) else "-fm"
     log:
         "logs/kmc.{sample}.txt"
     benchmark:
