@@ -42,7 +42,7 @@ group.tsv file to control the introgression caller parameters. See below for the
 files. The introgression caller can be used as follows:
 
 ```bash
-python introgression_runner.py <config.yaml> <--sweep>
+panagram intros <config.yaml> <--sweep>
 ```
 
 The caller will try to run in two different modes, based on the parameters you provide:
@@ -79,7 +79,7 @@ normalization (gnm) before calculating kmer similarity. These steps make differe
 across the pangenome:
 
 ```bash
-python create_heatmap.py \
+panagram intros heatmap \
 --index-dir <index_dir> \
 --anchor <anchor_name>
 
@@ -172,8 +172,8 @@ lower than the kmer similarity to WildRelative to call introgressions.
 
 The `2way_example_config.yaml` and `3way_example_config.yaml` provide good defaults for
 introgression analysis in other pangenomes. Feel free to play with the parameters in these files and
-check their impact by running `python introgression_runner.py ./example/2way_example_config.yaml` or
-`python introgression_runner.py ./example/3way_example_config.yaml` and looking at the heatmaps
+check their impact by running `panagram intros ./example/2way_example_config.yaml` or
+`panagram intros ./example/3way_example_config.yaml` and looking at the heatmaps
 generated in the `./example/introgressions` folder.
 
 You can also explore the simulated pangenome in Panagram's browser by running `panagram view .` in
@@ -284,7 +284,8 @@ most important parameters to tune are as follows:
 
 - _thr_: Easiest to tune after running the 2-way comparison once with the defaults, then looking at
   your pangenome's kmer similarities in the _heatmaps_ folder. You can also look at kmer
-  similarities before calling using `create_heatmap.py`, although depending on your parameters,
+  similarities before calling using `panagram intros heatmap`,
+  although depending on your parameters,
   preprocessing can substantially change kmer similarity. For 2-way calling, try to determine what
   the kmer similarity value is for large regions that are noticibly different from the reference
   (like in the example above). In testing, for 2-way calling, thresholds between 0.7-0.8 worked
@@ -312,7 +313,7 @@ simulate a F1 offspring with introgressions. Subsequent generations of offspring
 applying mutations to the F1 offspring, up to the mutation rate chosen in the parameters.
 
 ```text
-python simulate_introgressions.py \
+panagram intros simulate \
 --ref <reference fasta to use as a base> \
 --out-folder <output folder>
 

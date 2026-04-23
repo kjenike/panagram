@@ -1,9 +1,7 @@
 from setuptools import setup
 from setuptools.command.build_py import build_py
-from setuptools.command.build import SubCommand
 import subprocess
 import os
-import glob
 import sys
 
 import platform
@@ -99,7 +97,7 @@ class pre_build(build_py):
 if __name__ == "__main__":
     setup(
         cmdclass={'build_py': pre_build},
-        packages=["panagram", "panagram.extra"],
+        packages=["panagram", "panagram.extra", "panagram.introgressions"],
         version = about["__version__"],
         description = about["__summary__"][0],
         author = about["__author__"],

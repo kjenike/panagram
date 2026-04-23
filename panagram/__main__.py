@@ -1,5 +1,8 @@
 import argparse
 import cProfile
+from pathlib import Path
+import sys
+import subprocess
 
 from simple_parsing import ArgumentParser, field
 import dataclasses
@@ -112,6 +115,47 @@ class Annotate:
 
 
 @dataclasses.dataclass
+class Intros:
+    """Run the introgression caller"""
+
+    target: str = field(positional=True, nargs="?", metavar="config_or_cmd", default=None)
+    sweep: bool = field(action="store_true")
+    extra_args: list[str] = field(default_factory=list, help=argparse.SUPPRESS)
+
+    def run(self):
+        helper_scripts = {
+            "heatmap": "create_heatmap.py",
+            "bed2txt": "bed_to_txt.py",
+            "simulate": "simulate_introgressions.py",
+        }
+
+        if self.target in helper_scripts:
+            scripts_dir = Path(__file__).resolve().parent / "introgressions"
+            script = scripts_dir / helper_scripts[self.target]
+
+            passthrough_args = list(self.extra_args)
+            if not passthrough_args:
+                try:
+                    intros_i = sys.argv.index("intros")
+                    target_i = sys.argv.index(self.target, intros_i + 1)
+                    passthrough_args = sys.argv[target_i + 1 :]
+                except ValueError:
+                    passthrough_args = []
+
+            cmd = [sys.executable, str(script), *passthrough_args]
+            raise SystemExit(subprocess.call(cmd))
+
+        if self.target is None:
+            print("usage: panagram intros <config.yaml> [--sweep]")
+            print("       panagram intros {heatmap|bed_to_txt|simulate} [tool args]")
+            return
+
+        from .introgressions.introgression_runner import main as run_introgressions
+
+        run_introgressions(Path(self.target), sweep=self.sweep)
+
+
+@dataclasses.dataclass
 class Main:
     """Alignment-free pan-genome viewer
 
@@ -119,9 +163,10 @@ class Main:
         index    Anchor KMC bitvectors to reference FASTA files
         view     Display panagram viewer in a browser window
         annotate Create or replace GFF annotation for anchored genome
+        intros   Run the introgression caller
         bitdump  Query pan-kmer bitmap via the commandline"""
 
-    cmd: Union[View, Index, Bitdump, Annotate]
+    cmd: Union[View, Index, Bitdump, Annotate, Intros]
     cprof: str = field(default=None, help=argparse.SUPPRESS)
 
     def run(self):
@@ -141,7 +186,12 @@ def comma_split(s):
 def main():
     parser = ArgumentParser(add_config_path_arg=True)
     parser.add_arguments(Main, dest="main")
-    args = parser.parse_args()
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return
+    args, extra_args = parser.parse_known_args()
+    if isinstance(args.main, Intros):
+        args.main.extra_args.extend(extra_args)
     if args.main.cprof is None:
         args.main.run()
     else:

@@ -230,7 +230,19 @@ class Index(Serializable):
         os.chdir(self.prefix)
         self.prefix = ""
 
-        self.samples = pd.read_table(self.samples_fname).set_index("name")
+        self.samples = pd.read_table(self.samples_fname)
+
+        required_cols = {"name", "id"}
+        missing_cols = required_cols.difference(self.samples.columns)
+        if missing_cols:
+            missing = ", ".join(sorted(missing_cols))
+            raise ValueError(
+                f"{self.samples_fname} is missing required column(s): {missing}. "
+                "This directory does not look like a prepared Panagram index. "
+                "Run 'panagram index <samples.tsv> -k <k> --prepare' in the index directory first."
+            )
+
+        self.samples = self.samples.set_index("name")
 
         self.genomes = dict()
         p = self.params

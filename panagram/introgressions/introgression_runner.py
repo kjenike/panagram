@@ -294,25 +294,14 @@ def run_introgression_pipeline(
     return
 
 
-if __name__ == "__main__":
-    # Get config file path from command line argument
-    if len(sys.argv) < 2:
-        print("Usage: python introgression_runner.py <config.yaml> [--sweep]")
-        sys.exit(0)
+def main(config_path, sweep=False):
+    """Run the introgression pipeline from a config file."""
 
-    sweep = False
-    if len(sys.argv) > 2:
-        if sys.argv[2] == "--sweep":
-            sweep = True
-        else:
-            print(
-                "Unknown command. Use '--sweep' to run pipeline for a preset list of thresholds or no argument to run the pipeline with your list of thresholds."
-            )
-
-    config_path = Path(sys.argv[1])
+    config_path = Path(config_path)
     if not config_path.is_file():
         print(f"Config file {config_path} does not exist.")
         sys.exit(1)
+
     call_flags, postprocess_flags, score_flags, output_dir, call_thr, call_cmp, threads = (
         parse_config(config_path)
     )
@@ -349,3 +338,20 @@ if __name__ == "__main__":
     run_introgression_pipeline(
         call_flags, postprocess_flags, score_flags, output_dir, call_thr, call_cmp, threads, sweep
     )
+
+
+if __name__ == "__main__":
+    # Get config file path from command line argument
+    if len(sys.argv) < 2:
+        print("usage: python introgression_runner.py <config.yaml> [--sweep]")
+        sys.exit(0)
+
+    sweep = False
+    if len(sys.argv) > 2:
+        if sys.argv[2] == "--sweep":
+            sweep = True
+        else:
+            print(
+                "Unknown command. Use '--sweep' to run pipeline for a preset list of thresholds or no argument to run the pipeline with your list of thresholds."
+            )
+    main(sys.argv[1], sweep=sweep)
