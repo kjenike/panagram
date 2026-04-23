@@ -45,7 +45,7 @@ an error. You may be able to debug the KMC installation by running `make -C KMC 
 attempting to fix any errors, then re-run `pip install -v .` after the errors are fixed. An
 alternative fix is to manually update pybind11 in the KMC directory. You will need to replace the
 "panagram/KMC/py_kmc_api/libs/pybind11/include" directory with the latest version at
-<https://github.com/pybind/pybind11/tree/master/include/pybind11>. We are activley working to fix
+<https://github.com/pybind/pybind11/tree/master/include/pybind11>. We are actively working to fix
 this for a smoother installation.
 
 # Running
@@ -66,13 +66,13 @@ reference genomes as anchors.
 
 To run the indexing step, start by preparing the panagram index. It is best to create an empty
 folder that will act as Panagram's index folder. Within this folder, create a subfolder called
-FASTAS; this is where you can place any FASTAS that you want to include in your pangenome. You can
+FASTAS; this is where you can place any FASTAS that you want to include in your pan-genome. You can
 also create a folder called GFFs; if you have any annotation files in GFF3 format, you can place
 them in here. Next, you will need to tell Panagram where your FASTAS and GFFs are. For this, you
 will need a tsv file with a list of the samples.
 
 The samples.tsv file should contain one sample per line. You need the name, fasta, and gff columns.
-On each line include the sample name and minimally the fasta file location. Currently genome names
+On each line include the sample name and minimally the FASTA file location. Currently genome names
 should only contain alphanumeric characters and underscores due to KMC requirements. If you have no
 annotations for a file, leave the gff column blank. If you have multiple annotation files per
 sample, you can concatenate them into one gff file. The id and anchor columns will be created by
@@ -101,12 +101,12 @@ run into any problems, you first check the format annotation format. This can be
 line tools like gff3validator or online at
 [GenomeTools](https://genometools.org/cgi-bin/gff3validator.cgi).
 
-Picking an acceptable k-mer length for the data set can be tricky. For samples that are very
-similar, a larger k may be more approperiate. While samples that are more diverged may benefit from
-a smaller k-mer length. The papers by
+Picking an acceptable kmer length for the data set can be tricky. For samples that are very
+similar, a larger k may be more appropriate. While samples that are more diverged may benefit from
+a smaller kmer length. The papers by
 [Bonnie et al. (2024)](<https://www.cell.com/iscience/fulltext/S2589-0042(24)00275-X?uuid=uuid%3A8d061319-27f8-49ca-b7ee-0d33ec846225>)
 and [Jenike et al. (2025)](https://pubmed.ncbi.nlm.nih.gov/39890468/) give some detail on picking
-"good" k-mer length, but if in doubt, k=21 usually works fine.
+"good" kmer length, but if in doubt, k=21 usually works fine.
 
 Once the preparation step is run, you can run Panagram's anchoring via snakemake and specify the
 number of threads you want to use with this command:
@@ -119,7 +119,7 @@ This step anchors KMC bitvectors to FASTA files to create a pan-kmer bitmap.
 
 ## View
 
-Once anchoring is complete, navigate to the index folder and view your pangenome with
+Once anchoring is complete, navigate to the index folder and view your pan-genome with
 `panagram view .` This runs a local Dash server. The pan-genome browser can be viewed at
 <http://127.0.0.1:8050/> by default.
 
@@ -211,7 +211,7 @@ use of the slash ('/') character):
     }
 ```
 
-The retart nginx with:
+The restart nginx with:
 
 ```bash
 systemctl stop nginx
