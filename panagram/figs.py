@@ -1,14 +1,28 @@
 from plotly.subplots import make_subplots
-from mycolorpy import colorlist as mcp
 import plotly.figure_factory as ff
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from scipy.spatial.distance import pdist, squareform
 
 
 def genome_colors(index, cmap="viridis_r"):
-    return mcp.gen_color(cmap=cmap, n=index.ngenomes)
+    n = index.ngenomes
+
+    # Handle edge cases
+    if n == 0:
+        return []
+    if n == 1:
+        colormap = plt.get_cmap(cmap)
+        return [mcolors.rgb2hex(colormap(0.5))]
+
+    # Generate colors from matplotlib colormap
+    colormap = plt.get_cmap(cmap)
+    colors = [mcolors.rgb2hex(colormap(i / (n - 1))) for i in range(n)]
+
+    return colors
 
 
 def read_genome_comp(index, anchor_name):

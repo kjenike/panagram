@@ -16,7 +16,7 @@ dependencies = [
     "scipy",
     "toml",
     "bgzip",
-    "mycolorpy",
+    "matplotlib",
     "seaborn",
     "umap-learn",
     "snakemake>=9",

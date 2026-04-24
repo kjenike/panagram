@@ -1,6 +1,5 @@
 import sys
 import os.path
-from mycolorpy import colorlist as mcp
 from plotly.subplots import make_subplots
 import seaborn as sns
 import pandas as pd
@@ -21,7 +20,7 @@ from . import figs
 
 
 def view(params):
-    index = Index(params.index_dir)  # Directory that contains the anchor direcotry
+    index = Index(params.index_dir)  # Directory that contains the anchor directory
 
     anchor_name = params.genome
     if anchor_name is None:
@@ -37,7 +36,7 @@ def view(params):
         params.end = index[anchor_name].chrs.loc[chrs, "size"]
 
     sns.set_palette("viridis", index.ngenomes)
-    colors = mcp.gen_color(cmap="viridis_r", n=index.ngenomes)
+    colors = figs.genome_colors(index, cmap="viridis_r")
 
     # This will have the figure componants that we need
     layout = go.Layout(
