@@ -10,14 +10,6 @@ from typing import Union
 
 from .index import Index
 
-# TODO add view parameters
-# prefix: required positional
-# rest are optional arguments?
-# genome
-# coords
-# max_chr_bins
-# bookmarks
-
 
 @dataclasses.dataclass
 class View:
@@ -118,7 +110,6 @@ class Annotate:
 class Intros:
     """Run the introgression caller"""
 
-    target: str = field(positional=True, nargs="?", metavar="config_or_cmd", default=None)
     sweep: bool = field(action="store_true")
     extra_args: list[str] = field(default_factory=list, help=argparse.SUPPRESS)
 
@@ -129,30 +120,35 @@ class Intros:
             "simulate": "simulate_introgressions.py",
         }
 
-        if self.target in helper_scripts:
-            scripts_dir = Path(__file__).resolve().parent / "introgressions"
-            script = scripts_dir / helper_scripts[self.target]
+        target = None
+        passthrough_args = list(self.extra_args)
 
-            passthrough_args = list(self.extra_args)
-            if not passthrough_args:
-                try:
-                    intros_i = sys.argv.index("intros")
-                    target_i = sys.argv.index(self.target, intros_i + 1)
-                    passthrough_args = sys.argv[target_i + 1 :]
-                except ValueError:
-                    passthrough_args = []
+        if passthrough_args:
+            target = passthrough_args[0]
+            passthrough_args = passthrough_args[1:]
+        else:
+            try:
+                intros_i = sys.argv.index("intros")
+                target = sys.argv[intros_i + 1]
+                passthrough_args = sys.argv[intros_i + 2 :]
+            except (ValueError, IndexError):
+                target = None
+
+        if target in helper_scripts:
+            scripts_dir = Path(__file__).resolve().parent / "introgressions"
+            script = scripts_dir / helper_scripts[target]
 
             cmd = [sys.executable, str(script), *passthrough_args]
             raise SystemExit(subprocess.call(cmd))
 
-        if self.target is None:
+        if target is None:
             print("usage: panagram intros <config.yaml> [--sweep]")
             print("       panagram intros {heatmap|bed_to_txt|simulate} [tool args]")
             return
 
         from .introgressions.introgression_runner import main as run_introgressions
 
-        run_introgressions(Path(self.target), sweep=self.sweep)
+        run_introgressions(Path(target), sweep=self.sweep)
 
 
 @dataclasses.dataclass

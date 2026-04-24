@@ -1,0 +1,59 @@
+{% set version = "1.0.0" %}
+
+package:
+  name: panagram
+  version: {{ version }}
+
+source:
+  path: ..
+
+build:
+  number: 1
+  script: {{ PYTHON }} -m pip install . -vv --no-deps
+
+requirements:
+  build:
+    - {{ compiler('c') }}
+    - {{ compiler('cxx') }}
+    - git
+    - make
+  host:
+    - python >=3.11,<3.14
+    - pip
+    - setuptools
+  run:
+    - python >=3.11,<3.14
+    - numpy
+    - simple-parsing
+    - plotly
+    - dash
+    - pysam
+    - pandas
+    - biopython
+    - scipy
+    - pyyaml
+    - toml
+    - py-bgzip
+    - matplotlib
+    - seaborn
+    - umap-learn
+    - snakemake-minimal >=9
+    - scikit-learn
+    - python-kaleido
+    - reportlab ==4.4.1
+    - htslib
+    - pip
+
+test:
+  imports:
+    - panagram
+  commands:
+    - panagram --help
+
+about:
+  home: https://github.com/kjenike/panagram
+  license: MIT
+  license_file: LICENSE
+  summary: Interactive, alignment-free pan-genome browser
+  dev_url: https://github.com/kjenike/panagram
+  doc_url: https://github.com/kjenike/panagram/blob/main/README.md
