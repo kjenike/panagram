@@ -98,9 +98,10 @@ if __name__ == "__main__":
     setup(
         cmdclass={'build_py': pre_build},
         packages=["panagram", "panagram.extra", "panagram.introgressions"],
+        include_package_data=True,
+        package_data={"panagram": ["assets/*", "workflow/*"]},
         version = about["__version__"],
         description = about["__summary__"][0],
         author = about["__author__"],
         url = about["__uri__"],
-
     )

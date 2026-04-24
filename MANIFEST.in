@@ -1,4 +1,5 @@
 recursive-include panagram *py *so extra* panagram/workflow
+recursive-include panagram/assets *
 include panagram/workflow/Snakefile
 include panagram/extra/kmc
 include panagram/extra/kmc_tools
