@@ -327,7 +327,7 @@ def main(config_path, sweep=False):
 
     if (
         postprocess_flags
-        and (len(call_thr) > 1 or sweep)
+        and (sweep or len(call_thr) > 1)
         and any(flag.startswith("--act") and "lift" in flag for flag in postprocess_flags)
     ):
         if not any(flag.startswith("--paf") for flag in postprocess_flags):
