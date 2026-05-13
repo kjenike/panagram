@@ -1,0 +1,44 @@
+general:
+  output_dir: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/aethiopicum_v4/introgressions/3way
+  index_dir: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/aethiopicum_v4
+  tsv: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/aethiopicum_v4/group.tsv
+  bin: 125000
+  ref: Saet3
+  threads: 90
+
+calling:
+  run: true
+  grp: AET
+  anc: null
+  chr: null
+  cmp: [ANG]
+  thr: [0]
+  stp: 100
+  gnm: .92
+  trm: 3
+  sft: null
+  ssz: 4
+  urf: false
+  rmf: false
+  rmu: true
+  ogrp: [ANG]
+  edg: false
+  vis: false
+
+postprocessing:
+  run: true
+  act: [lift, fgap, rmbn]
+  min: 4
+  gap: 16
+  map: null
+  paf: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/aethiopicum_v4/alignments
+
+scoring:
+  run: true
+  gdt: /home/nbrown62/data_mschatz1/nbrown62/CallIntrogressions_data/aethiopicum_v1
+  act: [fgap, rmbn]
+  min: 1
+  gap: 1
+  thr: 0.25
+  cmp: [ANG]
+  vis: true

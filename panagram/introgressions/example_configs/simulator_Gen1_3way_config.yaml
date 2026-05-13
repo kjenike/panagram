@@ -1,0 +1,44 @@
+general:
+  output_dir: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v4/introgressions/OffspringGen1
+  index_dir: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v4
+  tsv: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v4/group.tsv
+  bin: 1000000
+  ref: OffspringGen1
+  threads: 5
+
+calling:
+  run: true
+  grp: null
+  anc: [OffspringGen1]
+  chr: null
+  cmp: [WT]
+  thr: 0.95
+  stp: 100
+  gnm: 0.9
+  trm: 3
+  sft: mean
+  ssz: 1
+  urf: false
+  rmf: true
+  rmu: null
+  ogrp: null
+  edg: false
+  vis: true
+
+postprocessing:
+  run: true
+  act: [rmbn]
+  min: 1
+  gap: 1
+  map: null
+  paf: null
+
+scoring:
+  run: true
+  gdt: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v4/introgressions_gt/per_accession/OffspringGen1
+  act: [rmbn]
+  min: 1
+  gap: 1
+  thr: 0
+  cmp: [WT]
+  vis: true

@@ -1,0 +1,44 @@
+general:
+  output_dir: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v4/introgressions/2way
+  index_dir: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v4
+  tsv: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v4/group.tsv
+  bin: 1000000
+  ref: Reference
+  threads: 20
+
+calling:
+  run: true
+  grp: OFFSPRING
+  anc: null
+  chr: null
+  cmp: [REF]
+  thr: [0.75]
+  stp: 100
+  gnm: -1
+  trm: 3
+  sft: null
+  ssz: 1
+  urf: true
+  rmf: true
+  rmu: null
+  ogrp: null
+  edg: false
+  vis: true
+
+postprocessing:
+  run: true
+  act: [rmbn]
+  min: 1
+  gap: 1
+  map: null
+  paf: null
+
+scoring:
+  run: true
+  gdt: /home/nbrown62/data_mschatz1/nbrown62/panagram_data/arabidopsis_simulated_v4/introgressions_gt
+  act: [rmbn]
+  min: 1
+  gap: 1
+  thr: 0
+  cmp: [WT]
+  vis: true
