@@ -450,6 +450,7 @@ def mutate_seq_with_indels_and_snps(
     new_seq = []
     # index mapper for introgressions/alignment: original_index -> new index
     reverse_mapper = []
+    total_bases_mutated = 0
 
     for pos, length, mtype in all_mutations:
         if mtype == "insertion":
@@ -466,6 +467,7 @@ def mutate_seq_with_indels_and_snps(
             # build insertion sequence
             ins_seq = rng.choice(bases, size=length, replace=True)
             new_seq.extend(ins_seq)
+            total_bases_mutated += length
 
         if mtype == "deletion":
             # append everything up to pos
@@ -480,6 +482,7 @@ def mutate_seq_with_indels_and_snps(
 
             # pad reverse_mapper for deleted indices
             reverse_mapper.extend([-1] * length)
+            total_bases_mutated += length
 
         if mtype == "snp":
             # append everything up to pos
@@ -490,11 +493,12 @@ def mutate_seq_with_indels_and_snps(
 
             # change base at pos
             old_base = seq[pos]
-            new_base = rng.choice([b for b in bases if b != old_base])
+            new_base = rng.choice([b for b in bases if b.upper() != old_base.upper()])
             new_seq.append(new_base)
 
             # update current index
             current_index = pos + 1
+            total_bases_mutated += 1
 
     # append remaining sequence after last mutation
     new_seq.extend(seq[current_index:])
@@ -503,6 +507,9 @@ def mutate_seq_with_indels_and_snps(
 
     # available positions are those that were not mutated (i.e., weights > 0)
     available_positions = np.nonzero(position_weights)[0].tolist()
+    print("Original length:", L)
+    print("Total bases mutated:", total_bases_mutated)
+    print("New length:", len(new_seq))
 
     return "".join(new_seq), reverse_mapper, available_positions
 
@@ -665,7 +672,8 @@ def main():
 
     # read in reference as an ordered dict with each chr
     reference = Path(args.ref)
-    reference_basename = Path(reference.name.removesuffix(".gz")).stem
+    reference_name = reference.name[:-3] if reference.name.endswith(".gz") else reference.name
+    reference_basename = Path(reference_name).stem
     ref_seqs = parse_fasta(reference)
     if not ref_seqs:
         raise ValueError("ERROR: no sequences read from", reference)

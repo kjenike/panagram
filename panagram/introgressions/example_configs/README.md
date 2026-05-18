@@ -14,9 +14,9 @@ pangenome, a *Solanum lycopersicum* pangenome, and a *Solanum aethiopicum* pange
 The simulated pangenome was generated with the following command:
 
 ```bash
-python simulate_introgressions.py \
-  --ref /home/nbrown62/data_mschatz1/nbrown62/panagram_data/simulator/arabidopsis/Athal_edited.fasta \
-  --out-folder /home/nbrown62/data_mschatz1/nbrown62/panagram_data/simulator/arabidopsis/v4 \
+panagram intros simulate \
+  --ref ./Athal_edited.fasta \
+  --out-folder ./arabidopsis \
   --num-introgressions 10 \
   --introgression-size-min 2000000 \
   --introgression-size-max 6000000 \
@@ -24,10 +24,18 @@ python simulate_introgressions.py \
   --rel-ins-size-max 1000 \
   --rel-del-size-min 1 \
   --rel-del-size-max 500 \
+  --rel-sub-rate 3.3e-3 \
+  --rel-ins-rate 3.3e-3 \
+  --rel-del-rate 3.3e-3 \
   --mut-ins-size-min 1 \
   --mut-ins-size-max 1000 \
   --mut-del-size-min 1 \
-  --mut-del-size-max 500
+  --mut-del-size-max 500 \
+  --mut-rate-start 1e-3 \
+  --mut-sub-rate 1e-2 \
+  --mut-ins-rate 1e-2 \
+  --mut-del-rate 1e-2 \
+  --seed 42
 ```
 
 `Athal_edited.fasta` is the TAIR10 reference for *Arabidopsis thaliana*, edited so that the
