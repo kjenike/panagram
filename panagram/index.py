@@ -1113,7 +1113,6 @@ class Genome:
                 bitmap, self.index.chrom_umap.bin_size
             ).T.fillna(0)
             chrom_paircounts = pd.concat({chrom: paircounts}, names=["chrom", "start"])
-            # print(chrom_paircounts)
             chrom_umaps.append(self.run_umap(chrom_paircounts, self.index.chrom_umap))
 
             genome_paircounts[chrom] = self.index.bitmap_to_paircount_bins(
@@ -1129,16 +1128,21 @@ class Genome:
         self.genome_umap.to_csv(self.genome_umap_filename, index=False)
 
     def run_umap(self, paircounts, args):
-        reducer = umap.UMAP(
-            n_neighbors=args.neighbors, min_dist=args.dist, n_components=2, random_state=42
-        )
-
-        try:
-            embedding = reducer.fit_transform(paircounts.to_numpy())
-        except:
+        if len(paircounts) <= args.neighbors:
+            logger.warning(f"Skipping UMAP for at least one {self.name} chromosome: {len(paircounts)} bins <= {args.neighbors} neighbors.")
+            logger.debug(paircounts)
             embedding = None
-            print(paircounts)
-            logger.warning(f"{self.name} UMAP failed for at least one chromosome")
+        else:
+            reducer = umap.UMAP(
+                n_neighbors=args.neighbors, min_dist=args.dist, n_components=2, n_jobs=1, random_state=42
+            )
+            try:
+                embedding = reducer.fit_transform(paircounts.to_numpy())
+            except Exception as e:
+                logger.warning(f"{self.name} UMAP failed for at least one chromosome.")
+                logger.error(f"Error: {e}")
+                logger.debug(paircounts)
+                embedding = None
 
         if embedding is not None:
             clusters = DBSCAN(eps=args.eps, min_samples=args.samples).fit_predict(embedding)
