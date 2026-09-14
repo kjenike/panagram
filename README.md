@@ -42,11 +42,7 @@ Panagram relies on [KMC](https://github.com/refresh-bio/KMC) to build its kmer i
 installed automatically, however it is possible that the KMC installation will fail but panagram
 will successfully install. In this case `panagram view` can be run, but `panagram index` will return
 an error. You may be able to debug the KMC installation by running `make -C KMC py_kmc_api` and
-attempting to fix any errors, then re-run `pip install -v .` after the errors are fixed. An
-alternative fix is to manually update pybind11 in the KMC directory. You will need to replace the
-"panagram/KMC/py_kmc_api/libs/pybind11/include" directory with the latest version at
-<https://github.com/pybind/pybind11/tree/master/include/pybind11>. We are actively working to fix
-this for a smoother installation.
+attempting to fix any errors, then re-run `pip install -v .` after the errors are fixed.
 
 # Running
 
