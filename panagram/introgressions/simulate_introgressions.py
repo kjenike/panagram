@@ -507,9 +507,10 @@ def mutate_seq_with_indels_and_snps(
 
     # available positions are those that were not mutated (i.e., weights > 0)
     available_positions = np.nonzero(position_weights)[0].tolist()
-    print("Original length:", L)
-    print("Total bases mutated:", total_bases_mutated)
-    print("New length:", len(new_seq))
+    print("Original length:", L, flush=True)
+    print("Total bases mutated:", total_bases_mutated, flush=True)
+    print("Number of mutations:", len(all_mutations), flush=True)
+    print("New length:", len(new_seq), flush=True)
 
     return "".join(new_seq), reverse_mapper, available_positions
 
