@@ -7,7 +7,7 @@
 [![Release](https://img.shields.io/github/v/release/kjenike/panagram?label=Release)](https://github.com/kjenike/panagram/releases)
 [![Integration](https://github.com/kjenike/panagram/actions/workflows/integration.yaml/badge.svg)](https://github.com/kjenike/panagram/actions/workflows/integration.yaml)
 
-#### Katie Jenike, Nicole Brown, Sam Kovaka, Robin Burns, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Elinor Karlsson, Zach Lippman, Ian R Henderson, Michael C Schatz
+#### Katharine M. Jenike, Nicole L. Brown, Sam Kovaka, Delphine Larivière, Robin Burns, Frances Chen, Hagai Shohat, Matthias Benoit, Tyler Collins, Rachel Daniels, Blaine Fitzgerald, Iacopo Gentile, Anat Hendelman, Rachel Johnston, Betty Y.H. Huang, Alex Ostrovsky, Srividya Ramakrishnan, Katia Renault, Gina M. Robitaille, James W. Satterlee, Anton Nekrutenko, Elinor K. Karlsson, Zachary B. Lippman, Ian R. Henderson, Michael C. Schatz
 
 Welcome to Panagram! Panagram is
 [an alignment-free pangenome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf).
