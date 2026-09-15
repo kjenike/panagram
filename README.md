@@ -2,7 +2,7 @@
   <img src="./panagram/assets/panagram.png" alt="Panagram" width="300"/>
 </div>
 
-# Panagram: Interactive, alignment-free pan-genome browser
+# Panagram: Interactive, alignment-free pangenome browser
 
 [![Release](https://img.shields.io/github/v/release/kjenike/panagram?label=Release)](https://github.com/kjenike/panagram/releases)
 [![Integration](https://github.com/kjenike/panagram/actions/workflows/integration.yaml/badge.svg)](https://github.com/kjenike/panagram/actions/workflows/integration.yaml)
@@ -10,7 +10,7 @@
 #### Katie Jenike, Nicole Brown, Sam Kovaka, Robin Burns, Shujun Ou, Stephen Hwang, Srividya Ramakrishnan, Ben Langmead, Elinor Karlsson, Zach Lippman, Ian R Henderson, Michael C Schatz
 
 Welcome to Panagram! Panagram is
-[an alignment-free pan-genome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf).
+[an alignment-free pangenome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf).
 
 # Installation
 
@@ -62,7 +62,7 @@ reference genomes as anchors.
 
 To run the indexing step, start by preparing the panagram index. It is best to create an empty
 folder that will act as Panagram's index folder. Within this folder, create a subfolder called
-FASTAS; this is where you can place any FASTAS that you want to include in your pan-genome. You can
+FASTAS; this is where you can place any FASTAS that you want to include in your pangenome. You can
 also create a folder called GFFs; if you have any annotation files in GFF3 format, you can place
 them in here. Next, you will need to tell Panagram where your FASTAS and GFFs are. For this, you
 will need a tsv file with a list of the samples.
@@ -97,9 +97,9 @@ run into any problems, you first check the format annotation format. This can be
 line tools like gff3validator or online at
 [GenomeTools](https://genometools.org/cgi-bin/gff3validator.cgi).
 
-Picking an acceptable kmer length for the data set can be tricky. For samples that are very
-similar, a larger k may be more appropriate. While samples that are more diverged may benefit from
-a smaller kmer length. The papers by
+Picking an acceptable kmer length for the data set can be tricky. For samples that are very similar,
+a larger k may be more appropriate. While samples that are more diverged may benefit from a smaller
+kmer length. The papers by
 [Bonnie et al. (2024)](<https://www.cell.com/iscience/fulltext/S2589-0042(24)00275-X?uuid=uuid%3A8d061319-27f8-49ca-b7ee-0d33ec846225>)
 and [Jenike et al. (2025)](https://pubmed.ncbi.nlm.nih.gov/39890468/) give some detail on picking
 "good" kmer length, but if in doubt, k=21 usually works fine.
@@ -115,8 +115,8 @@ This step anchors KMC bitvectors to FASTA files to create a pan-kmer bitmap.
 
 ## View
 
-Once anchoring is complete, navigate to the index folder and view your pan-genome with
-`panagram view .` This runs a local Dash server. The pan-genome browser can be viewed at
+Once anchoring is complete, navigate to the index folder and view your pangenome with
+`panagram view .` This runs a local Dash server. The pangenome browser can be viewed at
 <http://127.0.0.1:8050/> by default.
 
 Here is the full set of flags you can choose:
@@ -143,7 +143,7 @@ usage: panagram view [-h] <index_dir/> [genome] [chrom] [start] [end]
   <img src="./panagram/introgressions/assets/introgressions.svg" alt="Panagram" width="200"/>
 </div>
 
-Panagram's bitmap also enables calling introgressions between members of your pan-genome. For all
+Panagram's bitmap also enables calling introgressions between members of your pangenome. For all
 information on the introgression calling module, see the
 [introgressions README](./panagram/introgressions).
 
@@ -230,7 +230,8 @@ until panagram view --ndebug .; do echo "restarting"; sleep 1; done
 
 Have a question or found a bug? [Open an issue](https://github.com/kjenike/panagram/issues)!
 
-Like to contribute? Send us a pull request! We use the following tools for code quality and formatting:
+Like to contribute? Send us a pull request! We use the following tools for code quality and
+formatting:
 
 - **ruff** for Python linting
 - **mypy** for type checking

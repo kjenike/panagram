@@ -173,8 +173,8 @@ lower than the kmer similarity to WildRelative to call introgressions.
 The `2way_example_config.yaml` and `3way_example_config.yaml` provide good defaults for
 introgression analysis in other pangenomes. Feel free to play with the parameters in these files and
 check their impact by running `panagram intros ./example/2way_example_config.yaml` or
-`panagram intros ./example/3way_example_config.yaml` and looking at the heatmaps
-generated in the `./example/introgressions` folder.
+`panagram intros ./example/3way_example_config.yaml` and looking at the heatmaps generated in the
+`./example/introgressions` folder.
 
 You can also explore the simulated pangenome in Panagram's browser by running `panagram view .` in
 the examples folder.
@@ -189,11 +189,11 @@ The group.tsv is a tab-separated file with 2 columns:
   should be a genome suspected of having few to no introgressions with the suspected introgression
   donors. REF should also be closely related (preferably the same species) as the genomes that you
   suspect to be introgression recipients. Other groups can have any name, although names cannot
-  include underscores. Typically there are at
-  least 2 other groups - one for introgression donors and one for introgression recipients.
-  Introgression donor groups should be listed in the cmp parameter. Introgression recipient groups
-  should be listed in the grp parameter. You can also use the anc parameter to check a custom list
-  of recipients for introgressions (you must still create a group.tsv though).
+  include underscores. Typically there are at least 2 other groups - one for introgression donors
+  and one for introgression recipients. Introgression donor groups should be listed in the cmp
+  parameter. Introgression recipient groups should be listed in the grp parameter. You can also use
+  the anc parameter to check a custom list of recipients for introgressions (you must still create a
+  group.tsv though).
 
 ## Config File Parameters
 
@@ -284,14 +284,13 @@ most important parameters to tune are as follows:
 
 - _thr_: Easiest to tune after running the 2-way comparison once with the defaults, then looking at
   your pangenome's kmer similarities in the _heatmaps_ folder. You can also look at kmer
-  similarities before calling using `panagram intros heatmap`,
-  although depending on your parameters,
-  preprocessing can substantially change kmer similarity. For 2-way calling, try to determine what
-  the kmer similarity value is for large regions that are noticibly different from the reference
-  (like in the example above). In testing, for 2-way calling, thresholds between 0.7-0.8 worked
-  best. For 3-way calling, the threshold is a bit less important. Smaller thresholds, between 0-0.2
-  worked best. You can always specify multiple thresholds in your config file to try a few different
-  options.
+  similarities before calling using `panagram intros heatmap`, although depending on your
+  parameters, preprocessing can substantially change kmer similarity. For 2-way calling, try to
+  determine what the kmer similarity value is for large regions that are noticibly different from
+  the reference (like in the example above). In testing, for 2-way calling, thresholds between
+  0.7-0.8 worked best. For 3-way calling, the threshold is a bit less important. Smaller thresholds,
+  between 0-0.2 worked best. You can always specify multiple thresholds in your config file to try a
+  few different options.
 
 - _gnm_: Normally, this should be kept on. This can especially help if you have very different
   genomes together in the same pangenome. Try setting this to -1 first. If you notice that visually,
