@@ -1,8 +1,10 @@
 import sys
 import argparse
+import subprocess
 from pathlib import Path
 from io import StringIO
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -10,7 +12,6 @@ import numpy as np
 from Bio import Phylo
 from scipy.cluster import hierarchy
 from scipy.cluster.hierarchy import linkage
-from statsmodels.stats.multitest import multipletests
 import statsmodels.api as sm
 import seaborn as sns
 from panagram.index import Index
@@ -19,15 +20,6 @@ from panagram.index import Index
 def get_newick(node, parent_dist, leaf_names, newick=""):
     """
     Convert scipy.cluster.hierarchy.to_tree() output to Newick format.
-
-    Parameters:
-        node: output of scipy.cluster.hierarchy.to_tree()
-        parent_dist: distance of the parent node
-        leaf_names: list of leaf names
-        newick: used internally during recursion
-
-    Returns:
-        Newick-formatted tree string
     """
 
     if node.is_leaf():
@@ -39,9 +31,7 @@ def get_newick(node, parent_dist, leaf_names, newick=""):
         newick = ");"
 
     newick = get_newick(node.get_left(), node.dist, leaf_names, newick=newick)
-
     newick = get_newick(node.get_right(), node.dist, leaf_names, newick=",%s" % newick)
-
     newick = "(%s" % newick
 
     return newick
@@ -49,14 +39,7 @@ def get_newick(node, parent_dist, leaf_names, newick=""):
 
 def get_major_clades(tree, min_size=2):
     """
-    Divide the tips of a tree into major clades.
-
-    Parameters:
-        tree: Bio.Phylo tree object
-        min_size: minimum number of tips for a clade to be considered major
-
-    Returns:
-        dict: {clade_name: [tip1, tip2, ...]}
+    Divide root-level tips of a tree into major clades.
     """
 
     clades = {}
@@ -76,18 +59,17 @@ def get_major_clades(tree, min_size=2):
 def extract_feature_name(attributes):
     """
     Extract the feature name from the first field of the GFF attributes column.
-    NOTE: GFF names are not standardized, so this may need editing to parse certain GFFs correctly
+
+    NOTE: GFF names are not standardized, so this may need editing for some GFFs.
     """
 
     feature_name = attributes.split(";")[0]
 
-    # Split on "=" or space to extract the feature name.
     if "=" in feature_name:
         feature_name = feature_name.split("=")[1]
     else:
         feature_name = feature_name.split()[1]
 
-    # Remove quotes.
     feature_name = feature_name.replace('"', "")
 
     return feature_name
@@ -113,24 +95,87 @@ def read_sample_order(sample_f):
     return sample_order
 
 
+def generate_regulatory_windows(
+    gene_name,
+    gene_start,
+    gene_end,
+    chrom_size,
+    flank_size=500000,
+    window_size=200,
+    step_size=100,
+):
+    """
+    Generate overlapping regulatory windows around one gene.
+
+    Regulatory region:
+        gene_start - 500,000 to gene_end + 500,000
+
+    Windows:
+        200 bp windows, overlapping by 100 bp.
+
+    The full regulatory region is clamped to chromosome boundaries.
+    Only complete 200 bp windows are returned.
+    """
+
+    reg_start = max(gene_start - flank_size, 0)
+    reg_end = min(gene_end + flank_size, chrom_size)
+
+    windows = []
+    window_counter = 1
+
+    for window_start in range(reg_start, reg_end - window_size + 1, step_size):
+        window_end = window_start + window_size
+        window_name = f"{gene_name}_reg_{window_counter}"
+
+        windows.append((window_name, window_start, window_end))
+
+        window_counter += 1
+
+    return windows
+
+
+def generate_chromosome_windows(
+    chromosome,
+    chrom_size,
+    window_size=200,
+    step_size=100,
+):
+    """
+    Generate overlapping windows across an entire chromosome/contig.
+
+    Window names are:
+        chrname_startcoordinate
+
+    Example:
+        chr1_0
+        chr1_100
+        chr1_200
+    """
+
+    windows = []
+
+    for window_start in range(0, chrom_size - window_size + 1, step_size):
+        window_end = window_start + window_size
+        window_name = f"{chromosome}_{window_start}"
+
+        windows.append((window_name, chromosome, window_start, window_end))
+
+    return windows
+
+
 def build_bitmap_tree(anchor_name, panagram_dir, tree_file):
     """
     Build a genome-wide sample tree from Panagram bitmap data.
     """
 
-    # Hard-coded sampling parameters.
     n_skips = 100
     max_sampled_rows = 2000000
 
-    # Load the Panagram index.
     index = Index(panagram_dir)
-
-    # Get all chromosomes/contigs for the anchor genome.
     chroms = list(index[anchor_name].chrs.index)
 
     bitmap = []
 
-    # Query bitmap data for each chromosome/contig.
     for chrom in chroms:
         start_coord = 0
         end_coord = index[anchor_name].chrs.loc[chrom, "size"]
@@ -140,20 +185,15 @@ def build_bitmap_tree(anchor_name, panagram_dir, tree_file):
         print(f"Tree bitmap query complete: {chrom}", file=sys.stderr, flush=True)
         bitmap.append(bittmp)
 
-    # Combine chromosome-level bitmaps into one genome-wide bitmap.
     result = pd.concat(bitmap)
 
-    # Randomly sample rows for clustering, using a fixed seed for reproducibility.
     result_sample = result.sample(n=min(len(result), max_sampled_rows), random_state=42)
 
-    # Cluster samples by their genome-wide bitmap profiles.
     matrix = linkage(result_sample.transpose(), method="average")
 
-    # Convert the clustering result to Newick format.
     tree_tmp = hierarchy.to_tree(matrix, False)
     treedata = get_newick(tree_tmp, tree_tmp.dist, index.genome_names)
 
-    # Write the Newick tree to the output file.
     with open(tree_file, "w") as f:
         f.write(treedata)
 
@@ -162,114 +202,64 @@ def build_bitmap_tree(anchor_name, panagram_dir, tree_file):
 
 def create_feature_tree(bitmap, genome_names):
     """
-    Cluster samples by their bitmap profiles for one feature and return top-level clades.
+    Cluster samples by their bitmap profiles for one feature/window.
     """
 
-    # Cluster samples using their bitmap profiles for this interval.
     matrix = linkage(bitmap.transpose(), method="ward", metric="euclidean")
 
-    # Convert the clustering result to a Newick tree string.
     tree_tmp = hierarchy.to_tree(matrix, False)
     treedata = get_newick(tree_tmp, tree_tmp.dist, genome_names)
 
-    # Read the Newick tree directly from memory.
     tree = Phylo.read(StringIO(treedata), "newick")
 
-    # Use the top-level clades as haplotype groups.
     clades = get_major_clades(tree, 1)
 
     return clades
 
 
-def write_haplotype_output(clades, sample_order, feature_name, out_f):
+def make_haplotype_series(clades, sample_order):
     """
-    Write haplotype group assignments for each sample.
+    Convert clades into a per-sample haplotype series.
 
     Samples in Clade_1 are labeled 0.
     Samples in Clade_2 are labeled 1.
     """
 
+    haplotypes = {}
+
     for sample in sample_order:
-        if sample in clades["Clade_1"]:
-            hap = "0"
-        elif sample in clades["Clade_2"]:
-            hap = "1"
+        if sample in clades.get("Clade_1", []):
+            haplotypes[sample] = 0
+        elif sample in clades.get("Clade_2", []):
+            haplotypes[sample] = 1
 
-        out_f.write(feature_name + "\t" + sample + "\t" + hap + "\n")
+    return pd.Series(haplotypes, name="haplotype")
 
 
-def query_feature_haplotypes(
-    anchor_name, chromosome, panagram_dir, gff, sample_f, feature_type, output_tsv
-):
+def write_wide_haplotype_header(out_f, sample_order):
     """
-    Query Panagram bitmaps for genes or exons on one chromosome and assign haplotype groups.
-    NOTE: this may need to be adjusted for different GFFs.
+    Write the wide-format haplotype TSV header.
     """
 
-    # Load the Panagram index inside this process.
-    index = Index(panagram_dir)
+    out_f.write("feature_id\t" + "\t".join(sample_order) + "\n")
 
-    # Read the sample file and store sample order.
-    sample_order = read_sample_order(sample_f)
 
-    # Track how many times each feature name has been seen.
-    # This is used to number exons as feature_1, feature_2, etc.
-    feature_counts = {}
+def write_wide_haplotype_row(out_f, feature_name, haplotype_series, sample_order):
+    """
+    Write one wide-format haplotype row.
 
-    cntr = 0
+    Missing haplotype calls are written as NA.
+    """
 
-    # Read in the GFF file and write haplotype assignments to the output TSV.
-    with open(output_tsv, "w") as out_f, open(gff, "r") as f:
-        line = f.readline()
+    values = []
 
-        while line:
-            # Skip comments.
-            if line.startswith("#"):
-                line = f.readline()
-                continue
+    for sample in sample_order:
+        if sample in haplotype_series.index:
+            values.append(str(int(haplotype_series.loc[sample])))
+        else:
+            values.append("NA")
 
-            tmp = line.strip().split("\t")
-
-            # Skip malformed lines.
-            if len(tmp) < 9:
-                line = f.readline()
-                continue
-
-            # Skip features that do not match the requested type.
-            if tmp[2] != feature_type:
-                line = f.readline()
-                continue
-
-            # Extract chromosome and feature coordinates.
-            chrom = tmp[0]
-            start_coord = int(tmp[3])
-            end_coord = int(tmp[4])
-
-            # Extract the feature name from the GFF attributes column.
-            feature_name = extract_feature_name(tmp[8])
-
-            # For exons, add _1, _2, etc. based on how many times we have seen this feature.
-            # For genes, keep the original feature name.
-            if feature_type == "exon":
-                feature_counts[feature_name] = feature_counts.get(feature_name, 0) + 1
-                feature_name = f"{feature_name}_{feature_counts[feature_name]}"
-
-            # Only process features on the requested chromosome/contig.
-            if chrom == chromosome:
-                # Query the Panagram bitmap for this interval.
-                bitmap = index.query_bitmap(anchor_name, chrom, start_coord, end_coord, 1)
-
-                # Cluster samples and assign haplotype groups.
-                clades = create_feature_tree(bitmap, index.genome_names)
-                write_haplotype_output(clades, sample_order, feature_name, out_f)
-
-                # Periodically flush output for long runs.
-                if cntr % 10 == 0:
-                    out_f.flush()
-
-                cntr += 1
-
-            line = f.readline()
+    out_f.write(feature_name + "\t" + "\t".join(values) + "\n")
 
 
 def build_kinship_matrix(tree_file):
@@ -277,19 +267,15 @@ def build_kinship_matrix(tree_file):
     Build a tree-derived kinship-like covariance matrix.
     """
 
-    # Load tree.
     tree = Phylo.read(tree_file, "newick")
 
-    # Get terminal taxa/tips.
     tips = tree.get_terminals()
     sample_names = [tip.name for tip in tips]
     max_samples = len(sample_names) + 3
 
-    # Total root-to-tip distance, used for normalization.
     max_distance = max(tree.distance(tree.root, tip) for tip in tips)
     max_distance = max_distance * 2
 
-    # Compute pairwise tree-based similarity values.
     distance_matrix = pd.DataFrame(index=sample_names, columns=sample_names, dtype=float)
 
     for tip_a in tips:
@@ -298,7 +284,6 @@ def build_kinship_matrix(tree_file):
                 max_distance - tree.distance(tip_a, tip_b)
             ) / max_distance
 
-    # Convert the distance matrix into a kinship-like covariance matrix.
     kinship_matrix = distance_matrix.values.copy()
     kinship_matrix += np.eye(kinship_matrix.shape[0]) * 1e-6
     kinship_matrix = kinship_matrix / np.mean(np.diag(kinship_matrix))
@@ -306,410 +291,793 @@ def build_kinship_matrix(tree_file):
     return kinship_matrix, distance_matrix, max_samples
 
 
-def test_one_feature(
+def test_one_feature_immediate(
     feature_name,
+    haplotype_series,
     kinship_matrix,
-    feature_haplotype_df,
-    group1_size,
-    group2_size,
-    group1_samples,
-    group2_samples,
+    distance_matrix,
     phenotype_df,
     phenotype_list,
-    distance_matrix,
-    max_samples,
     out_f,
 ):
     """
-    Test one gene/exon against all phenotypes using GLS.
+    Test one feature/window against all phenotypes using GLS.
+
+    This function works directly from one in-memory haplotype Series and
+    writes association rows immediately.
     """
 
-    # Convert phenotype sample IDs from index to a column for merging.
-    phenotype_for_merge = phenotype_df.copy()
-    phenotype_for_merge.index.name = "sample_id"
-    phenotype_for_merge = phenotype_for_merge.reset_index()
-
-    # Merge phenotype values with haplotype calls for this feature.
-    merged_df = phenotype_for_merge.merge(feature_haplotype_df, on="sample_id", validate="1:1")
-
-    # Put sample IDs back as the index and order samples to match the kinship matrix.
-    merged_df = merged_df.set_index("sample_id")
+    # Match sample order to the kinship matrix/tree order.
     sample_order = distance_matrix.index.tolist()
-    merged_df = merged_df.loc[sample_order]
 
-    def test_each_phenotype(
-        phenotype_name,
-        kinship_matrix,
-        feature_name,
-        group1_size,
-        group2_size,
-        group1_samples,
-        group2_samples,
-    ):
-        """
-        Test one phenotype for one gene/exon.
-        """
+    # Keep only samples with haplotype calls and phenotype rows.
+    shared_samples = [
+        sample
+        for sample in sample_order
+        if sample in haplotype_series.index and sample in phenotype_df.index
+    ]
 
-        phenotype_values = merged_df[phenotype_name].values
-        haplotype_values = merged_df["haplotype"].values.reshape(-1, 1)
+    if len(shared_samples) == 0:
+        return
+
+    haplotypes = haplotype_series.loc[shared_samples].astype(float)
+    phenotypes = phenotype_df.loc[shared_samples]
+
+    group1_samples = haplotypes[haplotypes == 0].index
+    group2_samples = haplotypes[haplotypes == 1].index
+
+    group1_size = len(group1_samples)
+    group2_size = len(group2_samples)
+
+    # Require both haplotype groups to exist before phenotype-specific filtering.
+    if min(group1_size, group2_size) == 0:
+        return
+
+    # Positions of shared samples in the full kinship matrix.
+    shared_positions = [sample_order.index(sample) for sample in shared_samples]
+
+    for phenotype_name in phenotype_list:
+        phenotype_values_all = phenotypes[phenotype_name].values.astype(float)
+        haplotype_values_all = haplotypes.values.astype(float)
+
+        valid_indices = ~np.isnan(phenotype_values_all)
+
+        if valid_indices.sum() == 0:
+            continue
+
+        phenotype_values = phenotype_values_all[valid_indices]
+        haplotype_values_raw = haplotype_values_all[valid_indices]
+
+        # Require both haplotype groups after dropping missing phenotype values.
+        if len(np.unique(haplotype_values_raw)) < 2:
+            continue
+
+        group1_phenotype_values = phenotypes.loc[group1_samples, phenotype_name].dropna()
+        group2_phenotype_values = phenotypes.loc[group2_samples, phenotype_name].dropna()
+
+        if len(group1_phenotype_values) == 0 or len(group2_phenotype_values) == 0:
+            continue
+
+        haplotype_values = haplotype_values_raw.reshape(-1, 1)
         haplotype_values = sm.add_constant(haplotype_values)
 
-        valid_indices = ~np.isnan(phenotype_values)
+        valid_positions = np.array(shared_positions)[valid_indices]
+        kinship_matrix_subset = kinship_matrix[np.ix_(valid_positions, valid_positions)]
 
-        phenotype_values = phenotype_values[valid_indices]
-        haplotype_values = haplotype_values[valid_indices]
-
-        group1_phenotype_values = list(
-            merged_df[merged_df.index.isin(group1_samples)][phenotype_name].dropna()
-        )
-        group2_phenotype_values = list(
-            merged_df[merged_df.index.isin(group2_samples)][phenotype_name].dropna()
+        model = sm.GLS(
+            phenotype_values,
+            haplotype_values,
+            sigma=kinship_matrix_subset,
         )
 
-        if (
-            len(valid_indices) < max_samples
-            and len(haplotype_values) < max_samples
-            and len(phenotype_values) < max_samples
-            and len(haplotype_values) > 0
-            and len(phenotype_values) > 0
-            and len(group1_phenotype_values) > 0
-            and len(group2_phenotype_values) > 0
-        ):
-            kinship_matrix_subset = kinship_matrix[np.ix_(valid_indices, valid_indices)]
+        results = model.fit()
 
-            model = sm.GLS(phenotype_values, haplotype_values, sigma=kinship_matrix_subset)
+        group1_mean = group1_phenotype_values.mean()
+        group2_mean = group2_phenotype_values.mean()
 
-            results = model.fit()
-
-            group1_mean = sum(group1_phenotype_values) / len(group1_phenotype_values)
-            group2_mean = sum(group2_phenotype_values) / len(group2_phenotype_values)
-
-            out_f.write(
-                feature_name
-                + "\t"
-                + phenotype_name
-                + "\t"
-                + group1_size
-                + "\t"
-                + group2_size
-                + "\t"
-                + str(group1_mean)
-                + "\t"
-                + str(group2_mean)
-                + "\t"
-                + str(results.pvalues[1])
-                + "\n"
-            )
-
-    for phenotype_column in phenotype_list:
-        test_each_phenotype(
-            phenotype_column,
-            kinship_matrix,
-            feature_name,
-            group1_size,
-            group2_size,
-            list(group1_samples.index),
-            list(group2_samples.index),
+        out_f.write(
+            feature_name
+            + "\t"
+            + phenotype_name
+            + "\t"
+            + str(group1_size)
+            + "\t"
+            + str(group2_size)
+            + "\t"
+            + str(group1_mean)
+            + "\t"
+            + str(group2_mean)
+            + "\t"
+            + str(results.pvalues[1])
+            + "\n"
         )
 
 
-def run_association_tests(
-    tree_file, chromosome, haplotype_file, gff, phenotype_file, feature_type, output_tsv
+def build_feature_windows(
+    anchor_name,
+    panagram_dir,
+    gff,
+    feature_type,
 ):
     """
-    Test associations between gene/exon haplotype groups and phenotypes for one chromosome.
+    Build the full list of features/windows to test.
+
+    Output rows are:
+        feature_name, chromosome, start, end
+
+    Modes:
+        gene:
+            test each gene feature directly
+
+        exon:
+            test each exon directly, numbering repeated exon parent IDs
+
+        reg:
+            generate gene-flanking regulatory windows and skip windows
+            that overlap the gene body
+
+        all:
+            ignore the GFF and tile every chromosome/contig
     """
 
-    # Build kinship matrix from tree.
-    kinship_matrix, distance_matrix, max_samples = build_kinship_matrix(tree_file)
+    index = Index(panagram_dir)
+    features = []
 
-    # Read phenotype and haplotype files.
-    # Phenotype file is expected to be CSV with sample IDs in the first column.
-    phenotype_df = pd.read_csv(phenotype_file, index_col=0)
+    if feature_type == "all":
+        chroms = list(index[anchor_name].chrs.index)
 
-    column_names = ["gene_id", "sample_id", "haplotype"]
+        for chrom in chroms:
+            chrom_size = index[anchor_name].chrs.loc[chrom, "size"]
 
-    haplotype_df = pd.read_csv(haplotype_file, sep="\t", index_col=1, names=column_names)
+            chrom_windows = generate_chromosome_windows(
+                chrom,
+                chrom_size,
+            )
 
-    phenotype_list = phenotype_df.columns.values.tolist()
+            features.extend(chrom_windows)
 
-    counter = 0
+        return features
+
     feature_counts = {}
 
-    # Read the GFF and write association results to the output TSV.
-    with open(output_tsv, "w") as out_f, open(gff, "r") as file:
-        line = file.readline()
+    with open(gff, "r") as gff_f:
+        line = gff_f.readline()
 
         while line:
-            counter += 1
-
-            # Skip comments.
             if line.startswith("#"):
-                line = file.readline()
+                line = gff_f.readline()
                 continue
 
             fields = line.strip().split("\t")
 
-            # Skip malformed lines.
             if len(fields) < 9:
-                line = file.readline()
+                line = gff_f.readline()
                 continue
 
-            line_chromosome = fields[0]
+            chrom = fields[0]
 
-            if line_chromosome != chromosome:
-                line = file.readline()
-                continue
+            # reg mode is generated from gene features.
+            if feature_type == "reg":
+                if fields[2] != "gene":
+                    line = gff_f.readline()
+                    continue
+            else:
+                if fields[2] != feature_type:
+                    line = gff_f.readline()
+                    continue
 
-            # Skip features that do not match the requested type.
-            if fields[2] != feature_type:
-                line = file.readline()
-                continue
-
-            # Extract feature name from GFF attributes.
+            start_coord = int(fields[3])
+            end_coord = int(fields[4])
             feature_name = extract_feature_name(fields[8])
 
-            # For exons, add _1, _2, etc. to match the haplotype output.
-            # For genes, keep the original feature name.
-            if feature_type == "exon":
-                feature_counts[feature_name] = feature_counts.get(feature_name, 0) + 1
-                feature_name = f"{feature_name}_{feature_counts[feature_name]}"
+            if feature_type == "reg":
+                chrom_size = index[anchor_name].chrs.loc[chrom, "size"]
 
-            feature_haplotype_df = haplotype_df[haplotype_df["gene_id"] == feature_name]
-
-            group1_count = len(feature_haplotype_df[feature_haplotype_df["haplotype"] == 0])
-            group2_count = len(feature_haplotype_df[feature_haplotype_df["haplotype"] == 1])
-
-            if min(group1_count, group2_count) > 0:
-                test_one_feature(
+                windows = generate_regulatory_windows(
                     feature_name,
-                    kinship_matrix,
-                    feature_haplotype_df,
-                    str(group1_count),
-                    str(group2_count),
-                    feature_haplotype_df[feature_haplotype_df["haplotype"] == 0],
-                    feature_haplotype_df[feature_haplotype_df["haplotype"] == 1],
-                    phenotype_df,
-                    phenotype_list,
-                    distance_matrix,
-                    max_samples,
-                    out_f,
+                    start_coord,
+                    end_coord,
+                    chrom_size,
                 )
 
-            if counter % 10 == 0:
-                out_f.flush()
+                for window_name, window_start, window_end in windows:
+                    # Skip regulatory windows that overlap the gene body.
+                    overlaps_gene = window_start < end_coord and window_end > start_coord
 
-            line = file.readline()
+                    if overlaps_gene:
+                        continue
+
+                    features.append((window_name, chrom, window_start, window_end))
+
+            else:
+                # Number exons so repeated exon parent IDs become feature_1, feature_2, etc.
+                if feature_type == "exon":
+                    feature_counts[feature_name] = feature_counts.get(feature_name, 0) + 1
+                    feature_name = f"{feature_name}_{feature_counts[feature_name]}"
+
+                features.append((feature_name, chrom, start_coord, end_coord))
+
+            line = gff_f.readline()
+
+    return features
 
 
-def run_one_chromosome(
-    chromosome,
+def split_into_chunks(items, chunk_size):
+    """
+    Split a list into fixed-size chunks.
+    """
+
+    chunks = []
+
+    for start in range(0, len(items), chunk_size):
+        end = start + chunk_size
+        chunks.append(items[start:end])
+
+    return chunks
+
+
+def process_feature_chunk(
+    chunk_id,
+    feature_chunk,
     anchor_name,
     panagram_dir,
-    gff,
     sample_f,
     phenotype_file,
     feature_type,
     tree_file,
     haplotype_dir,
     association_dir,
+    keep_haplotypes,
 ):
     """
-    Run haplotype querying and association testing for one chromosome.
+    Process one chunk of features/windows.
+
+    Each feature/window:
+        query bitmap
+        assign haplotypes
+        optionally write wide haplotype row
+        immediately run association tests
+
+    This allows more parallelism than chromosome-level processing.
     """
 
-    haplotype_tsv = haplotype_dir / f"{chromosome}_{feature_type}_haplotypes.tsv"
-    association_tsv = association_dir / f"{chromosome}_{feature_type}_associations.tsv"
+    print(f"Starting chunk: {chunk_id}", file=sys.stderr, flush=True)
 
-    print(f"Starting chromosome: {chromosome}", file=sys.stderr, flush=True)
+    index = Index(panagram_dir)
+    sample_order = read_sample_order(sample_f)
+    phenotype_df = pd.read_csv(phenotype_file, index_col=0)
+    phenotype_list = phenotype_df.columns.values.tolist()
 
-    # Query haplotypes for this chromosome.
-    query_feature_haplotypes(
-        anchor_name, chromosome, panagram_dir, gff, sample_f, feature_type, haplotype_tsv
-    )
+    kinship_matrix, distance_matrix, max_samples = build_kinship_matrix(tree_file)
 
-    print(f"Haplotypes complete: {chromosome}", file=sys.stderr, flush=True)
+    haplotype_tsv = haplotype_dir / f"chunk_{chunk_id}_{feature_type}_haplotypes.tsv"
+    association_tsv = association_dir / f"chunk_{chunk_id}_{feature_type}_associations.tsv"
 
-    # Run association tests for this chromosome.
-    run_association_tests(
-        tree_file, chromosome, haplotype_tsv, gff, phenotype_file, feature_type, association_tsv
-    )
+    cntr = 0
 
-    print(f"Associations complete: {chromosome}", file=sys.stderr, flush=True)
+    # Open haplotype output only if requested.
+    if keep_haplotypes:
+        hap_f = open(haplotype_tsv, "w")
+        write_wide_haplotype_header(hap_f, sample_order)
+    else:
+        hap_f = None
 
-    return chromosome
+    with open(association_tsv, "w") as assoc_f:
+        for test_feature_name, chrom, test_start, test_end in feature_chunk:
+            bitmap = index.query_bitmap(
+                anchor_name,
+                chrom,
+                test_start,
+                test_end,
+                1,
+            )
+
+            clades = create_feature_tree(bitmap, index.genome_names)
+            haplotype_series = make_haplotype_series(clades, sample_order)
+
+            if keep_haplotypes:
+                write_wide_haplotype_row(
+                    hap_f,
+                    test_feature_name,
+                    haplotype_series,
+                    sample_order,
+                )
+
+            test_one_feature_immediate(
+                test_feature_name,
+                haplotype_series,
+                kinship_matrix,
+                distance_matrix,
+                phenotype_df,
+                phenotype_list,
+                assoc_f,
+            )
+
+            if cntr % 10 == 0:
+                assoc_f.flush()
+
+                if keep_haplotypes:
+                    hap_f.flush()
+
+            cntr += 1
+
+    if keep_haplotypes:
+        hap_f.close()
+
+    print(f"Finished chunk: {chunk_id}", file=sys.stderr, flush=True)
+
+    return chunk_id
 
 
-def plot_volcano(input_folder, output_plot):
+def combine_association_files(association_dir, feature_type):
     """
-    Read association result TSVs, apply FDR correction, and make volcano plots.
+    Combine chunk-level association files into one association TSV.
+
+    This uses streaming append and does not load files into memory.
     """
 
-    output_plot = Path(output_plot)
-    output_dir = output_plot.parent
+    association_dir = Path(association_dir)
+    combined_file = association_dir / f"all_{feature_type}_associations.tsv"
 
-    # Create output directory if it does not already exist.
-    output_dir.mkdir(parents=True, exist_ok=True)
+    association_files = sorted(association_dir.glob(f"*_{feature_type}_associations.tsv"))
 
-    # Find all TSV files in the input folder.
-    tsv_files = list(Path(input_folder).glob("*.tsv"))
+    # Avoid accidentally combining previous all_* files.
+    association_files = [f for f in association_files if not f.name.startswith("all_")]
 
-    # Stop early if no TSV files are found.
-    if len(tsv_files) == 0:
-        sys.exit(f"ERROR: No .tsv files found in {input_folder}")
+    with open(combined_file, "w") as out_f:
+        for association_file in association_files:
+            print(f"Combining: {association_file}", file=sys.stderr, flush=True)
 
-    # Expected columns in the association result TSVs.
-    column_names = [
-        "gene_name",
+            with open(association_file, "r") as in_f:
+                for line in in_f:
+                    out_f.write(line)
+
+    print(f"Combined associations: {combined_file}", file=sys.stderr, flush=True)
+
+    return combined_file
+
+
+def filter_associations_and_replace_zero_pvalues(combined_file, filtered_file):
+    """
+    Match the original script's pre-FDR filtering behavior.
+
+    Original behavior:
+        1. Remove rows where either haplotype group is less than 10% of total.
+        2. Mark p-values of 0 and replace them before FDR.
+           Replacement is:
+               1e-300 if all retained p-values are zero
+               otherwise 10 ** (floor(log10(min_nonzero_p)) - 2)
+
+    This function streams the data twice:
+        pass 1: filter rows and find min nonzero p-value
+        pass 2: write filtered rows with p == 0 replaced
+    """
+
+    min_nonzero_p = None
+    retained_rows = 0
+
+    # First pass: determine min nonzero p-value after 10% group-size filtering.
+    with open(combined_file, "r") as in_f:
+        for line in in_f:
+            fields = line.rstrip("\n").split("\t")
+
+            group1_size = float(fields[2])
+            group2_size = float(fields[3])
+            p_value = float(fields[6])
+
+            total_size = group1_size + group2_size
+
+            if group1_size < 0.1 * total_size or group2_size < 0.1 * total_size:
+                continue
+
+            retained_rows += 1
+
+            if p_value > 0:
+                if min_nonzero_p is None or p_value < min_nonzero_p:
+                    min_nonzero_p = p_value
+
+    if retained_rows == 0:
+        sys.exit("ERROR: No rows remain after filtering by haplotype group size.")
+
+    if min_nonzero_p is None:
+        replacement_p = 1e-300
+    else:
+        exponent = int(np.floor(np.log10(min_nonzero_p))) - 2
+        replacement_p = 10**exponent
+
+    print(f"Rows after 10% group-size filter: {retained_rows}", file=sys.stderr, flush=True)
+    print(f"Minimum non-zero p-value: {min_nonzero_p}", file=sys.stderr, flush=True)
+    print(f"Setting zero p-values to: {replacement_p}", file=sys.stderr, flush=True)
+
+    # Second pass: write filtered rows with zero p-values replaced.
+    with open(combined_file, "r") as in_f, open(filtered_file, "w") as out_f:
+        for line in in_f:
+            fields = line.rstrip("\n").split("\t")
+
+            group1_size = float(fields[2])
+            group2_size = float(fields[3])
+            p_value = float(fields[6])
+
+            total_size = group1_size + group2_size
+
+            if group1_size < 0.1 * total_size or group2_size < 0.1 * total_size:
+                continue
+
+            if p_value == 0:
+                fields[6] = str(replacement_p)
+
+            out_f.write("\t".join(fields) + "\n")
+
+    return retained_rows
+
+
+def count_lines(input_file):
+    """
+    Count lines in a file.
+    """
+
+    count = 0
+
+    with open(input_file, "r") as f:
+        for _ in f:
+            count += 1
+
+    return count
+
+
+def run_sort(input_file, output_file, sort_key, temp_dir=None):
+    """
+    Run Unix sort.
+
+    sort_key should be a list of sort arguments, e.g. ["-k7,7g"].
+    """
+
+    cmd = ["sort", "-t", "\t"]
+
+    if temp_dir is not None:
+        cmd.extend(["-T", str(temp_dir)])
+
+    cmd.extend(sort_key)
+    cmd.extend([str(input_file), "-o", str(output_file)])
+
+    print("Running:", " ".join(cmd), file=sys.stderr, flush=True)
+    subprocess.run(cmd, check=True)
+
+
+def add_bh_rank_values(sorted_by_p_file, ranked_file, total_tests):
+    """
+    Add rank and raw BH values to p-value-sorted associations.
+    """
+
+    with open(sorted_by_p_file, "r") as in_f, open(ranked_file, "w") as out_f:
+        rank = 1
+
+        for line in in_f:
+            line = line.rstrip("\n")
+            fields = line.split("\t")
+
+            p_value = float(fields[6])
+            raw_bh = p_value * total_tests / rank
+
+            out_f.write(line + "\t" + str(rank) + "\t" + str(raw_bh) + "\n")
+
+            rank += 1
+
+
+def apply_bh_cumulative_min(ranked_desc_file, fdr_unsorted_file):
+    """
+    Apply BH cumulative minimum while streaming from largest rank to smallest rank.
+    """
+
+    running_min = 1.0
+
+    with open(ranked_desc_file, "r") as in_f, open(fdr_unsorted_file, "w") as out_f:
+        for line in in_f:
+            line = line.rstrip("\n")
+            fields = line.split("\t")
+
+            raw_bh = float(fields[8])
+            running_min = min(running_min, raw_bh)
+            fdr = min(running_min, 1.0)
+
+            # Drop rank and raw_bh, append final FDR.
+            original_fields = fields[:7]
+            out_f.write("\t".join(original_fields) + "\t" + str(fdr) + "\n")
+
+
+def collect_phenotype_mean_diff_ranges(fdr_sorted_file):
+    """
+    Collect phenotype-specific min/max mean differences from corrected associations.
+
+    This matches the original behavior because this file already contains only
+    rows that passed the 10% haplotype group-size filter.
+    """
+
+    ranges = {}
+
+    with open(fdr_sorted_file, "r") as f:
+        for line in f:
+            fields = line.rstrip("\n").split("\t")
+
+            phenotype_name = fields[1]
+            group1_mean = float(fields[4])
+            group2_mean = float(fields[5])
+            mean_difference = group1_mean - group2_mean
+
+            if phenotype_name not in ranges:
+                ranges[phenotype_name] = [mean_difference, mean_difference]
+            else:
+                ranges[phenotype_name][0] = min(
+                    ranges[phenotype_name][0],
+                    mean_difference,
+                )
+                ranges[phenotype_name][1] = max(
+                    ranges[phenotype_name][1],
+                    mean_difference,
+                )
+
+    return ranges
+
+
+def collect_top_features_per_phenotype(fdr_sorted_file, max_points_per_phenotype=50000):
+    """
+    Collect feature/phenotype pairs to plot.
+
+    The input file is sorted by FDR ascending, so the first N rows for each
+    phenotype are the top N rows for that phenotype.
+    """
+
+    counts = defaultdict(int)
+    plotted_features = set()
+
+    with open(fdr_sorted_file, "r") as f:
+        for line in f:
+            fields = line.rstrip("\n").split("\t")
+
+            feature_id = fields[0]
+            phenotype_name = fields[1]
+
+            if counts[phenotype_name] < max_points_per_phenotype:
+                plotted_features.add((feature_id, phenotype_name))
+                counts[phenotype_name] += 1
+
+    return plotted_features
+
+
+def add_norm_difference_and_plotted_flag(
+    fdr_sorted_file,
+    final_file,
+    phenotype_ranges,
+    plotted_features,
+):
+    """
+    Add norm_mean_difference and plotted columns to the final corrected file.
+
+    The norm_mean_difference formula matches the original script:
+
+        norm_mean_difference = mean_difference / (phenotype_max - phenotype_min)
+
+    It does not subtract the phenotype minimum.
+    """
+
+    header = [
+        "feature_id",
         "phenotype_name",
         "group1_size",
         "group2_size",
         "group1_mean",
         "group2_mean",
         "p_value",
+        "fdr",
+        "norm_mean_difference",
+        "plotted",
     ]
 
-    # Read and concatenate all TSV files.
-    dataframes = []
+    with open(fdr_sorted_file, "r") as in_f, open(final_file, "w") as out_f:
+        out_f.write("\t".join(header) + "\n")
 
-    for tsv_file in tsv_files:
-        df_temp = pd.read_csv(tsv_file, sep="\t", names=column_names, dtype={"p_value": float})
-        dataframes.append(df_temp)
+        for line in in_f:
+            fields = line.rstrip("\n").split("\t")
 
-    df = pd.concat(dataframes, ignore_index=True)
+            feature_id = fields[0]
+            phenotype_name = fields[1]
+            group1_mean = float(fields[4])
+            group2_mean = float(fields[5])
 
-    # Drop rows where either haplotype group is less than 10% of the total group size.
-    total_size = round(df["group1_size"] + df["group2_size"])
-    df = df[(df["group1_size"] >= 0.1 * total_size) & (df["group2_size"] >= 0.1 * total_size)]
+            mean_difference = group1_mean - group2_mean
 
-    # Stop if filtering removed all rows.
-    if len(df) == 0:
-        sys.exit("ERROR: No rows remain after filtering by haplotype group size.")
+            pheno_min, pheno_max = phenotype_ranges[phenotype_name]
 
-    # Mark original p-values of 0 before replacing them.
-    # These will be plotted with star markers.
-    df["is_zero_p"] = df["p_value"] == 0
+            if pheno_max == pheno_min:
+                norm_mean_difference = 0.0
+            else:
+                norm_mean_difference = mean_difference / (pheno_max - pheno_min)
 
-    # Replace p-values of 0 so -log10(p) can be calculated.
-    min_nonzero_p = df[df["p_value"] > 0]["p_value"].min()
+            if (feature_id, phenotype_name) in plotted_features:
+                plotted = "1"
+            else:
+                plotted = "0"
 
-    if pd.isna(min_nonzero_p):
-        # If all p-values are zero, use a fixed very small value.
-        replacement_p = 1e-300
+            out_f.write(
+                "\t".join(fields) + "\t" + str(norm_mean_difference) + "\t" + plotted + "\n"
+            )
+
+
+def run_bh_fdr_disk(
+    combined_association_file,
+    association_dir,
+    feature_type,
+    sort_temp_dir=None,
+    max_points_per_phenotype=50000,
+):
+    """
+    Run exact global BH/FDR correction using disk-based sorting.
+
+    This version matches the original script's output logic:
+        1. Apply 10% haplotype group-size filter before FDR.
+        2. Replace p-values of 0 before FDR.
+        3. Run BH/FDR only on retained rows.
+        4. Compute norm_mean_difference from retained rows.
+    """
+
+    association_dir = Path(association_dir)
+
+    filtered_file = association_dir / f"all_{feature_type}_associations.filtered.tmp.tsv"
+    sorted_by_p_file = association_dir / f"all_{feature_type}_associations.sorted_by_p.tmp.tsv"
+    ranked_file = association_dir / f"all_{feature_type}_associations.ranked.tmp.tsv"
+    ranked_desc_file = association_dir / f"all_{feature_type}_associations.ranked_desc.tmp.tsv"
+    fdr_unsorted_file = association_dir / f"all_{feature_type}_associations.fdr_unsorted.tmp.tsv"
+    fdr_sorted_no_header_file = (
+        association_dir / f"all_{feature_type}_associations.fdr_sorted.no_header.tmp.tsv"
+    )
+
+    final_file = association_dir / f"all_{feature_type}_associations.fdr_sorted.tsv"
+
+    # Match original pre-FDR filtering and zero-p-value replacement.
+    total_tests = filter_associations_and_replace_zero_pvalues(
+        combined_association_file,
+        filtered_file,
+    )
+
+    print(f"Total association tests used for FDR: {total_tests}", file=sys.stderr, flush=True)
+
+    # Sort filtered associations by p-value, then feature_id, then phenotype_name.
+    # The extra tie-breakers make chunked output more deterministic.
+    run_sort(
+        filtered_file,
+        sorted_by_p_file,
+        ["-k7,7g", "-k1,1", "-k2,2"],
+        temp_dir=sort_temp_dir,
+    )
+
+    # Add BH rank and raw BH.
+    add_bh_rank_values(sorted_by_p_file, ranked_file, total_tests)
+
+    # Sort by rank descending, column 8.
+    run_sort(
+        ranked_file,
+        ranked_desc_file,
+        ["-k8,8nr"],
+        temp_dir=sort_temp_dir,
+    )
+
+    # Apply cumulative minimum to get final FDR.
+    apply_bh_cumulative_min(ranked_desc_file, fdr_unsorted_file)
+
+    # Sort final corrected rows by FDR ascending, column 8.
+    run_sort(
+        fdr_unsorted_file,
+        fdr_sorted_no_header_file,
+        ["-k8,8g"],
+        temp_dir=sort_temp_dir,
+    )
+
+    # Add norm_mean_difference and plotted flag.
+    phenotype_ranges = collect_phenotype_mean_diff_ranges(fdr_sorted_no_header_file)
+
+    plotted_features = collect_top_features_per_phenotype(
+        fdr_sorted_no_header_file,
+        max_points_per_phenotype=max_points_per_phenotype,
+    )
+
+    add_norm_difference_and_plotted_flag(
+        fdr_sorted_no_header_file,
+        final_file,
+        phenotype_ranges,
+        plotted_features,
+    )
+
+    print(f"Final FDR-corrected associations: {final_file}", file=sys.stderr, flush=True)
+
+    return final_file
+
+
+def plot_volcano(corrected_association_file, output_plot):
+    """
+    Make volcano plots using only rows marked plotted == 1.
+    """
+
+    output_plot = Path(output_plot)
+    output_dir = output_plot.parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    chunks = []
+
+    for chunk in pd.read_csv(corrected_association_file, sep="\t", chunksize=500000):
+        chunk = chunk[chunk["plotted"] == 1]
+
+        if len(chunk) > 0:
+            chunks.append(chunk)
+
+    if len(chunks) == 0:
+        sys.exit("ERROR: No rows marked plotted == 1.")
+
+    df = pd.concat(chunks, ignore_index=True)
+
+    # Ensure numeric types.
+    df["group1_mean"] = pd.to_numeric(df["group1_mean"])
+    df["group2_mean"] = pd.to_numeric(df["group2_mean"])
+    df["fdr"] = pd.to_numeric(df["fdr"])
+    df["norm_mean_difference"] = pd.to_numeric(df["norm_mean_difference"])
+
+    # Avoid -log10(0).
+    nonzero_fdr = df[df["fdr"] > 0]["fdr"].min()
+
+    if pd.isna(nonzero_fdr):
+        replacement_fdr = 1e-300
     else:
-        # If p = 0, set it to 1e<exponent - 2>.
-        exponent = int(np.floor(np.log10(min_nonzero_p))) - 2
-        replacement_p = 10**exponent
+        exponent = int(np.floor(np.log10(nonzero_fdr))) - 2
+        replacement_fdr = 10**exponent
 
-    df.loc[df["p_value"] == 0, "p_value"] = replacement_p
+    df.loc[df["fdr"] == 0, "fdr"] = replacement_fdr
 
-    print(f"Minimum non-zero p-value: {min_nonzero_p}", file=sys.stderr, flush=True)
-    print(f"Setting zero p-values to: {replacement_p}", file=sys.stderr, flush=True)
-
-    # Calculate derived columns.
+    # Derived plotting columns are calculated only in memory.
     df["mean_difference"] = df["group1_mean"] - df["group2_mean"]
-    df["log_pval"] = -np.log10(df["p_value"])
-    df["fdr_corrected"] = multipletests(df["p_value"], method="fdr_bh")[1]
-    df["log_fdr"] = -np.log10(df["fdr_corrected"])
+    df["log_fdr"] = -np.log10(df["fdr"])
 
-    # Normalize mean differences per phenotype.
-    # This keeps the original normalization approach.
-    groups = df.groupby("phenotype_name")
-    norm_diffs = []
-
-    for name, group in groups:
-        g_max = group["mean_difference"].max()
-        g_min = group["mean_difference"].min()
-
-        # Avoid division by zero if all mean differences are identical.
-        if g_max == g_min:
-            group_norm = group["mean_difference"] * 0
-        else:
-            group_norm = group["mean_difference"] / (g_max - g_min)
-
-        norm_diffs.append(group_norm)
-
-    df["norm_mean_difference"] = pd.concat(norm_diffs).sort_index()
-
-    # Save sorted results.
-    df_sorted = df.sort_values("log_fdr", ascending=False)
-    sorted_output = output_dir / (output_plot.stem + "_sorted.tsv")
-    df_sorted.to_csv(sorted_output, sep="\t", index=False)
-
-    print(f"Dataframe saved to: {sorted_output}", file=sys.stderr, flush=True)
-
-    # Assign visually distinct colors to all phenotypes.
     unique_phenotypes = df["phenotype_name"].unique()
     palette = sns.color_palette("husl", n_colors=len(unique_phenotypes))
     color_map = dict(zip(unique_phenotypes, palette))
 
-    # FDR threshold.
     sig_threshold_fdr = 0.05
     sig_threshold_log_fdr = -np.log10(sig_threshold_fdr)
 
-    # Recreate groups after adding derived columns.
     groups = df.groupby("phenotype_name")
 
-    # Combined plot with normalized differences.
+    # Combined plot using normalized mean difference.
     plt.rcParams["figure.figsize"] = (4.5, 5)
     fig, ax = plt.subplots()
 
     for name, group in groups:
-        non_zero = group[~group["is_zero_p"]]
-        zero_p = group[group["is_zero_p"]]
-
         ax.scatter(
-            non_zero.norm_mean_difference,
-            non_zero.log_fdr,
+            group["norm_mean_difference"],
+            group["log_fdr"],
             alpha=0.5,
             c=[color_map[name]],
             label=name.replace("_", " "),
         )
 
-        ax.scatter(
-            zero_p.norm_mean_difference,
-            zero_p.log_fdr,
-            alpha=0.5,
-            c=[color_map[name]],
-            marker="*",
-            s=200,
-        )
-
-    plt.axhline(y=sig_threshold_log_fdr, color="r", linestyle="--", label="FDR")
-
-    plt.xlabel("Difference in means")
-    plt.ylabel("-log10(FDR corrected pvalue)")
+    plt.axhline(y=sig_threshold_log_fdr, color="r", linestyle="--", label="FDR 0.05")
+    plt.xlabel("Normalized difference in means")
+    plt.ylabel("-log10(FDR corrected p-value)")
     plt.legend(loc="upper right")
     plt.savefig(output_plot, dpi=300, bbox_inches="tight")
     plt.close()
 
-    # Individual plots per phenotype with raw differences.
+    # Individual plots per phenotype using raw mean difference.
     for name, group in groups:
-        non_zero = group[~group["is_zero_p"]]
-        zero_p = group[group["is_zero_p"]]
-
         plt.scatter(
-            non_zero.mean_difference,
-            non_zero.log_fdr,
+            group["mean_difference"],
+            group["log_fdr"],
             alpha=0.9,
             label=name.replace("_", " "),
             c=[color_map[name]],
         )
 
-        plt.scatter(
-            zero_p.mean_difference,
-            zero_p.log_fdr,
-            alpha=0.9,
-            c=[color_map[name]],
-            marker="*",
-            s=200,
-        )
-
-        plt.axhline(y=sig_threshold_log_fdr, color="r", linestyle="--", label="FDR")
-
+        plt.axhline(y=sig_threshold_log_fdr, color="r", linestyle="--", label="FDR 0.05")
         plt.legend(loc="upper right")
         plt.xlabel("Difference in means")
-        plt.ylabel("-log10(FDR corrected pvalue)")
+        plt.ylabel("-log10(FDR corrected p-value)")
 
         individual_plot_path = output_dir / f"{name}_volcano.png"
         plt.savefig(individual_plot_path, dpi=300, bbox_inches="tight")
@@ -724,24 +1092,35 @@ def main():
     """
 
     parser = argparse.ArgumentParser(
-        description="Run the full Panagram gene/exon association testing pipeline."
+        description="Run Panagram gene/exon/regulatory-window association testing."
     )
 
     parser.add_argument(
-        "-a", "--anchor-name", required=True, help="Anchor genome name in the Panagram index."
+        "-a",
+        "--anchor-name",
+        required=True,
+        help="Anchor genome name in the Panagram index.",
     )
 
     parser.add_argument(
-        "-p", "--panagram-dir", required=True, help="Path to the Panagram index directory."
+        "-p",
+        "--panagram-dir",
+        required=True,
+        help="Path to the Panagram index directory.",
     )
 
-    parser.add_argument("-g", "--gff", required=True, help="Path to the GFF annotation file.")
+    parser.add_argument(
+        "-g",
+        "--gff",
+        required=True,
+        help="Path to the GFF annotation file. Ignored when --type all is used.",
+    )
 
     parser.add_argument(
         "-s",
         "--sample-file",
         required=True,
-        help="Path to the tab-delimited sample file. The first column should contain sample IDs.",
+        help="Path to the tab-delimited sample file. First column should contain sample IDs.",
     )
 
     parser.add_argument(
@@ -755,9 +1134,9 @@ def main():
         "-t",
         "--type",
         required=True,
-        choices=["gene", "exon"],
+        choices=["gene", "exon", "reg", "all"],
         dest="feature_type",
-        help="Feature type to test. Must be either 'gene' or 'exon'.",
+        help="Feature type to test: gene, exon, reg, or all.",
     )
 
     parser.add_argument(
@@ -765,7 +1144,7 @@ def main():
         "--output-dir",
         required=True,
         type=Path,
-        help="Output directory for tree, haplotypes, association results, and plots.",
+        help="Output directory.",
     )
 
     parser.add_argument(
@@ -774,7 +1153,34 @@ def main():
         required=True,
         type=int,
         dest="n_threads",
-        help="Number of chromosomes/contigs to process in parallel.",
+        help="Number of worker processes to use.",
+    )
+
+    parser.add_argument(
+        "--chunk-size",
+        default=1000,
+        type=int,
+        help="Number of features/windows per worker chunk.",
+    )
+
+    parser.add_argument(
+        "--keep-haplotypes",
+        action="store_true",
+        help="Write wide-format haplotype TSV files. Default is not to save haplotypes.",
+    )
+
+    parser.add_argument(
+        "--sort-temp-dir",
+        default=None,
+        type=Path,
+        help="Optional temporary directory for Unix sort.",
+    )
+
+    parser.add_argument(
+        "--max-plot-points-per-phenotype",
+        default=50000,
+        type=int,
+        help="Number of top FDR rows per phenotype to mark for plotting.",
     )
 
     args = parser.parse_args()
@@ -787,8 +1193,11 @@ def main():
     feature_type = args.feature_type
     output_dir = args.output_dir
     n_threads = args.n_threads
+    chunk_size = args.chunk_size
+    keep_haplotypes = args.keep_haplotypes
+    sort_temp_dir = args.sort_temp_dir
+    max_plot_points_per_phenotype = args.max_plot_points_per_phenotype
 
-    # Make output directories.
     tree_dir = output_dir / "tree"
     haplotype_dir = output_dir / "haplotypes"
     association_dir = output_dir / "associations"
@@ -799,57 +1208,88 @@ def main():
     association_dir.mkdir(parents=True, exist_ok=True)
     plot_dir.mkdir(parents=True, exist_ok=True)
 
-    # Define output files.
     tree_file = tree_dir / "bitmap_tree.nwk"
     volcano_plot = plot_dir / f"{feature_type}_volcano.png"
 
-    # Load the Panagram index once to get chromosome names.
     index = Index(panagram_dir)
     chroms = list(index[anchor_name].chrs.index)
 
-    print("Chromosomes/contigs to process:", file=sys.stderr, flush=True)
+    print("Chromosomes/contigs in Panagram index:", file=sys.stderr, flush=True)
+
     for chrom in chroms:
         print(f"  {chrom}", file=sys.stderr, flush=True)
 
-    # Build the genome-wide bitmap tree once.
     print("Building genome-wide bitmap tree...", file=sys.stderr, flush=True)
     build_bitmap_tree(anchor_name, panagram_dir, tree_file)
 
-    # Run haplotype querying and association testing by chromosome in parallel.
-    print("Running chromosome-level analyses in parallel...", file=sys.stderr, flush=True)
+    print("Building feature/window list...", file=sys.stderr, flush=True)
+
+    features = build_feature_windows(
+        anchor_name,
+        panagram_dir,
+        gff,
+        feature_type,
+    )
+
+    print(f"Total features/windows to test: {len(features)}", file=sys.stderr, flush=True)
+
+    if len(features) == 0:
+        sys.exit("ERROR: No features/windows were found to test.")
+
+    feature_chunks = split_into_chunks(features, chunk_size)
+
+    print(f"Total chunks: {len(feature_chunks)}", file=sys.stderr, flush=True)
+    print(f"Chunk size: {chunk_size}", file=sys.stderr, flush=True)
+
+    print("Running chunk-level analyses in parallel...", file=sys.stderr, flush=True)
 
     with ProcessPoolExecutor(max_workers=n_threads) as executor:
         futures = []
 
-        for chrom in chroms:
+        for chunk_index, feature_chunk in enumerate(feature_chunks, start=1):
+            chunk_id = str(chunk_index).zfill(6)
+
             future = executor.submit(
-                run_one_chromosome,
-                chrom,
+                process_feature_chunk,
+                chunk_id,
+                feature_chunk,
                 anchor_name,
                 panagram_dir,
-                gff,
                 sample_f,
                 phenotype_file,
                 feature_type,
                 tree_file,
                 haplotype_dir,
                 association_dir,
+                keep_haplotypes,
             )
 
             futures.append(future)
 
         for future in as_completed(futures):
-            chrom = future.result()
-            print(f"Finished chromosome: {chrom}", file=sys.stderr, flush=True)
+            chunk_id = future.result()
+            print(f"Completed chunk: {chunk_id}", file=sys.stderr, flush=True)
 
-    # Make FDR-corrected results and volcano plots.
+    print("Combining association files...", file=sys.stderr, flush=True)
+    combined_association_file = combine_association_files(association_dir, feature_type)
+
+    print("Running disk-based BH/FDR correction...", file=sys.stderr, flush=True)
+    corrected_association_file = run_bh_fdr_disk(
+        combined_association_file,
+        association_dir,
+        feature_type,
+        sort_temp_dir=sort_temp_dir,
+        max_points_per_phenotype=max_plot_points_per_phenotype,
+    )
+
     print("Making volcano plots...", file=sys.stderr, flush=True)
-    plot_volcano(association_dir, volcano_plot)
+    plot_volcano(corrected_association_file, volcano_plot)
 
     print("Pipeline complete.", file=sys.stderr, flush=True)
     print(f"Tree: {tree_file}", file=sys.stderr, flush=True)
     print(f"Haplotypes: {haplotype_dir}", file=sys.stderr, flush=True)
     print(f"Associations: {association_dir}", file=sys.stderr, flush=True)
+    print(f"Corrected associations: {corrected_association_file}", file=sys.stderr, flush=True)
     print(f"Plots: {plot_dir}", file=sys.stderr, flush=True)
 
 
