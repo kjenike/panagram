@@ -38,4 +38,5 @@ jobs:
         with:
           globs: |
             README.md
+            scripts/README.md
             panagram/introgressions/README.md
