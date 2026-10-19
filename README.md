@@ -97,7 +97,8 @@ run into any problems, you first check the format annotation format. This can be
 line tools like gff3validator or online at
 [GenomeTools](https://genometools.org/cgi-bin/gff3validator.cgi).
 
-Please make sure the gff file is unzipped. Alternatively, you can run panagram without the gff files initially and use the python API after the bitmaps are made. The API is slightly more flexible. 
+Please make sure the gff file is unzipped. Alternatively, you can run panagram without the gff files
+initially and use the python API after the bitmaps are made. The API is slightly more flexible.
 
 Picking an acceptable kmer length for the data set can be tricky. For samples that are very similar,
 a larger k may be more appropriate. While samples that are more diverged may benefit from a smaller
