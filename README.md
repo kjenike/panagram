@@ -2,7 +2,7 @@
   <img src="./panagram/assets/panagram.png" alt="Panagram" width="300"/>
 </div>
 
-# Panagram: Interactive, alignment-free pangenome browser
+# Panagram: Interactive, alignment-free pangenome browser and analysis suite
 
 [![Release](https://img.shields.io/github/v/release/kjenike/panagram?label=Release)](https://github.com/kjenike/panagram/releases)
 [![Integration](https://github.com/kjenike/panagram/actions/workflows/integration.yaml/badge.svg)](https://github.com/kjenike/panagram/actions/workflows/integration.yaml)
@@ -10,7 +10,10 @@
 #### Katharine M. Jenike, Nicole L. Brown, Sam Kovaka, Delphine Larivière, Robin Burns, Frances Chen, Hagai Shohat, Matthias Benoit, Tyler Collins, Rachel Daniels, Blaine Fitzgerald, Iacopo Gentile, Anat Hendelman, Rachel Johnston, Betty Y.H. Huang, Alex Ostrovsky, Srividya Ramakrishnan, Katia Renault, Gina M. Robitaille, James W. Satterlee, Anton Nekrutenko, Elinor K. Karlsson, Zachary B. Lippman, Ian R. Henderson, Michael C. Schatz
 
 Welcome to Panagram! Panagram is
-[an alignment-free pangenome viewer](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf).
+[an alignment-free pangenome viewer and analysis suite](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf).
+
+Read the preprint [https://www.biorxiv.org/content/10.64898/2026.10.21.760756v1](https://www.biorxiv.org/content/10.64898/2026.10.21.760756v1)
+
 
 # Installation
 
