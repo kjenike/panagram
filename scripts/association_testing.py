@@ -85,7 +85,7 @@ def read_sample_order(sample_f):
     sample_order = []
 
     with open(sample_f, "r") as f:
-        line = f.readline()  # Skip header.
+        line = f.readline()
         line = f.readline()
 
         while line:
@@ -106,15 +106,6 @@ def generate_regulatory_windows(
 ):
     """
     Generate overlapping regulatory windows around one gene.
-
-    Regulatory region:
-        gene_start - 500,000 to gene_end + 500,000
-
-    Windows:
-        200 bp windows, overlapping by 100 bp.
-
-    The full regulatory region is clamped to chromosome boundaries.
-    Only complete 200 bp windows are returned.
     """
 
     reg_start = max(gene_start - flank_size, 0)
@@ -128,7 +119,6 @@ def generate_regulatory_windows(
         window_name = f"{gene_name}_reg_{window_counter}"
 
         windows.append((window_name, window_start, window_end))
-
         window_counter += 1
 
     return windows
@@ -142,14 +132,6 @@ def generate_chromosome_windows(
 ):
     """
     Generate overlapping windows across an entire chromosome/contig.
-
-    Window names are:
-        chrname_startcoordinate
-
-    Example:
-        chr1_0
-        chr1_100
-        chr1_200
     """
 
     windows = []
@@ -186,7 +168,6 @@ def build_bitmap_tree(anchor_name, panagram_dir, tree_file):
         bitmap.append(bittmp)
 
     result = pd.concat(bitmap)
-
     result_sample = result.sample(n=min(len(result), max_sampled_rows), random_state=42)
 
     matrix = linkage(result_sample.transpose(), method="average")
@@ -220,9 +201,6 @@ def create_feature_tree(bitmap, genome_names):
 def make_haplotype_series(clades, sample_order):
     """
     Convert clades into a per-sample haplotype series.
-
-    Samples in Clade_1 are labeled 0.
-    Samples in Clade_2 are labeled 1.
     """
 
     haplotypes = {}
@@ -247,8 +225,6 @@ def write_wide_haplotype_header(out_f, sample_order):
 def write_wide_haplotype_row(out_f, feature_name, haplotype_series, sample_order):
     """
     Write one wide-format haplotype row.
-
-    Missing haplotype calls are written as NA.
     """
 
     values = []
@@ -302,15 +278,10 @@ def test_one_feature_immediate(
 ):
     """
     Test one feature/window against all phenotypes using GLS.
-
-    This function works directly from one in-memory haplotype Series and
-    writes association rows immediately.
     """
 
-    # Match sample order to the kinship matrix/tree order.
     sample_order = distance_matrix.index.tolist()
 
-    # Keep only samples with haplotype calls and phenotype rows.
     shared_samples = [
         sample
         for sample in sample_order
@@ -329,11 +300,9 @@ def test_one_feature_immediate(
     group1_size = len(group1_samples)
     group2_size = len(group2_samples)
 
-    # Require both haplotype groups to exist before phenotype-specific filtering.
     if min(group1_size, group2_size) == 0:
         return
 
-    # Positions of shared samples in the full kinship matrix.
     shared_positions = [sample_order.index(sample) for sample in shared_samples]
 
     for phenotype_name in phenotype_list:
@@ -348,7 +317,6 @@ def test_one_feature_immediate(
         phenotype_values = phenotype_values_all[valid_indices]
         haplotype_values_raw = haplotype_values_all[valid_indices]
 
-        # Require both haplotype groups after dropping missing phenotype values.
         if len(np.unique(haplotype_values_raw)) < 2:
             continue
 
@@ -401,23 +369,6 @@ def build_feature_windows(
 ):
     """
     Build the full list of features/windows to test.
-
-    Output rows are:
-        feature_name, chromosome, start, end
-
-    Modes:
-        gene:
-            test each gene feature directly
-
-        exon:
-            test each exon directly, numbering repeated exon parent IDs
-
-        reg:
-            generate gene-flanking regulatory windows and skip windows
-            that overlap the gene body
-
-        all:
-            ignore the GFF and tile every chromosome/contig
     """
 
     index = Index(panagram_dir)
@@ -428,12 +379,7 @@ def build_feature_windows(
 
         for chrom in chroms:
             chrom_size = index[anchor_name].chrs.loc[chrom, "size"]
-
-            chrom_windows = generate_chromosome_windows(
-                chrom,
-                chrom_size,
-            )
-
+            chrom_windows = generate_chromosome_windows(chrom, chrom_size)
             features.extend(chrom_windows)
 
         return features
@@ -456,7 +402,6 @@ def build_feature_windows(
 
             chrom = fields[0]
 
-            # reg mode is generated from gene features.
             if feature_type == "reg":
                 if fields[2] != "gene":
                     line = gff_f.readline()
@@ -481,7 +426,6 @@ def build_feature_windows(
                 )
 
                 for window_name, window_start, window_end in windows:
-                    # Skip regulatory windows that overlap the gene body.
                     overlaps_gene = window_start < end_coord and window_end > start_coord
 
                     if overlaps_gene:
@@ -490,7 +434,6 @@ def build_feature_windows(
                     features.append((window_name, chrom, window_start, window_end))
 
             else:
-                # Number exons so repeated exon parent IDs become feature_1, feature_2, etc.
                 if feature_type == "exon":
                     feature_counts[feature_name] = feature_counts.get(feature_name, 0) + 1
                     feature_name = f"{feature_name}_{feature_counts[feature_name]}"
@@ -531,14 +474,6 @@ def process_feature_chunk(
 ):
     """
     Process one chunk of features/windows.
-
-    Each feature/window:
-        query bitmap
-        assign haplotypes
-        optionally write wide haplotype row
-        immediately run association tests
-
-    This allows more parallelism than chromosome-level processing.
     """
 
     print(f"Starting chunk: {chunk_id}", file=sys.stderr, flush=True)
@@ -555,7 +490,6 @@ def process_feature_chunk(
 
     cntr = 0
 
-    # Open haplotype output only if requested.
     if keep_haplotypes:
         hap_f = open(haplotype_tsv, "w")
         write_wide_haplotype_header(hap_f, sample_order)
@@ -612,16 +546,12 @@ def process_feature_chunk(
 def combine_association_files(association_dir, feature_type):
     """
     Combine chunk-level association files into one association TSV.
-
-    This uses streaming append and does not load files into memory.
     """
 
     association_dir = Path(association_dir)
     combined_file = association_dir / f"all_{feature_type}_associations.tsv"
 
     association_files = sorted(association_dir.glob(f"*_{feature_type}_associations.tsv"))
-
-    # Avoid accidentally combining previous all_* files.
     association_files = [f for f in association_files if not f.name.startswith("all_")]
 
     with open(combined_file, "w") as out_f:
@@ -637,27 +567,22 @@ def combine_association_files(association_dir, feature_type):
     return combined_file
 
 
-def filter_associations_and_replace_zero_pvalues(combined_file, filtered_file):
+def filter_associations_by_group_size(combined_file, filtered_file):
     """
-    Match the original script's pre-FDR filtering behavior.
+    Apply the 10% haplotype group-size filter before FDR.
 
-    Original behavior:
-        1. Remove rows where either haplotype group is less than 10% of total.
-        2. Mark p-values of 0 and replace them before FDR.
-           Replacement is:
-               1e-300 if all retained p-values are zero
-               otherwise 10 ** (floor(log10(min_nonzero_p)) - 2)
+    This function does NOT replace p_value == 0.
 
-    This function streams the data twice:
-        pass 1: filter rows and find min nonzero p-value
-        pass 2: write filtered rows with p == 0 replaced
+    The filtered file keeps original unmodified association values, including:
+        p_value = 0
+
+    FDR correction is then run directly on these original p-values.
     """
 
-    min_nonzero_p = None
     retained_rows = 0
+    zero_pvalue_rows = 0
 
-    # First pass: determine min nonzero p-value after 10% group-size filtering.
-    with open(combined_file, "r") as in_f:
+    with open(combined_file, "r") as in_f, open(filtered_file, "w") as out_f:
         for line in in_f:
             fields = line.rstrip("\n").split("\t")
 
@@ -672,41 +597,18 @@ def filter_associations_and_replace_zero_pvalues(combined_file, filtered_file):
 
             retained_rows += 1
 
-            if p_value > 0:
-                if min_nonzero_p is None or p_value < min_nonzero_p:
-                    min_nonzero_p = p_value
+            if p_value == 0:
+                zero_pvalue_rows += 1
+
+            out_f.write("\t".join(fields) + "\n")
 
     if retained_rows == 0:
         sys.exit("ERROR: No rows remain after filtering by haplotype group size.")
 
-    if min_nonzero_p is None:
-        replacement_p = 1e-300
-    else:
-        exponent = int(np.floor(np.log10(min_nonzero_p))) - 2
-        replacement_p = 10**exponent
-
     print(f"Rows after 10% group-size filter: {retained_rows}", file=sys.stderr, flush=True)
-    print(f"Minimum non-zero p-value: {min_nonzero_p}", file=sys.stderr, flush=True)
-    print(f"Setting zero p-values to: {replacement_p}", file=sys.stderr, flush=True)
-
-    # Second pass: write filtered rows with zero p-values replaced.
-    with open(combined_file, "r") as in_f, open(filtered_file, "w") as out_f:
-        for line in in_f:
-            fields = line.rstrip("\n").split("\t")
-
-            group1_size = float(fields[2])
-            group2_size = float(fields[3])
-            p_value = float(fields[6])
-
-            total_size = group1_size + group2_size
-
-            if group1_size < 0.1 * total_size or group2_size < 0.1 * total_size:
-                continue
-
-            if p_value == 0:
-                fields[6] = str(replacement_p)
-
-            out_f.write("\t".join(fields) + "\n")
+    print(
+        f"Rows with p_value == 0 retained for FDR: {zero_pvalue_rows}", file=sys.stderr, flush=True
+    )
 
     return retained_rows
 
@@ -728,8 +630,6 @@ def count_lines(input_file):
 def run_sort(input_file, output_file, sort_key, temp_dir=None):
     """
     Run Unix sort.
-
-    sort_key should be a list of sort arguments, e.g. ["-k7,7g"].
     """
 
     cmd = ["sort", "-t", "\t"]
@@ -747,6 +647,8 @@ def run_sort(input_file, output_file, sort_key, temp_dir=None):
 def add_bh_rank_values(sorted_by_p_file, ranked_file, total_tests):
     """
     Add rank and raw BH values to p-value-sorted associations.
+
+    If p_value == 0, raw_bh is also 0.
     """
 
     with open(sorted_by_p_file, "r") as in_f, open(ranked_file, "w") as out_f:
@@ -780,7 +682,6 @@ def apply_bh_cumulative_min(ranked_desc_file, fdr_unsorted_file):
             running_min = min(running_min, raw_bh)
             fdr = min(running_min, 1.0)
 
-            # Drop rank and raw_bh, append final FDR.
             original_fields = fields[:7]
             out_f.write("\t".join(original_fields) + "\t" + str(fdr) + "\n")
 
@@ -788,9 +689,6 @@ def apply_bh_cumulative_min(ranked_desc_file, fdr_unsorted_file):
 def collect_phenotype_mean_diff_ranges(fdr_sorted_file):
     """
     Collect phenotype-specific min/max mean differences from corrected associations.
-
-    This matches the original behavior because this file already contains only
-    rows that passed the 10% haplotype group-size filter.
     """
 
     ranges = {}
@@ -822,9 +720,6 @@ def collect_phenotype_mean_diff_ranges(fdr_sorted_file):
 def collect_top_features_per_phenotype(fdr_sorted_file, max_points_per_phenotype=50000):
     """
     Collect feature/phenotype pairs to plot.
-
-    The input file is sorted by FDR ascending, so the first N rows for each
-    phenotype are the top N rows for that phenotype.
     """
 
     counts = defaultdict(int)
@@ -852,12 +747,6 @@ def add_norm_difference_and_plotted_flag(
 ):
     """
     Add norm_mean_difference and plotted columns to the final corrected file.
-
-    The norm_mean_difference formula matches the original script:
-
-        norm_mean_difference = mean_difference / (phenotype_max - phenotype_min)
-
-    It does not subtract the phenotype minimum.
     """
 
     header = [
@@ -913,11 +802,10 @@ def run_bh_fdr_disk(
     """
     Run exact global BH/FDR correction using disk-based sorting.
 
-    This version matches the original script's output logic:
-        1. Apply 10% haplotype group-size filter before FDR.
-        2. Replace p-values of 0 before FDR.
-        3. Run BH/FDR only on retained rows.
-        4. Compute norm_mean_difference from retained rows.
+    Important:
+        p_value == 0 values are NOT replaced before FDR.
+        True zero p-values are used directly in BH/FDR.
+        The final TSV preserves p_value == 0 and fdr == 0 where applicable.
     """
 
     association_dir = Path(association_dir)
@@ -933,16 +821,15 @@ def run_bh_fdr_disk(
 
     final_file = association_dir / f"all_{feature_type}_associations.fdr_sorted.tsv"
 
-    # Match original pre-FDR filtering and zero-p-value replacement.
-    total_tests = filter_associations_and_replace_zero_pvalues(
+    total_tests = filter_associations_by_group_size(
         combined_association_file,
         filtered_file,
     )
 
     print(f"Total association tests used for FDR: {total_tests}", file=sys.stderr, flush=True)
 
-    # Sort filtered associations by p-value, then feature_id, then phenotype_name.
-    # The extra tie-breakers make chunked output more deterministic.
+    # Sort filtered associations by true p-value, then feature_id, then phenotype_name.
+    # True p_value == 0 rows are kept and sorted first.
     run_sort(
         filtered_file,
         sorted_by_p_file,
@@ -950,10 +837,8 @@ def run_bh_fdr_disk(
         temp_dir=sort_temp_dir,
     )
 
-    # Add BH rank and raw BH.
     add_bh_rank_values(sorted_by_p_file, ranked_file, total_tests)
 
-    # Sort by rank descending, column 8.
     run_sort(
         ranked_file,
         ranked_desc_file,
@@ -961,10 +846,8 @@ def run_bh_fdr_disk(
         temp_dir=sort_temp_dir,
     )
 
-    # Apply cumulative minimum to get final FDR.
     apply_bh_cumulative_min(ranked_desc_file, fdr_unsorted_file)
 
-    # Sort final corrected rows by FDR ascending, column 8.
     run_sort(
         fdr_unsorted_file,
         fdr_sorted_no_header_file,
@@ -972,7 +855,6 @@ def run_bh_fdr_disk(
         temp_dir=sort_temp_dir,
     )
 
-    # Add norm_mean_difference and plotted flag.
     phenotype_ranges = collect_phenotype_mean_diff_ranges(fdr_sorted_no_header_file)
 
     plotted_features = collect_top_features_per_phenotype(
@@ -995,6 +877,14 @@ def run_bh_fdr_disk(
 def plot_volcano(corrected_association_file, output_plot):
     """
     Make volcano plots using only rows marked plotted == 1.
+
+    True p_value == 0 rows are shown with star markers.
+
+    Zero FDR values are replaced only in memory for plotting because:
+        -log10(0)
+    is not finite.
+
+    The final TSV is not modified.
     """
 
     output_plot = Path(output_plot)
@@ -1014,13 +904,16 @@ def plot_volcano(corrected_association_file, output_plot):
 
     df = pd.concat(chunks, ignore_index=True)
 
-    # Ensure numeric types.
     df["group1_mean"] = pd.to_numeric(df["group1_mean"])
     df["group2_mean"] = pd.to_numeric(df["group2_mean"])
+    df["p_value"] = pd.to_numeric(df["p_value"])
     df["fdr"] = pd.to_numeric(df["fdr"])
     df["norm_mean_difference"] = pd.to_numeric(df["norm_mean_difference"])
 
-    # Avoid -log10(0).
+    # Track original true zero p-values before any plotting-only replacement.
+    df["original_p_value_zero"] = df["p_value"] == 0
+
+    # Replace fdr == 0 only in memory for plotting.
     nonzero_fdr = df[df["fdr"] > 0]["fdr"].min()
 
     if pd.isna(nonzero_fdr):
@@ -1031,7 +924,6 @@ def plot_volcano(corrected_association_file, output_plot):
 
     df.loc[df["fdr"] == 0, "fdr"] = replacement_fdr
 
-    # Derived plotting columns are calculated only in memory.
     df["mean_difference"] = df["group1_mean"] - df["group2_mean"]
     df["log_fdr"] = -np.log10(df["fdr"])
 
@@ -1044,18 +936,33 @@ def plot_volcano(corrected_association_file, output_plot):
 
     groups = df.groupby("phenotype_name")
 
-    # Combined plot using normalized mean difference.
+    # Combined volcano plot.
     plt.rcParams["figure.figsize"] = (4.5, 5)
     fig, ax = plt.subplots()
 
     for name, group in groups:
-        ax.scatter(
-            group["norm_mean_difference"],
-            group["log_fdr"],
-            alpha=0.5,
-            c=[color_map[name]],
-            label=name.replace("_", " "),
-        )
+        nonzero_group = group[~group["original_p_value_zero"]]
+        zero_group = group[group["original_p_value_zero"]]
+
+        if len(nonzero_group) > 0:
+            ax.scatter(
+                nonzero_group["norm_mean_difference"],
+                nonzero_group["log_fdr"],
+                alpha=0.5,
+                c=[color_map[name]],
+                marker="o",
+                label=name.replace("_", " "),
+            )
+
+        if len(zero_group) > 0:
+            ax.scatter(
+                zero_group.norm_mean_difference,
+                zero_group.log_fdr,
+                alpha=0.5,
+                c=[color_map[name]],
+                marker="*",
+                s=200,
+            )
 
     plt.axhline(y=sig_threshold_log_fdr, color="r", linestyle="--", label="FDR 0.05")
     plt.xlabel("Normalized difference in means")
@@ -1064,15 +971,30 @@ def plot_volcano(corrected_association_file, output_plot):
     plt.savefig(output_plot, dpi=300, bbox_inches="tight")
     plt.close()
 
-    # Individual plots per phenotype using raw mean difference.
+    # Individual phenotype volcano plots.
     for name, group in groups:
-        plt.scatter(
-            group["mean_difference"],
-            group["log_fdr"],
-            alpha=0.9,
-            label=name.replace("_", " "),
-            c=[color_map[name]],
-        )
+        nonzero_group = group[~group["original_p_value_zero"]]
+        zero_group = group[group["original_p_value_zero"]]
+
+        if len(nonzero_group) > 0:
+            plt.scatter(
+                nonzero_group["mean_difference"],
+                nonzero_group["log_fdr"],
+                alpha=0.9,
+                label=name.replace("_", " "),
+                c=[color_map[name]],
+                marker="o",
+            )
+
+        if len(zero_group) > 0:
+            plt.scatter(
+                zero_group.mean_difference,
+                zero_group.log_fdr,
+                alpha=0.9,
+                c=[color_map[name]],
+                marker="*",
+                s=200,
+            )
 
         plt.axhline(y=sig_threshold_log_fdr, color="r", linestyle="--", label="FDR 0.05")
         plt.legend(loc="upper right")
@@ -1158,7 +1080,7 @@ def main():
 
     parser.add_argument(
         "--chunk-size",
-        default=1000,
+        default=10000,
         type=int,
         help="Number of features/windows per worker chunk.",
     )
