@@ -12,8 +12,8 @@
 Welcome to Panagram! Panagram is
 [an alignment-free pangenome viewer and analysis suite](https://www.dropbox.com/s/g7snjgr8bs6c2uj/2023.01.17.Panagram.pdf).
 
-Read the preprint [https://www.biorxiv.org/content/10.64898/2026.10.21.760756v1](https://www.biorxiv.org/content/10.64898/2026.10.21.760756v1)
-
+Read the preprint
+[https://www.biorxiv.org/content/10.64898/2026.10.21.760756v1](https://www.biorxiv.org/content/10.64898/2026.10.21.760756v1).
 
 # Installation
 
