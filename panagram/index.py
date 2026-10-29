@@ -750,6 +750,8 @@ class Genome:
         parents = self._gffattr(annos, "Parent")  # .set_index(annos["id"]).dropna()
         anno_ids = annos.reset_index().dropna().set_index("id")["index"]
         gene_names = genes[["id", "name"]].set_index("id")["name"]
+        # a gene split over several rows (e.g. trans-spliced organelle genes) repeats its ID
+        gene_names = gene_names[~gene_names.index.duplicated()]
 
         p = parents.isin(anno_ids.index)
 
