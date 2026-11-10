@@ -1027,6 +1027,8 @@ class Genome:
         if self.annotated:
             gene_df = self.init_gff()  # .groupby("chr")
             chr_genes = gene_df.index.get_level_values(0).value_counts()
+            gene_cols = gene_df.columns.get_indexer(self.bitsum_index)
+            gene_counts = np.zeros((len(gene_df), self.ngenomes + 1), dtype=np.int64)
             logger.info("Annotation pre-processed")
         else:
             chr_genes = pd.Series([0])
@@ -1053,14 +1055,34 @@ class Genome:
             logger.info(f"Anchored {chrom}")
 
             if self.annotated and chrom in chr_genes:
-                for _, start, end in gene_df.loc[[chrom]].index:
-                    if end <= start or start < 0 or end > len(bitsum):
+                rows = gene_df.index.get_locs([chrom])
+                starts = gene_df.index.get_level_values("start")[rows].to_numpy()
+                ends = gene_df.index.get_level_values("end")[rows].to_numpy()
+
+                # Rows sharing (chr, start, end) were each incremented once per
+                # duplicate by the original per-gene .loc update, so scale by the
+                # duplicate count.
+                _, inverse, dup = np.unique(
+                    np.stack([starts, ends], axis=1),
+                    axis=0,
+                    return_inverse=True,
+                    return_counts=True,
+                )
+                dup = dup[inverse.reshape(-1)]
+
+                nbitsum = len(bitsum)
+                for j in range(len(rows)):
+                    start, end = starts[j], ends[j]
+                    if end <= start or start < 0 or end > nbitsum:
                         logger.warning(
                             f"Skipping gene at {chrom}:{start}-{end}, coordinates out-of-bounds"
                         )
                         continue
-                    occ, counts = np.unique(bitsum[start:end], return_counts=True)
-                    gene_df.loc[(chrom, start, end), occ] += counts
+                    gene_counts[rows[j]] += dup[j] * np.bincount(
+                        bitsum[start:end], minlength=self.ngenomes + 1
+                    )
+
+                gene_df.iloc[rows, gene_cols] = gene_counts[rows]
                 logger.info(f"Annotated {chrom}")
 
             t = time()
