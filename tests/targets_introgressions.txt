@@ -1,0 +1,110 @@
+# Targets for the introgression part: public functions/classes/methods (ast) and CLI options.
+# Format: <module> <kind> <name>   -> tests in the named file (see the file for the covering tests)
+
+## panagram/introgressions/call_introgressions.py  (tests: tests/test_introgressions_call.py)
+function fill_snps
+function bitmap_to_bins
+function row_trimmed_mean
+function get_genome_similarities
+function smooth_row
+function edge_tapered_row_normalization
+function preprocess_binned_bitmap
+function threshold_introgressions
+function threshold_introgressions_simple
+function bins_to_bed
+function visualize
+function run_introgression_finder
+function run_introgression_finder_worker
+function main
+cli-option --threads
+cli-option --stp
+cli-option --bin
+cli-option --gnm
+cli-option --trm
+cli-option --sft
+cli-option --ssz
+cli-option --edg
+cli-option --rmf
+cli-option --rmu
+cli-option --ogrp
+cli-option --vis
+cli-option --urf
+cli-option --ref
+cli-option --anc
+cli-option --grp
+cli-option --chr
+cli-option --cmp
+cli-option --thr
+cli-option --idx
+cli-option --tsv
+cli-option --out
+
+## panagram/introgressions/simulate_introgressions.py  (tests: tests/test_introgressions_simulate.py)
+function parse_fasta
+function write_fasta
+function write_bed
+function mutate_seq_with_introgressions
+function apply_genome_wide_introgressions
+function generate_skewed_sizes
+function create_random_trenches
+function generate_edge_tapered_weights
+function position_spacer
+function generate_mutation_positions
+function mutate_seq_with_indels_and_snps
+function apply_genome_wide_mutations
+function main
+cli-option --ref
+cli-option --out-folder
+cli-option --offspring
+cli-option --rounds
+cli-option --num-introgressions
+cli-option --introgression-size-min
+cli-option --introgression-size-max
+cli-option --rel-sub-rate
+cli-option --rel-ins-rate
+cli-option --rel-del-rate
+cli-option --rel-ins-size-min
+cli-option --rel-ins-size-max
+cli-option --rel-del-size-min
+cli-option --rel-del-size-max
+cli-option --mut-sub-rate
+cli-option --mut-ins-rate
+cli-option --mut-del-rate
+cli-option --mut-rate-start
+cli-option --mut-ins-size-min
+cli-option --mut-ins-size-max
+cli-option --mut-del-size-min
+cli-option --mut-del-size-max
+cli-option --seed
+
+## panagram/introgressions/score_introgressions.py  (tests: tests/test_introgressions_score.py)
+function merge_bed_files
+function merge_text_files
+function read_text_file
+function rescale_introgressions_helper
+function merge_centromere_regions_helper
+function threshold_introgressions_helper
+function threshold_introgressions
+function score_introgressions
+function create_scored_heatmap
+function main
+cli-option --pre
+cli-option --gdt
+cli-option --idx
+cli-option --ref
+cli-option --out
+cli-option --vis
+cli-option --grp
+cli-option --bin
+cli-option --min
+cli-option --gap
+cli-option --thr
+cli-option --cmp
+cli-option --act
+
+# Not covered by a value-checking test (reason in the report):
+#   simulate_introgressions --offspring            parsed, never used by main()
+#   score_introgressions    --act fcen             no-op on BEDs written by bins_to_bed (inclusive ends); only the helper round trip is tested
+#   score_introgressions    --gdt <file>           main() leaves gt_df unset when --gdt is a file
+#   call_introgressions     fill_snps on a pandas row  skipped on pandas 3 (read-only .values); tested with a writable stand-in
+# run_introgression_finder and run_introgression_finder_worker are covered through main() (in-process executor and a real process pool).

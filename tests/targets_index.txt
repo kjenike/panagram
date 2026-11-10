@@ -1,0 +1,174 @@
+panagram/index.py::init_logger	test_index_index.py
+panagram/index.py::KMC	test_index_genome.py,test_index_index.py,test_index_annotation.py,test_index_anchor.py
+panagram/index.py::UMAP	test_index_index.py,test_index_umap.py
+panagram/index.py::Index	test_index_genome.py,test_index_index.py,test_index_anchor.py,test_main_cli.py,test_figs.py
+panagram/index.py::Index._load_dict	test_index_index.py
+panagram/index.py::Index.params	test_index_genome.py,test_index_index.py,test_index_annotation.py,test_index_anchor.py
+panagram/index.py::Index.bitsum_index	test_index_genome.py,test_index_index.py
+panagram/index.py::Index.kmc_prefix	test_index_index.py
+panagram/index.py::Index.get_subdir	test_index_index.py
+panagram/index.py::Index.snakefile	test_index_index.py
+panagram/index.py::Index.run	test_index_index.py,test_main_cli.py
+panagram/index.py::Index.__getitem__	covered by idx[name] in test_index_index.py, test_index_genome.py, test_index_annotation.py (no textual name)
+panagram/index.py::Index.__post_init__	test_index_index.py
+panagram/index.py::Index.genome_names	test_index_genome.py,test_index_index.py,test_index_anchor.py,test_figs.py
+panagram/index.py::Index.init_config	test_index_index.py
+panagram/index.py::Index._init_read	covered by every read-mode test through the anchored_reader fixture (test_index_index.py aggregate-table tests)
+panagram/index.py::Index.__getitem__	covered by idx[name] in test_index_index.py, test_index_genome.py, test_index_annotation.py (no textual name)
+panagram/index.py::Index.write_config	test_index_index.py
+panagram/index.py::Index.load_config	test_index_index.py
+panagram/index.py::Index.config_fname	test_index_index.py
+panagram/index.py::Index.samples_fname	test_index_index.py
+panagram/index.py::Index.genome_dist_fname	test_index_index.py,test_figs.py
+panagram/index.py::Index.bitsum_count	test_index_genome.py,test_index_index.py
+panagram/index.py::Index.close	test_index_genome.py,test_index_index.py,test_index_annotation.py,test_index_umap.py,test_index_anchor.py
+panagram/index.py::Index.query_bitmap	test_index_index.py
+panagram/index.py::Index.query_genes	test_index_index.py,test_index_annotation.py,test_index_anchor.py
+panagram/index.py::Index.query_anno	test_index_index.py,test_index_annotation.py,test_index_anchor.py
+panagram/index.py::Index.kmc_bitvec_count	test_index_index.py
+panagram/index.py::Index.opdef_filenames	test_index_index.py
+panagram/index.py::Index.bitvec_prefixes	test_index_index.py
+panagram/index.py::Index.steps	test_index_genome.py,test_index_index.py
+panagram/index.py::Index.init_opdefs	test_index_index.py
+panagram/index.py::Index.get_anchor_filenames	test_index_genome.py
+panagram/index.py::Index.anchor_filenames	test_index_genome.py,test_index_anchor.py
+panagram/index.py::Index.bitmap_to_bins	test_index_index.py
+panagram/index.py::Index.bitmap_to_pancount	test_index_index.py
+panagram/index.py::Index.bitmap_to_paircount_bins	test_index_index.py
+panagram/index.py::Index.pancount_to_bins	test_index_index.py
+panagram/index.py::Genome	test_index_genome.py,test_index_index.py,test_index_annotation.py,test_index_umap.py,test_index_anchor.py,test_main_cli.py
+panagram/index.py::Genome.__init__	test_index_umap.py,test_index_anchor.py,test_package_metadata.py
+panagram/index.py::Genome.anchor_filenames	test_index_genome.py,test_index_anchor.py
+panagram/index.py::Genome.chrs_fname	test_index_genome.py
+panagram/index.py::Genome.bins_fname	test_index_genome.py
+panagram/index.py::Genome.chr_genes_fname	test_index_genome.py
+panagram/index.py::Genome.anno_types_fname	test_index_genome.py,test_index_annotation.py
+panagram/index.py::Genome.bitmap_gz_fname	test_index_genome.py
+panagram/index.py::Genome.bitmap_gzi_fname	test_index_genome.py
+panagram/index.py::Genome.bed_tmp_fname	test_index_genome.py
+panagram/index.py::Genome.tabix_fname	test_index_genome.py,test_index_annotation.py
+panagram/index.py::Genome.tabix_idx_fname	test_index_genome.py,test_index_annotation.py
+panagram/index.py::Genome.bitsum_index	test_index_genome.py,test_index_index.py
+panagram/index.py::Genome.gene_tabix_cols	test_index_genome.py
+panagram/index.py::Genome.gene_tabix_types	test_index_genome.py
+panagram/index.py::Genome.chr_count	test_index_genome.py,test_index_index.py
+panagram/index.py::Genome.init_chrs	test_index_genome.py
+panagram/index.py::Genome.write_chrs	test_index_genome.py
+panagram/index.py::Genome.load_chrs	test_index_genome.py
+panagram/index.py::Genome.set_chrs	test_index_genome.py
+panagram/index.py::Genome._init_steps	test_index_genome.py
+panagram/index.py::Genome.init_read	covered by the read-mode tests of test_index_genome.py/test_index_annotation.py and by run_anchor in test_index_anchor.py
+panagram/index.py::Genome._load_tabix	test_index_annotation.py
+panagram/index.py::Genome._read_bitsum_bins	test_index_anchor.py
+panagram/index.py::Genome.seq_len	test_index_genome.py
+panagram/index.py::Genome._gffattr	test_index_annotation.py
+panagram/index.py::Genome._iter_gff	test_index_annotation.py
+panagram/index.py::Genome._init_anno_types	test_index_annotation.py
+panagram/index.py::Genome._write_anno_types	test_index_annotation.py
+panagram/index.py::Genome.init_gff	test_index_annotation.py
+panagram/index.py::Genome._write_tabix	test_index_annotation.py
+panagram/index.py::Genome.load_bgz_blocks	test_index_genome.py
+panagram/index.py::Genome.bitsum_count	test_index_genome.py,test_index_index.py
+panagram/index.py::Genome.query	test_index_genome.py,test_index_index.py,test_index_anchor.py
+panagram/index.py::Genome._bytes_to_bits	test_index_genome.py
+panagram/index.py::Genome._query_bytes	test_index_genome.py
+panagram/index.py::Genome._load_kmc	test_index_genome.py
+panagram/index.py::Genome.query_genes	test_index_index.py,test_index_annotation.py,test_index_anchor.py
+panagram/index.py::Genome.query_anno	test_index_index.py,test_index_annotation.py,test_index_anchor.py
+panagram/index.py::Genome.iter_fasta	test_index_genome.py
+panagram/index.py::Genome._query_kmc_bytes	test_index_genome.py
+panagram/index.py::Genome._write_bitmap	test_index_genome.py
+panagram/index.py::Genome.run_annotate	test_index_annotation.py,test_main_cli.py
+panagram/index.py::Genome.run_anchor	test_index_genome.py,test_index_anchor.py
+panagram/index.py::Genome.chrom_umaps_filename	test_index_genome.py,test_index_umap.py,test_index_anchor.py
+panagram/index.py::Genome.genome_umap_filename	test_index_genome.py,test_index_umap.py,test_index_anchor.py
+panagram/index.py::Genome.write_umaps	test_index_umap.py
+panagram/index.py::Genome.run_umap	test_index_umap.py
+panagram/index.py::Genome.load_umaps	test_index_umap.py
+panagram/index.py::Genome.bin_bitsum	test_index_genome.py,test_index_anchor.py
+panagram/index.py::Genome.close	test_index_genome.py,test_index_index.py,test_index_annotation.py,test_index_umap.py,test_index_anchor.py
+panagram/__main__.py::View	test_main_cli.py
+panagram/__main__.py::View.run	test_index_index.py,test_main_cli.py
+panagram/__main__.py::Bitdump	test_main_cli.py
+panagram/__main__.py::Bitdump.run	test_index_index.py,test_main_cli.py
+panagram/__main__.py::Annotate	test_main_cli.py
+panagram/__main__.py::Annotate.run	test_index_index.py,test_main_cli.py
+panagram/__main__.py::Intros	test_main_cli.py
+panagram/__main__.py::Intros.run	test_index_index.py,test_main_cli.py
+panagram/__main__.py::Main	test_main_cli.py
+panagram/__main__.py::Main.run	test_index_index.py,test_main_cli.py
+panagram/__main__.py::parse_coords	test_main_cli.py
+panagram/__main__.py::comma_split	test_main_cli.py
+panagram/__main__.py::main	test_index_index.py,test_main_cli.py,test_package_metadata.py
+panagram/figs.py::genome_colors	test_figs.py
+panagram/figs.py::read_genome_comp	test_figs.py
+panagram/figs.py::make_all_genome_dend	test_figs.py
+panagram/figs.py::read_pangenome_comp	test_figs.py
+panagram/__about__.py::__title__	test_package_metadata.py
+panagram/__about__.py::__version__	test_package_metadata.py
+panagram/__about__.py::__summary__	test_package_metadata.py
+panagram/__about__.py::__author__	test_package_metadata.py
+panagram/__about__.py::__uri__	test_package_metadata.py
+panagram/__about__.py::__license__	test_package_metadata.py
+panagram/__about__.py::__copyright__	test_package_metadata.py
+panagram/__init__.py::main (re-export)	test_index_index.py,test_main_cli.py,test_package_metadata.py
+panagram/__init__.py::__title__ (re-export)	test_package_metadata.py
+panagram/__init__.py::__version__ (re-export)	test_package_metadata.py
+panagram/__init__.py::__summary__ (re-export)	test_package_metadata.py
+panagram/__init__.py::__author__ (re-export)	test_package_metadata.py
+panagram/__init__.py::__uri__ (re-export)	test_package_metadata.py
+panagram/__init__.py::__license__ (re-export)	test_package_metadata.py
+panagram/__init__.py::__copyright__ (re-export)	test_package_metadata.py
+cli index input	test_index_index.py,test_index_umap.py,test_main_cli.py
+cli index -o/--prefix	test_index_index.py,test_main_cli.py
+cli index -k	test_main_cli.py
+cli index -c/--cores	test_index_index.py,test_main_cli.py
+cli index --lowres_step	test_main_cli.py
+cli index --max_bin_kbp	test_main_cli.py
+cli index --min_bin_count	test_main_cli.py
+cli index --max_view_chrs	test_main_cli.py
+cli index --gff_gene_types	test_main_cli.py
+cli index --gff_anno_types	test_main_cli.py
+cli index --gff_name	test_main_cli.py
+cli index --anchor_genomes	test_main_cli.py
+cli index -p/--prepare	test_index_index.py,test_main_cli.py
+cli index --kmc.memory	NOT COVERED: accepted but ignored, config.yaml keeps kmc.memory 8 (bug, see report)
+cli index --kmc.threads	NOT COVERED: accepted but ignored, config.yaml keeps kmc.threads 1 (bug, see report)
+cli index --kmc.use_existing	test_main_cli.py
+cli index --genome_umap.neighbors	test_main_cli.py
+cli index --genome_umap.dist	test_main_cli.py
+cli index --genome_umap.eps	test_main_cli.py
+cli index --genome_umap.samples	test_main_cli.py
+cli index --genome_umap.bin_size	test_main_cli.py
+cli index --chrom_umap.neighbors	test_main_cli.py
+cli index --chrom_umap.dist	test_main_cli.py
+cli index --chrom_umap.eps	test_main_cli.py
+cli index --chrom_umap.samples	test_main_cli.py
+cli index --chrom_umap.bin_size	test_main_cli.py
+cli view index_dir	test_main_cli.py
+cli view genome	test_index_genome.py,test_index_index.py,test_index_annotation.py,test_index_umap.py,test_index_anchor.py,test_main_cli.py,test_figs.py
+cli view chrom	test_index_genome.py,test_index_index.py,test_index_annotation.py,test_index_umap.py,test_index_anchor.py,test_main_cli.py,test_figs.py
+cli view start	test_index_genome.py,test_index_annotation.py,test_index_umap.py,test_index_anchor.py,test_main_cli.py
+cli view end	test_index_genome.py,test_index_annotation.py,test_index_umap.py,test_index_anchor.py,test_main_cli.py,test_figs.py
+cli view --order	test_main_cli.py
+cli view --ndebug	test_main_cli.py
+cli view --port	test_main_cli.py
+cli view --host	test_main_cli.py
+cli view --url_base	test_main_cli.py
+cli view --max_chr_bins	test_main_cli.py
+cli view --bookmarks	test_main_cli.py
+cli bitdump index_dir	test_main_cli.py
+cli bitdump genome	test_index_genome.py,test_index_index.py,test_index_annotation.py,test_index_umap.py,test_index_anchor.py,test_main_cli.py,test_figs.py
+cli bitdump chromosome	test_index_genome.py,test_index_annotation.py,test_index_umap.py,test_index_anchor.py,test_main_cli.py,test_figs.py
+cli bitdump start	test_index_genome.py,test_index_annotation.py,test_index_umap.py,test_index_anchor.py,test_main_cli.py
+cli bitdump end	test_index_genome.py,test_index_annotation.py,test_index_umap.py,test_index_anchor.py,test_main_cli.py,test_figs.py
+cli bitdump step	test_index_genome.py,test_index_index.py,test_index_umap.py,test_index_anchor.py,test_main_cli.py
+cli bitdump -v/--verbose	NOT COVERED: bitdump -v raises KeyError (known issue); parsing of -v is checked in test_main_cli.py::test_bitdump_parsing
+cli annotate index_dir	test_main_cli.py
+cli annotate genome_name	test_main_cli.py
+cli annotate gff_file	test_index_annotation.py,test_main_cli.py
+cli annotate --nogene	test_main_cli.py
+cli intros --sweep	test_main_cli.py
+cli intros extra_args (positional passthrough)	test_main_cli.py
+cli main --cprof	test_main_cli.py
+cli main --config_path	NOT COVERED: `panagram --config_path FILE view idx` raises RuntimeError with this simple_parsing (bug, see report)

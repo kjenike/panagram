@@ -1,0 +1,63 @@
+# Targets of the panagram.view tests: every function in panagram/view.py (view() defines all of them as closures)
+# and every `panagram view` option. Columns: kind, target, where defined, covered by.
+
+function	view	view.py:22 (module level)	test_view_app.py
+function	b64_image	view.py:53 (nested in view)	test_view_app.py
+function	annotation_tab_info	view.py:501 (nested in view)	test_view_callbacks.py
+function	annotation_tab_plot	view.py:538 (nested in view)	test_view_callbacks.py
+function	get_newick	view.py:576 (nested in view)	test_view_tree.py
+function	get_x_coordinates	view.py:598 (nested in view)	test_view_tree.py
+function	get_y_coordinates	view.py:609 (nested in view)	test_view_tree.py
+function	calc_row	view.py:623 (nested in get_y_coordinates)	test_view_tree.py (through get_y_coordinates)
+function	get_clade_lines	view.py:633 (nested in view)	test_view_tree.py
+function	biggest_num_in_clade	view.py:671 (nested in view)	test_view_tree.py
+function	draw_clade	view.py:684 (nested in view)	test_view_tree.py
+function	create_tree	view.py:751 (nested in view)	test_view_tree.py
+function	make_anns	view.py:854 (nested in create_tree)	test_view_tree.py (annotation texts of create_tree)
+function	get_umap_chrom_hist	view.py:921 (nested in view)	test_view_genome_figs.py
+function	get_umap_from_file	view.py:957 (nested in view)	test_view_genome_figs.py
+function	read_clusters	view.py:1030 (nested in view)	test_view_genome_figs.py
+function	get_local_info_just_one	view.py:1043 (nested in view)	test_view_chromosome_figs.py
+function	get_local_info	view.py:1053 (nested in view)	test_view_chromosome_figs.py
+function	plot_interactive	view.py:1116 (nested in view)	test_view_chromosome_figs.py (direct call and through update_all_figs)
+function	make_gene_whole_chr_old	view.py:1628 (nested in view)	NOT COVERED: raises AttributeError (index.max_bin_len does not exist) and is never called
+function	make_gene_whole_chr	view.py:1638 (nested in view)	test_view_chromosome_figs.py
+function	plot_chr_whole	view.py:1644 (nested in view)	test_view_chromosome_figs.py
+function	plot_whole_genome	view.py:1851 (nested in view)	test_view_genome_figs.py
+function	plot_gene_content	view.py:1971 (nested in view)	test_view_chromosome_figs.py
+function	read_genome_size_files	view.py:2092 (nested in view)	test_view_genome_figs.py
+function	make_genome_count_plot	view.py:2106 (nested in view)	test_view_callbacks.py, test_view_genome_figs.py
+function	make_genome_size_plot	view.py:2121 (nested in view)	test_view_callbacks.py, test_view_genome_figs.py
+function	plot_avgs	view.py:2137 (nested in view)	test_view_callbacks.py, test_view_genome_figs.py
+function	make_avg_kmer_fig	view.py:2153 (nested in view)	test_view_genome_figs.py
+function	anchor_umaps_per_chr	view.py:2192 (nested in view)	test_view_genome_figs.py
+function	make_genome_umap	view.py:2202 (nested in view)	test_view_genome_figs.py
+function	get_genome_umap_hist	view.py:2266 (nested in view)	test_view_genome_figs.py
+function	make_genes_per_chr_fig	view.py:2303 (nested in view)	test_view_genome_figs.py
+function	plot_perc_shared	view.py:2354 (nested in view)	test_view_genome_figs.py
+function	make_anchor_tab_legends	view.py:2388 (nested in view)	test_view_genome_figs.py
+function	make_gene_per_genome_fig	view.py:2429 (nested in view)	test_view_genome_figs.py
+function	get_buffer	view.py:2481 (nested in view)	test_view_chromosome_figs.py
+function	set_coords	view.py:2489 (nested in view)	test_view_chromosome_figs.py
+function	nav_callback	view.py:2533 (nested in view)	test_view_callbacks.py
+function	annotation_tab_callback	view.py:2700 (nested in view)	test_view_callbacks.py
+function	pangenome_callback	view.py:2728 (nested in view)	test_view_callbacks.py
+function	anchor_callback	view.py:2765 (nested in view)	test_view_callbacks.py
+function	chromosome_callback	view.py:2795 (nested in view)	test_view_callbacks.py
+function	update_all_figs	view.py:2811 (nested in view)	test_view_app.py, test_view_callbacks.py, test_view_chromosome_figs.py
+function	update_output_div	view.py:2941 (nested in view)	test_view_chromosome_figs.py
+function	update_out_chr	view.py:2944 (nested in view)	test_view_chromosome_figs.py
+function	update_gene_locals	view.py:2947 (nested in view)	test_view_chromosome_figs.py
+function	update_chromosome_list	view.py:2963 (nested in view)	test_view_chromosome_figs.py
+cli-option	--index_dir	panagram view	test_view_app.py::test_command_line_options_drive_view
+cli-option	--genome	panagram view	test_view_app.py::test_genome_start_end_parameters, test_command_line_options_drive_view
+cli-option	--chrom	panagram view	parsed in test_command_line_options_drive_view; NOT COVERED semantically: view() overwrites it (view.py:74)
+cli-option	--start	panagram view	test_view_app.py::test_genome_start_end_parameters, test_command_line_options_drive_view
+cli-option	--end	panagram view	test_view_app.py::test_genome_start_end_parameters, test_command_line_options_drive_view
+cli-option	--order	panagram view	test_view_app.py::test_order_parameter_reaches_the_heatmap; test_view_chromosome_figs.py::test_order_parameter_sets_heatmap_row_order
+cli-option	--ndebug	panagram view	test_view_app.py::test_run_receives_host_port_and_debug
+cli-option	--port	panagram view	test_view_app.py::test_run_receives_host_port_and_debug, test_command_line_options_drive_view
+cli-option	--host	panagram view	test_view_app.py::test_run_receives_host_port_and_debug, test_command_line_options_drive_view
+cli-option	--url_base	panagram view	test_view_app.py::test_url_base_prefixes_the_endpoints, test_command_line_options_drive_view
+cli-option	--max_chr_bins	panagram view	test_view_app.py::test_max_chr_bins_parameter_reaches_the_bin_size; test_view_chromosome_figs.py::test_max_chr_bins_sets_bin_size
+cli-option	--bookmarks	panagram view	NOT COVERED: accepted by the parser but never read by view.py

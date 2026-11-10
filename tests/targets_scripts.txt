@@ -1,0 +1,107 @@
+# Targets of tests/test_scripts_*.py and tests/test_cpp_anchor.py (scripts/*.py, scripts/*.sh, cpp/anchor.cpp).
+# Generated with ast from the files at the time of writing; the column after '->' names the test files that call the target.
+# 'NOT COVERED' entries are explained in the report: dead code, plotting/GUI helpers, or code that cannot run here.
+
+## scripts/annotate_significant_windows.py
+  extract_feature_name  -> test_scripts_annotate.py, test_scripts_association.py
+  read_genes_from_gff  -> test_scripts_annotate.py
+  parse_all_window_feature_id  -> test_scripts_annotate.py
+  annotate_region  -> test_scripts_annotate.py
+  annotate_significant_associations  -> test_scripts_annotate.py
+  main  -> test_scripts_annotate.py (test_cli_defaults_and_options, test_cli_requires_its_three_arguments), as a subprocess
+
+## scripts/association_testing.py
+  get_newick  -> test_scripts_association.py, test_scripts_plots.py
+  get_major_clades  -> test_scripts_association.py
+  extract_feature_name  -> test_scripts_annotate.py, test_scripts_association.py
+  read_sample_order  -> test_scripts_association.py, test_scripts_plots.py
+  generate_regulatory_windows  -> test_scripts_association.py
+  generate_chromosome_windows  -> test_scripts_association.py
+  build_bitmap_tree  -> test_scripts_association.py
+  create_feature_tree  -> test_scripts_association.py
+  make_haplotype_series  -> test_scripts_association.py
+  write_wide_haplotype_header  -> test_scripts_association.py
+  write_wide_haplotype_row  -> test_scripts_association.py
+  build_kinship_matrix  -> test_scripts_association.py
+  test_one_feature_immediate  -> test_scripts_association.py
+  build_feature_windows  -> test_scripts_association.py
+  split_into_chunks  -> test_scripts_association.py
+  process_feature_chunk  -> test_scripts_association.py
+  combine_association_files  -> test_scripts_association.py
+  filter_associations_by_group_size  -> test_scripts_association.py
+  count_lines  -> test_scripts_association.py
+  run_sort  -> test_scripts_association.py
+  add_bh_rank_values  -> test_scripts_association.py
+  apply_bh_cumulative_min  -> test_scripts_association.py
+  collect_phenotype_mean_diff_ranges  -> test_scripts_association.py
+  collect_top_features_per_phenotype  -> test_scripts_association.py
+  add_norm_difference_and_plotted_flag  -> test_scripts_association.py
+  run_bh_fdr_disk  -> test_scripts_association.py
+  plot_volcano  -> test_scripts_association.py
+  main  -> test_scripts_association.py (test_cli_*), as a subprocess
+
+## scripts/make_bins_bits.py
+  make_bars  -> test_scripts_small.py
+  module body  -> test_scripts_small.py (test_make_bins_bits_prints_bin_edges_and_unique_and_universal_counts)
+
+## scripts/pairwise_comp.py
+  get_bits_from_chrom  -> test_scripts_small.py (through the module body, as a subprocess)
+  module body  -> test_scripts_small.py (test_pairwise_comp_*)
+
+## scripts/plot_umaps.py
+  one_loc  -> test_scripts_plots.py (through the module body, chromosome mode only)
+  get_ids_from  -> NOT COVERED: reads test.samples and an undefined global `ids` (dead code)
+  get_ids_from_coords  -> NOT COVERED: uses an undefined global `ids` (dead code)
+  make_pca  -> test_scripts_plots.py (through the module body; the png is checked)
+  print_stuff  -> test_scripts_plots.py (through the module body; printed rows are checked)
+  plot_interactive  -> NOT COVERED: never called; writes PLOTS/<anchor>/ pngs through kaleido (Chrome)
+  module body  -> test_scripts_plots.py (chromosome mode; ALL mode needs the author's chromosome names and path, not testable)
+
+## scripts/query.py
+  read_gff  -> test_scripts_plots.py
+  read_clusters  -> test_scripts_plots.py
+  get_x_coordinates  -> test_scripts_plots.py
+  get_y_coordinates  -> test_scripts_plots.py
+  get_newick  -> test_scripts_association.py, test_scripts_plots.py
+  get_clade_lines  -> test_scripts_plots.py
+  biggest_num_in_clade  -> test_scripts_plots.py
+  draw_clade  -> test_scripts_plots.py (through create_tree: 13 drawn lines, 4 vertical)
+  create_tree  -> test_scripts_plots.py
+  read_sample_order  -> test_scripts_association.py, test_scripts_plots.py
+  update_biodigs  -> test_scripts_plots.py
+  read_clade_order  -> test_scripts_plots.py
+  SetColor  -> test_scripts_plots.py
+  plot_interactive  -> test_scripts_plots.py (called by the module body; the recorded figure's bars, heatmap and axis title are checked)
+  module body  -> test_scripts_plots.py
+
+## scripts/query_index.py
+  query_something  -> NOT COVERED: module body fails in every mode (gene/anno: KeyError 'attr'; bit: shape ValueError); cannot be called without running the body
+  find_univeral_genes  -> NOT COVERED: prints nothing (all output lines are commented out); no observable value
+  find_gene_avgs  -> test_scripts_small.py
+  find_cpg_avgs  -> test_scripts_small.py
+  in_sweep_genes  -> NOT COVERED: reads undefined global sweep_names (NameError)
+  plot_avgs  -> NOT COVERED: opens a plotly window (fig.show) from a table of an older query_index output format
+  module body  -> NOT COVERED: stops with an error in all three modes (gene, anno, bit); only the functions it defines are tested
+
+## scripts/write_umaps.py
+  module body  -> test_scripts_small.py (test_write_umaps_*; fake UMAP for the binned matrix and clusters, real UMAP for the row layout)
+
+
+## scripts/*.sh
+  run_umaps.sh <anchor> <fasta> <working_dir>  -> test_scripts_small.py (python stubbed; per-chromosome, ALL and per-sample jobs)
+  preprocess.sh <input> <k> <outdir>  -> test_scripts_small.py (kmc, kmc_tools, panagram, bgzip stubbed; 3 and 35 genomes)
+
+## cpp/anchor.cpp   (run_anchor <ngenomes> <index dir> <name> <fasta> [<name> <fasta> ...])
+  KMCdb::anchor_fasta, KMCdb::write_bits, main  -> test_cpp_anchor.py (built from source and the committed binary)
+
+## CLI options and arguments
+  annotate_significant_windows.py: -a/--association-file, -g/--gff, -o/--output-file, --fdr-cutoff, --window-size, --chunksize  -> test_scripts_annotate.py
+  association_testing.py: -a/--anchor-name, -p/--panagram-dir, -g/--gff, -s/--sample-file, -m/--phenotype-file, -t/--type (gene, all by run; exon, reg through build_feature_windows; invalid choice rejected), -o/--output-dir, -n/--threads, --chunk-size, --keep-haplotypes, --sort-temp-dir, --max-plot-points-per-phenotype  -> test_scripts_association.py
+  pairwise_comp.py: anchor, index dir  -> test_scripts_small.py
+  make_bins_bits.py: fai file, index dir  -> test_scripts_small.py
+  write_umaps.py: anchor, chrom (ignored by the script), bin size, eps, n_neighbors, min_dist, step  -> test_scripts_small.py
+  plot_umaps.py: anchor, chrom (chromosome mode only), bin size, eps, n_neighbors, min_dist, n_skips  -> test_scripts_plots.py
+  query.py: anchor, chrom, start, end, index dir  -> test_scripts_plots.py
+  query_index.py: index dir, anchor, element (gene|anno|bit|custom)  -> NOT COVERED (see above)
+  run_umaps.sh, preprocess.sh: positional arguments  -> test_scripts_small.py
+  run_anchor: ngenomes, index dir, name/fasta pairs, OMP_NUM_THREADS  -> test_cpp_anchor.py
