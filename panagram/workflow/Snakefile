@@ -1,11 +1,6 @@
 import os
 import sys
 import shlex
-import pandas as pd
-from panagram.index import Index
-from panagram.index import EXTRA_DIR
-
-configfile: "config.yaml"
 
 def _start_umaps_early():
     """Start the umaps warm-up now, in the main snakemake process only; rule umaps
@@ -17,18 +12,25 @@ def _start_umaps_early():
         "--d3dag", "--detailed-summary", "-D", "--containerize", "--unlock", "--cleanup-metadata"}
     if any(a.split("=")[0] in skip for a in sys.argv[1:]):
         return
+    import subprocess
     import tempfile
     control = tempfile.mkdtemp(prefix="panagram-umaps-")
     os.environ["PANAGRAM_UMAPS_CONTROL"] = control
     try:
-        from panagram._umaps_job import start_early
-        proc = start_early(control)
+        proc = subprocess.Popen([sys.executable, "-m", "panagram._umaps_job", "--early", control],
+            stdout=open(os.path.join(control, "log.txt"), "w"), stderr=subprocess.STDOUT)
         with open(os.path.join(control, "pid"), "w") as f:
             f.write(str(proc.pid))
     except Exception:
         pass
 
 _start_umaps_early()
+
+import pandas as pd
+from panagram.index import Index
+from panagram.index import EXTRA_DIR
+
+configfile: "config.yaml"
 
 index = Index(".", mode="w")
 index.load_config()
