@@ -16,8 +16,7 @@ import shutil
 import snakemake.cli
 import re
 import logging
-import umap
-from sklearn.cluster import DBSCAN
+import importlib.util
 import dataclasses
 from simple_parsing import field
 from simple_parsing.helpers import Serializable
@@ -25,6 +24,25 @@ from typing import List
 import argparse
 
 logger = logging.getLogger(__name__)
+
+
+def _lazy_import(name):
+    spec = importlib.util.find_spec(name)
+    spec.loader = importlib.util.LazyLoader(spec.loader)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+# umap pulls in numba, pynndescent and sklearn; only anchor jobs call it
+umap = _lazy_import("umap")
+
+
+def DBSCAN(*args, **kwargs):
+    from sklearn.cluster import DBSCAN as _DBSCAN
+
+    return _DBSCAN(*args, **kwargs)
 
 
 def init_logger(logfile):
