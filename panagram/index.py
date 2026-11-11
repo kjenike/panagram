@@ -1169,14 +1169,40 @@ class Genome:
         self.genome_umap.to_csv(self.genome_umap_filename, index=False)
 
     @staticmethod
+    def _umap_knn(reducer, x, n):
+        """Give `reducer` the exact k-nearest-neighbour table umap builds itself for under 4096 rows.
+
+        umap takes sklearn's pairwise distances and a stable argsort of each row, in a numba kernel
+        that is slow to compile; numpy's stable argsort gives the same table.
+        """
+        if x.shape[0] >= 4096 or x.shape[0] <= n:
+            return
+        from sklearn.metrics import pairwise_distances
+        from umap.distances import euclidean, pairwise_special_metric
+
+        x32 = np.ascontiguousarray(x, dtype=np.float32)
+        try:
+            dmat = pairwise_distances(x32, metric=euclidean)
+        except (ValueError, TypeError):
+            dmat = pairwise_special_metric(x32, metric=euclidean, kwds={})
+        indices = np.argsort(dmat, axis=1, kind="stable")[:, : n + 1]
+        nearest = np.take_along_axis(dmat, indices, axis=1)
+        if (nearest[:, 1:] == nearest[:, :-1]).any():
+            return  # tied distances: leave the fit to umap's own path
+        indices = indices[:, :n].astype(np.int32)
+        reducer.precomputed_knn = (indices, nearest[:, :n], None)
+
+    @staticmethod
     def warm_umap(index):
         """Compile umap's numba kernels with a small fit shaped like run_umap's input."""
         rng = np.random.default_rng(0)
         x = np.asfortranarray(rng.random((50, 50)))
-        umap.UMAP(
+        reducer = umap.UMAP(
             n_neighbors=index.chrom_umap.neighbors, min_dist=index.chrom_umap.dist,
             n_components=2, n_jobs=1, random_state=42,
-        ).fit_transform(x)
+        )
+        Genome._umap_knn(reducer, x, index.chrom_umap.neighbors)
+        reducer.fit_transform(x)
 
     def run_umap(self, paircounts, args):
         if len(paircounts) <= args.neighbors:
@@ -1188,7 +1214,9 @@ class Genome:
                 n_neighbors=args.neighbors, min_dist=args.dist, n_components=2, n_jobs=1, random_state=42
             )
             try:
-                embedding = reducer.fit_transform(paircounts.to_numpy())
+                x = paircounts.to_numpy()
+                Genome._umap_knn(reducer, x, args.neighbors)
+                embedding = reducer.fit_transform(x)
             except Exception as e:
                 logger.warning(f"{self.name} UMAP failed for at least one chromosome.")
                 logger.error(f"Error: {e}")
