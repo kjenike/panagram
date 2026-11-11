@@ -104,7 +104,7 @@ rule kmc_count:
         "logs/kmc.{sample}.txt"
     benchmark:
         "logs/kmc.{sample}.benchmark.txt"
-    threads : config["kmc"]["threads"]
+    threads: max(1, min(config["kmc"]["threads"], workflow.cores // len(SAMPLES)))
     resources:
         mem_mb=500+config["kmc"]["memory"]*1000,
     shell:
