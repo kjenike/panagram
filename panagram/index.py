@@ -422,7 +422,7 @@ class Index(Serializable):
     def steps(self):
         return (1, self.lowres_step)
 
-    def init_opdefs(self):
+    def opdef_texts(self):
         genome_dbs = [list()]
         i = 0
         for name, fasta in self.samples["fasta"].items():
@@ -432,16 +432,22 @@ class Index(Serializable):
             genome_dbs[-1].append((name, self.kmc_prefix(name, "onehot")))
             i += 1
 
-        for i, fname in enumerate(self.opdef_filenames):
+        texts = []
+        for i in range(self.kmc_bitvec_count):
             bitvec_fname = self.kmc_prefix(f"bitvec{i}")
+            text = "INPUT:\n"
+            for name, db in genome_dbs[i]:
+                text += f"{name} = {db}\n"
+            text += f"OUTPUT:\n{bitvec_fname} = {genome_dbs[i][0][0]}"
+            for name, _ in genome_dbs[i][1:]:
+                text += f" + {name}"
+            texts.append(text + "\n-ocsum\n")
+        return texts
+
+    def init_opdefs(self):
+        for fname, text in zip(self.opdef_filenames, self.opdef_texts()):
             with open(fname, "w") as opdefs:
-                opdefs.write("INPUT:\n")
-                for name, db in genome_dbs[i]:
-                    opdefs.write(f"{name} = {db}\n")
-                opdefs.write(f"OUTPUT:\n{bitvec_fname} = {genome_dbs[i][0][0]}")
-                for name, _ in genome_dbs[i][1:]:
-                    opdefs.write(f" + {name}")
-                opdefs.write("\n-ocsum\n")
+                opdefs.write(text)
 
     def get_anchor_filenames(self, name):
         return self.genomes[name].anchor_filenames

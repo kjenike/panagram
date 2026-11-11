@@ -1,4 +1,5 @@
 import sys
+import shlex
 import pandas as pd
 from panagram.index import Index
 from panagram.index import EXTRA_DIR
@@ -66,10 +67,12 @@ def get_bitvec_mb(wc,input):
 
 rule kmc_bitvec:
     input:
-        opdef="kmc/opdef{i}.txt",
         dbs=expand("kmc/{sample}.onehot.{ext}", sample=list(SAMPLES.index), ext=KMC_EXTS)
     output:
-        expand("kmc/bitvec{{i}}.{ext}", ext=KMC_EXTS)
+        expand("kmc/bitvec{{i}}.{ext}", ext=KMC_EXTS),
+        opdef="kmc/opdef{i}.txt"
+    params:
+        opdef_text=lambda wc: shlex.quote(index.opdef_texts()[int(wc.i)])
     log:
         "logs/kmc.bitvec{i}.log.txt"
     benchmark:
@@ -78,18 +81,8 @@ rule kmc_bitvec:
         mem_mb=get_bitvec_mb,
     threads: 2
     shell:
-        f"{EXTRA_DIR}/kmc_tools complex {{input.opdef}} > {{log}} 2>&1"
-        #kmc/opdef{{wildcards.i}}.txt
-
-rule opdefs:
-    input:
-        expand("kmc/{sample}.onehot.{ext}", sample=list(SAMPLES.index), ext=KMC_EXTS)
-    output:
-        expand("kmc/opdef{i}.txt", i=range(index.kmc_bitvec_count))
-    benchmark:
-        "logs/kmc.opdef.benchmark.txt"
-    run:
-        index.init_opdefs()
+        f"printf '%s' {{params.opdef_text}} > {{output.opdef}}; "
+        f"{EXTRA_DIR}/kmc_tools complex {{output.opdef}} > {{log}} 2>&1"
 
 rule kmc_count:
     input:
