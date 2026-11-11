@@ -45,7 +45,31 @@ rule anchor:
     resources:
         mem_mb=get_anchor_mb,
     run:
-        index[wildcards.sample].run_anchor(index.bitvec_prefixes, log.log)
+        try:
+            index[wildcards.sample].run_anchor(index.bitvec_prefixes, log.log, umaps=False)
+        except BaseException:
+            open(f"anchor/{wildcards.sample}/failed", "w").close()
+            raise
+
+rule umaps:
+    output:
+        expand("anchor/{sample}/chrom_umaps.csv", sample=index.anchor_genomes),
+        expand("anchor/{sample}/genome_umap.csv", sample=index.anchor_genomes),
+    threads: 0
+    run:
+        import os, time
+        from panagram.index import Genome
+        Genome.warm_umap(index)
+        for name in index.anchor_genomes:
+            done = f"logs/anchor.{name}.benchmark.txt"
+            failed = f"anchor/{name}/failed"
+            while not os.path.exists(done):
+                if os.path.exists(failed):
+                    raise RuntimeError(f"anchor job for {name} failed; no UMAPs")
+                time.sleep(0.05)
+            genome = index[name]
+            genome.init_read()
+            genome.write_umaps()
 
 def get_bitvec_mb(wc,input):
     dbsize = input.size_mb #max([d.size_mb for d in input.dbs])
@@ -151,4 +175,6 @@ rule mash_triangle:
 rule all:
     input:
         "genome_dist.tsv",
-        expand("anchor/{sample}/chrs.tsv", sample=index.anchor_genomes)
+        expand("anchor/{sample}/chrs.tsv", sample=index.anchor_genomes),
+        expand("anchor/{sample}/chrom_umaps.csv", sample=index.anchor_genomes),
+        expand("anchor/{sample}/genome_umap.csv", sample=index.anchor_genomes)

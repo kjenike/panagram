@@ -1027,7 +1027,7 @@ class Genome:
             gene_tabix = gene_df.reset_index()[self.gene_tabix_cols]
             self._write_tabix(gene_tabix, "gene")
 
-    def run_anchor(self, bitvecs, logfile=None):
+    def run_anchor(self, bitvecs, logfile=None, umaps=True):
         logging.basicConfig(
             filename=logfile,
             level=logging.INFO,
@@ -1134,7 +1134,8 @@ class Genome:
             )
 
         self.init_read()
-        self.write_umaps()
+        if umaps:
+            self.write_umaps()
 
     @property
     def chrom_umaps_filename(self):
@@ -1166,6 +1167,16 @@ class Genome:
             pd.concat(genome_paircounts, names=["chrom", "start"]), self.index.genome_umap
         )
         self.genome_umap.to_csv(self.genome_umap_filename, index=False)
+
+    @staticmethod
+    def warm_umap(index):
+        """Compile umap's numba kernels with a small fit shaped like run_umap's input."""
+        rng = np.random.default_rng(0)
+        x = np.asfortranarray(rng.random((50, 50)))
+        umap.UMAP(
+            n_neighbors=index.chrom_umap.neighbors, min_dist=index.chrom_umap.dist,
+            n_components=2, n_jobs=1, random_state=42,
+        ).fit_transform(x)
 
     def run_umap(self, paircounts, args):
         if len(paircounts) <= args.neighbors:
