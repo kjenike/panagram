@@ -1,3 +1,4 @@
+import sys
 import pandas as pd
 from panagram.index import Index
 from panagram.index import EXTRA_DIR
@@ -56,20 +57,8 @@ rule umaps:
         expand("anchor/{sample}/chrom_umaps.csv", sample=index.anchor_genomes),
         expand("anchor/{sample}/genome_umap.csv", sample=index.anchor_genomes),
     threads: 0
-    run:
-        import os, time
-        from panagram.index import Genome
-        Genome.warm_umap(index)
-        for name in index.anchor_genomes:
-            done = f"logs/anchor.{name}.benchmark.txt"
-            failed = f"anchor/{name}/failed"
-            while not os.path.exists(done):
-                if os.path.exists(failed):
-                    raise RuntimeError(f"anchor job for {name} failed; no UMAPs")
-                time.sleep(0.05)
-            genome = index[name]
-            genome.init_read()
-            genome.write_umaps()
+    shell:
+        f'"{sys.executable}" -m panagram._umaps_job'
 
 def get_bitvec_mb(wc,input):
     dbsize = input.size_mb #max([d.size_mb for d in input.dbs])
