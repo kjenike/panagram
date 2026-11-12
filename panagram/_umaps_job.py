@@ -34,6 +34,8 @@ def main(early=None):
         neighbors=chrom.get("neighbors", 4), dist=chrom.get("dist", 0))))
 
     if early:
+        if not _parent_alive(parent):
+            return 1
         while not os.path.exists(os.path.join(early, "go")):
             if not _parent_alive(parent):
                 return 1
@@ -93,27 +95,71 @@ def attach(control):
     with open(os.path.join(control, "anchors"), "w"):
         pass
     done = os.path.join(control, "status")
-    while not os.path.exists(done):
-        time.sleep(0.01)
-    with open(done) as f:
-        ok = f.read().strip() == "0"
-    stage = os.path.join(control, "stage")
-    if ok and os.path.isdir(stage):
-        for name in os.listdir(stage):
-            for fn in os.listdir(os.path.join(stage, name)):
-                shutil.move(os.path.join(stage, name, fn), os.path.join("anchor", name, fn))
-    shutil.rmtree(control, ignore_errors=True)
-    return ok
+    try:
+        with open(pidfile) as f:
+            pid = int(f.read().strip())
+    except (OSError, ValueError):
+        pid = None
+    try:
+        while not os.path.exists(done):
+            if pid is not None and not _process_running(pid) and not os.path.exists(done):
+                raise SystemExit(f"panagram umaps: the head-start process (pid {pid}) died before "
+                    f"writing its status; its log is {os.path.join(control, 'log.txt')}. "
+                    "Re-run snakemake to build the UMAPs.")
+            time.sleep(0.01)
+        with open(done) as f:
+            ok = f.read().strip() == "0"
+        stage = os.path.join(control, "stage")
+        if ok and os.path.isdir(stage):
+            for name in os.listdir(stage):
+                for fn in os.listdir(os.path.join(stage, name)):
+                    shutil.move(os.path.join(stage, name, fn), os.path.join("anchor", name, fn))
+        return ok
+    finally:
+        if sys.exc_info()[0] is not None:
+            # Keep the log readable in the error message only while the error is raised.
+            try:
+                print(open(os.path.join(control, "log.txt")).read()[-2000:], file=sys.stderr)
+            except OSError:
+                pass
+        shutil.rmtree(control, ignore_errors=True)
+
+
+def _process_running(pid):
+    """True while `pid` is a live process (a zombie awaiting its parent's wait counts as dead)."""
+    try:
+        import psutil
+    except ImportError:
+        if os.name == "nt":
+            return True
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except OSError:
+            pass
+        return True
+    try:
+        return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return False
+    except psutil.Error:
+        return True
 
 
 def _early_entry(control):
+    parent = os.getppid()
     status = 1
     try:
         status = main(early=control) or 0
     finally:
-        with open(os.path.join(control, "status.tmp"), "w") as f:
-            f.write(str(status))
-        os.replace(os.path.join(control, "status.tmp"), os.path.join(control, "status"))
+        if _parent_alive(parent):
+            with open(os.path.join(control, "status.tmp"), "w") as f:
+                f.write(str(status))
+            os.replace(os.path.join(control, "status.tmp"), os.path.join(control, "status"))
+        else:
+            # Nothing will ever attach: take the control directory with us.
+            shutil.rmtree(control, ignore_errors=True)
     return status
 
 

@@ -21,9 +21,20 @@ def _start_umaps_early():
             stdout=open(os.path.join(control, "log.txt"), "w"), stderr=subprocess.STDOUT)
         with open(os.path.join(control, "pid"), "w") as f:
             f.write(str(proc.pid))
-        return control
     except Exception:
         return None
+
+    def _cleanup():
+        # Whatever way snakemake ends (nothing to do, an error, success), the head-start
+        # must not outlive it or leave its control directory behind.
+        import shutil
+        if proc.poll() is None:
+            proc.terminate()
+        shutil.rmtree(control, ignore_errors=True)
+
+    import atexit
+    atexit.register(_cleanup)
+    return control
 
 _UMAPS_CONTROL = _start_umaps_early()
 
