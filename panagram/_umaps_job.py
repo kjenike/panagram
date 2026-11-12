@@ -14,6 +14,15 @@ def _parent_alive(parent):
     return os.getppid() == parent
 
 
+def _stamp(path):
+    """Identity of a file as it is now (None if absent), to tell a stale marker from a new one."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_ino, st.st_size)
+
+
 def main(early=None):
     """Run the umaps job. With `early` (a control directory), run as the head-start
     process of the Snakefile: warm up, wait for the go file, then write the UMAPs."""
@@ -31,11 +40,23 @@ def main(early=None):
             time.sleep(0.01)
 
     index = Index(".", mode="w")
+    # Markers left by an earlier run are stale until an anchor job rewrites them; once
+    # the anchors file exists (rule umaps is scheduled, so every anchor job is done) a
+    # benchmark file that never changed belongs to an anchor job that did not re-run.
+    stale = {}
+    if early:
+        for name in index.anchor_genomes:
+            stale[name] = (_stamp(f"logs/anchor.{name}.benchmark.txt"), _stamp(f"anchor/{name}/failed"))
     for name in index.anchor_genomes:
         done = f"logs/anchor.{name}.benchmark.txt"
         failed = f"anchor/{name}/failed"
-        while not os.path.exists(done):
-            if os.path.exists(failed):
+        old_done, old_failed = stale.get(name, (None, None))
+        while True:
+            now = _stamp(done)
+            if now is not None and (now != old_done or (early and os.path.exists(os.path.join(early, "anchors")))):
+                break
+            now_failed = _stamp(failed)
+            if now_failed is not None and now_failed != old_failed:
                 raise RuntimeError(f"anchor job for {name} failed; no UMAPs")
             if early and not _parent_alive(parent):
                 return 1
@@ -43,6 +64,13 @@ def main(early=None):
         genome = index[name]
         genome.init_read()
         genome.write_umaps()
+        if early:
+            # Snakemake deletes a rule's existing outputs when the rule starts, and rule
+            # umaps starts after the anchor jobs: park the files for attach() to move in.
+            stage = os.path.join(early, "stage", name)
+            os.makedirs(stage, exist_ok=True)
+            for path in (genome.chrom_umaps_filename, genome.genome_umap_filename):
+                shutil.move(path, os.path.join(stage, os.path.basename(path)))
     return 0
 
 
@@ -62,11 +90,18 @@ def attach(control):
         return False
     with open(os.path.join(control, "go"), "w"):
         pass
+    with open(os.path.join(control, "anchors"), "w"):
+        pass
     done = os.path.join(control, "status")
     while not os.path.exists(done):
         time.sleep(0.01)
     with open(done) as f:
         ok = f.read().strip() == "0"
+    stage = os.path.join(control, "stage")
+    if ok and os.path.isdir(stage):
+        for name in os.listdir(stage):
+            for fn in os.listdir(os.path.join(stage, name)):
+                shutil.move(os.path.join(stage, name, fn), os.path.join("anchor", name, fn))
     shutil.rmtree(control, ignore_errors=True)
     return ok
 

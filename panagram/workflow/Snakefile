@@ -6,12 +6,12 @@ def _start_umaps_early():
     """Start the umaps warm-up now, in the main snakemake process only; rule umaps
     attaches to it. Returns without effect for dry runs, lint, listings and jobs."""
     if "PANAGRAM_UMAPS_CONTROL" in os.environ or workflow.dryrun:
-        return
+        return None
     skip = {"-n", "--dry-run", "--dryrun", "--lint", "--list", "-l", "--summary", "-S",
         "--list-target-rules", "--list-rules", "--dag", "--rulegraph", "--filegraph",
         "--d3dag", "--detailed-summary", "-D", "--containerize", "--unlock", "--cleanup-metadata"}
     if any(a.split("=")[0] in skip for a in sys.argv[1:]):
-        return
+        return None
     import subprocess
     import tempfile
     control = tempfile.mkdtemp(prefix="panagram-umaps-")
@@ -21,10 +21,11 @@ def _start_umaps_early():
             stdout=open(os.path.join(control, "log.txt"), "w"), stderr=subprocess.STDOUT)
         with open(os.path.join(control, "pid"), "w") as f:
             f.write(str(proc.pid))
+        return control
     except Exception:
-        pass
+        return None
 
-_start_umaps_early()
+_UMAPS_CONTROL = _start_umaps_early()
 
 import pandas as pd
 from panagram.index import Index
@@ -73,13 +74,20 @@ rule anchor:
     resources:
         mem_mb=get_anchor_mb,
     run:
+        failed = f"anchor/{wildcards.sample}/failed"
+        if os.path.exists(failed):
+            os.remove(failed)
         try:
             index[wildcards.sample].run_anchor(index.bitvec_prefixes, log.log, umaps=False)
         except BaseException:
-            open(f"anchor/{wildcards.sample}/failed", "w").close()
+            open(failed, "w").close()
             raise
+        if os.path.exists(failed):
+            os.remove(failed)
 
 rule umaps:
+    input:
+        expand("anchor/{sample}/chrs.tsv", sample=index.anchor_genomes),
     output:
         expand("anchor/{sample}/chrom_umaps.csv", sample=index.anchor_genomes),
         expand("anchor/{sample}/genome_umap.csv", sample=index.anchor_genomes),
@@ -186,3 +194,10 @@ rule all:
         expand("anchor/{sample}/chrs.tsv", sample=index.anchor_genomes),
         expand("anchor/{sample}/chrom_umaps.csv", sample=index.anchor_genomes),
         expand("anchor/{sample}/genome_umap.csv", sample=index.anchor_genomes)
+
+if _UMAPS_CONTROL:
+    # Snakefile parsed: release the head-start process, so its UMAPs overlap the anchor jobs.
+    try:
+        open(os.path.join(_UMAPS_CONTROL, "go"), "w").close()
+    except OSError:
+        pass
