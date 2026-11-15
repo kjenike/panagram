@@ -47,6 +47,7 @@ configfile: "config.yaml"
 index = Index(".", mode="w")
 index.load_config()
 
+UMAP_GENOMES = list(dict.fromkeys(index.anchor_genomes))
 SAMPLES = index.samples #pd.read_table(config["samples"]).set_index("name")
 
 TMPDIR = f"tmp/"
@@ -98,10 +99,10 @@ rule anchor:
 
 rule umaps:
     input:
-        expand("anchor/{sample}/chrs.tsv", sample=index.anchor_genomes),
+        expand("anchor/{sample}/chrs.tsv", sample=UMAP_GENOMES),
     output:
-        expand("anchor/{sample}/chrom_umaps.csv", sample=index.anchor_genomes),
-        expand("anchor/{sample}/genome_umap.csv", sample=index.anchor_genomes),
+        expand("anchor/{sample}/chrom_umaps.csv", sample=UMAP_GENOMES),
+        expand("anchor/{sample}/genome_umap.csv", sample=UMAP_GENOMES),
     threads: 0
     shell:
         f'"{sys.executable}" -m panagram._umaps_job --attach'
@@ -142,7 +143,7 @@ rule kmc_count:
         "logs/kmc.{sample}.txt"
     benchmark:
         "logs/kmc.{sample}.benchmark.txt"
-    threads: max(1, min(config["kmc"]["threads"], workflow.cores // len(SAMPLES)))
+    threads: max(1, min(config["kmc"]["threads"], workflow.cores // max(1, len(SAMPLES))))
     resources:
         mem_mb=500+config["kmc"]["memory"]*1000,
     shell:

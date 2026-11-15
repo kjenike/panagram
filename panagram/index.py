@@ -1151,7 +1151,12 @@ class Genome:
     def genome_umap_filename(self):
         return os.path.join(self.prefix, "genome_umap.csv")
 
-    def write_umaps(self):
+    def write_umaps(self, outdir=None):
+        """Write chrom_umaps.csv and genome_umap.csv into `outdir` (default: the genome's anchor directory)."""
+        chrom_file, genome_file = self.chrom_umaps_filename, self.genome_umap_filename
+        if outdir is not None:
+            chrom_file = os.path.join(outdir, os.path.basename(chrom_file))
+            genome_file = os.path.join(outdir, os.path.basename(genome_file))
         genome_paircounts = {}
         chrom_umaps = list()
         for chrom in self.chrs.index:
@@ -1167,12 +1172,12 @@ class Genome:
             ).T.fillna(0)
 
         self.chrom_umaps = pd.concat(chrom_umaps).set_index("chrom")
-        self.chrom_umaps.to_csv(self.chrom_umaps_filename)
+        self.chrom_umaps.to_csv(chrom_file)
 
         self.genome_umap = self.run_umap(
             pd.concat(genome_paircounts, names=["chrom", "start"]), self.index.genome_umap
         )
-        self.genome_umap.to_csv(self.genome_umap_filename, index=False)
+        self.genome_umap.to_csv(genome_file, index=False)
 
     @staticmethod
     def _umap_knn(reducer, x, n):

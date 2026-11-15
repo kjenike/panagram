@@ -30,8 +30,11 @@ def main(early=None):
     with open("config.yaml") as f:
         cfg = yaml.load(f, yaml.Loader) or {}
     chrom = cfg.get("chrom_umap") or {}
-    Genome.warm_umap(SimpleNamespace(chrom_umap=SimpleNamespace(
-        neighbors=chrom.get("neighbors", 4), dist=chrom.get("dist", 0))))
+    try:
+        Genome.warm_umap(SimpleNamespace(chrom_umap=SimpleNamespace(
+            neighbors=chrom.get("neighbors", 4), dist=chrom.get("dist", 0))))
+    except Exception:
+        pass  # invalid UMAP parameters: run_umap catches the same failure per fit and writes zeros
 
     if early:
         if not _parent_alive(parent):
@@ -42,14 +45,15 @@ def main(early=None):
             time.sleep(0.01)
 
     index = Index(".", mode="w")
+    anchors = list(dict.fromkeys(index.anchor_genomes))
     # Markers left by an earlier run are stale until an anchor job rewrites them; once
     # the anchors file exists (rule umaps is scheduled, so every anchor job is done) a
     # benchmark file that never changed belongs to an anchor job that did not re-run.
     stale = {}
     if early:
-        for name in index.anchor_genomes:
+        for name in anchors:
             stale[name] = (_stamp(f"logs/anchor.{name}.benchmark.txt"), _stamp(f"anchor/{name}/failed"))
-    for name in index.anchor_genomes:
+    for name in anchors:
         done = f"logs/anchor.{name}.benchmark.txt"
         failed = f"anchor/{name}/failed"
         old_done, old_failed = stale.get(name, (None, None))
@@ -65,14 +69,15 @@ def main(early=None):
             time.sleep(0.05)
         genome = index[name]
         genome.init_read()
-        genome.write_umaps()
         if early:
             # Snakemake deletes a rule's existing outputs when the rule starts, and rule
-            # umaps starts after the anchor jobs: park the files for attach() to move in.
+            # umaps starts after the anchor jobs: write into the staging directory, which
+            # attach() moves in from, and never into anchor/<name>/.
             stage = os.path.join(early, "stage", name)
             os.makedirs(stage, exist_ok=True)
-            for path in (genome.chrom_umaps_filename, genome.genome_umap_filename):
-                shutil.move(path, os.path.join(stage, os.path.basename(path)))
+            genome.write_umaps(stage)
+        else:
+            genome.write_umaps()
     return 0
 
 
