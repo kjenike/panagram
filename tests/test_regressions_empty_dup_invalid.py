@@ -93,3 +93,16 @@ def test_write_umaps_to_another_directory_matches_the_default(anchored_reader, a
     genome.write_umaps(str(tmp_path))
     for name in ("chrom_umaps.csv", "genome_umap.csv"):
         assert (tmp_path / name).read_bytes() == (anchored_index / "anchor" / "alpha" / name).read_bytes()
+
+
+def test_unlock_and_missing_cores_behave_as_the_original(fresh_prepared_index, panagram_overlay):
+    """`snakemake --unlock` needs no --cores; a run without --cores stops with snakemake's own message."""
+    index = fresh_prepared_index
+    base = [sys.executable, "-m", "snakemake"]
+    r = subprocess.run(base + ["--unlock"], cwd=index, env=panagram_overlay, capture_output=True, text=True, timeout=600)
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert "total number of cores" not in r.stderr
+    r = subprocess.run(base + ["all"], cwd=index, env=panagram_overlay, capture_output=True, text=True, timeout=600)
+    assert r.returncode != 0
+    assert "cores have to be specified" in r.stderr
+    assert "total number of cores" not in r.stderr

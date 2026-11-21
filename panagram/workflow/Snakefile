@@ -39,6 +39,7 @@ def _start_umaps_early():
 _UMAPS_CONTROL = _start_umaps_early()
 
 import pandas as pd
+from snakemake.exceptions import WorkflowError
 from panagram.index import Index
 from panagram.index import EXTRA_DIR
 
@@ -130,6 +131,15 @@ rule kmc_bitvec:
         f"printf '%s' {{params.opdef_text}} > {{output.opdef}}; "
         f"{EXTRA_DIR}/kmc_tools complex {{output.opdef}} > {{log}} 2>&1"
 
+def get_kmc_threads():
+    # workflow.cores raises when snakemake got no --cores (--unlock, or a run it will refuse
+    # after parsing); the threads value is then the configured one, as before.
+    try:
+        cores = workflow.cores
+    except WorkflowError:
+        return config["kmc"]["threads"]
+    return max(1, min(config["kmc"]["threads"], cores // max(1, len(SAMPLES))))
+
 rule kmc_count:
     input:
         get_fasta #"{fasta}"
@@ -143,7 +153,7 @@ rule kmc_count:
         "logs/kmc.{sample}.txt"
     benchmark:
         "logs/kmc.{sample}.benchmark.txt"
-    threads: max(1, min(config["kmc"]["threads"], workflow.cores // max(1, len(SAMPLES))))
+    threads: get_kmc_threads()
     resources:
         mem_mb=500+config["kmc"]["memory"]*1000,
     shell:
