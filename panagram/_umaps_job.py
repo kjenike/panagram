@@ -1,0 +1,177 @@
+"""Entry point of rule umaps: warm up umap's numba kernels, then write every anchor's UMAPs."""
+import os
+import shutil
+import sys
+import time
+from types import SimpleNamespace
+
+import yaml
+
+from panagram.index import Genome, Index
+
+
+def _parent_alive(parent):
+    return os.getppid() == parent
+
+
+def _stamp(path):
+    """Identity of a file as it is now (None if absent), to tell a stale marker from a new one."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_ino, st.st_size)
+
+
+def main(early=None):
+    """Run the umaps job. With `early` (a control directory), run as the head-start
+    process of the Snakefile: warm up, wait for the go file, then write the UMAPs."""
+    parent = os.getppid()
+    with open("config.yaml") as f:
+        cfg = yaml.load(f, yaml.Loader) or {}
+    chrom = cfg.get("chrom_umap") or {}
+    try:
+        Genome.warm_umap(SimpleNamespace(chrom_umap=SimpleNamespace(
+            neighbors=chrom.get("neighbors", 4), dist=chrom.get("dist", 0))))
+    except Exception:
+        pass  # invalid UMAP parameters: run_umap catches the same failure per fit and writes zeros
+
+    if early:
+        if not _parent_alive(parent):
+            return 1
+        while not os.path.exists(os.path.join(early, "go")):
+            if not _parent_alive(parent):
+                return 1
+            time.sleep(0.01)
+
+    index = Index(".", mode="w")
+    anchors = list(dict.fromkeys(index.anchor_genomes))
+    # Markers left by an earlier run are stale until an anchor job rewrites them; once
+    # the anchors file exists (rule umaps is scheduled, so every anchor job is done) a
+    # benchmark file that never changed belongs to an anchor job that did not re-run.
+    stale = {}
+    if early:
+        for name in anchors:
+            stale[name] = (_stamp(f"logs/anchor.{name}.benchmark.txt"), _stamp(f"anchor/{name}/failed"))
+    for name in anchors:
+        done = f"logs/anchor.{name}.benchmark.txt"
+        failed = f"anchor/{name}/failed"
+        old_done, old_failed = stale.get(name, (None, None))
+        while True:
+            now = _stamp(done)
+            if now is not None and (now != old_done or (early and os.path.exists(os.path.join(early, "anchors")))):
+                break
+            now_failed = _stamp(failed)
+            if now_failed is not None and now_failed != old_failed:
+                raise RuntimeError(f"anchor job for {name} failed; no UMAPs")
+            if early and not _parent_alive(parent):
+                return 1
+            time.sleep(0.05)
+        genome = index[name]
+        genome.init_read()
+        if early:
+            # Snakemake deletes a rule's existing outputs when the rule starts, and rule
+            # umaps starts after the anchor jobs: write into the staging directory, which
+            # attach() moves in from, and never into anchor/<name>/.
+            stage = os.path.join(early, "stage", name)
+            os.makedirs(stage, exist_ok=True)
+            genome.write_umaps(stage)
+        else:
+            genome.write_umaps()
+    return 0
+
+
+def start_early(control):
+    """Spawn the head-start process (called from the Snakefile while it is parsed)."""
+    import subprocess
+    log = open(os.path.join(control, "log.txt"), "w")
+    return subprocess.Popen([sys.executable, "-m", "panagram._umaps_job", "--early", control],
+        stdout=log, stderr=subprocess.STDOUT)
+
+
+def attach(control):
+    """Rule umaps: release the head-start process and wait for it; True if it finished
+    cleanly, False when there is none or it failed (the caller then runs the job itself)."""
+    pidfile = os.path.join(control, "pid")
+    if not control or not os.path.exists(pidfile):
+        return False
+    with open(os.path.join(control, "go"), "w"):
+        pass
+    with open(os.path.join(control, "anchors"), "w"):
+        pass
+    done = os.path.join(control, "status")
+    try:
+        with open(pidfile) as f:
+            pid = int(f.read().strip())
+    except (OSError, ValueError):
+        pid = None
+    try:
+        while not os.path.exists(done):
+            if pid is not None and not _process_running(pid) and not os.path.exists(done):
+                raise SystemExit(f"panagram umaps: the head-start process (pid {pid}) died before "
+                    f"writing its status; its log is {os.path.join(control, 'log.txt')}. "
+                    "Re-run snakemake to build the UMAPs.")
+            time.sleep(0.01)
+        with open(done) as f:
+            ok = f.read().strip() == "0"
+        stage = os.path.join(control, "stage")
+        if ok and os.path.isdir(stage):
+            for name in os.listdir(stage):
+                for fn in os.listdir(os.path.join(stage, name)):
+                    shutil.move(os.path.join(stage, name, fn), os.path.join("anchor", name, fn))
+        return ok
+    finally:
+        if sys.exc_info()[0] is not None:
+            # Keep the log readable in the error message only while the error is raised.
+            try:
+                print(open(os.path.join(control, "log.txt")).read()[-2000:], file=sys.stderr)
+            except OSError:
+                pass
+        shutil.rmtree(control, ignore_errors=True)
+
+
+def _process_running(pid):
+    """True while `pid` is a live process (a zombie awaiting its parent's wait counts as dead)."""
+    try:
+        import psutil
+    except ImportError:
+        if os.name == "nt":
+            return True
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except OSError:
+            pass
+        return True
+    try:
+        return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return False
+    except psutil.Error:
+        return True
+
+
+def _early_entry(control):
+    parent = os.getppid()
+    status = 1
+    try:
+        status = main(early=control) or 0
+    finally:
+        if _parent_alive(parent):
+            with open(os.path.join(control, "status.tmp"), "w") as f:
+                f.write(str(status))
+            os.replace(os.path.join(control, "status.tmp"), os.path.join(control, "status"))
+        else:
+            # Nothing will ever attach: take the control directory with us.
+            shutil.rmtree(control, ignore_errors=True)
+    return status
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "--early":
+        sys.exit(_early_entry(sys.argv[2]))
+    if sys.argv[1:] == ["--attach"]:
+        if attach(os.environ.get("PANAGRAM_UMAPS_CONTROL", "")):
+            sys.exit(0)
+    main()

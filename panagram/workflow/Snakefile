@@ -1,4 +1,45 @@
+import os
+import sys
+import shlex
+
+def _start_umaps_early():
+    """Start the umaps warm-up now, in the main snakemake process only; rule umaps
+    attaches to it. Returns without effect for dry runs, lint, listings and jobs."""
+    if "PANAGRAM_UMAPS_CONTROL" in os.environ or workflow.dryrun:
+        return None
+    skip = {"-n", "--dry-run", "--dryrun", "--lint", "--list", "-l", "--summary", "-S",
+        "--list-target-rules", "--list-rules", "--dag", "--rulegraph", "--filegraph",
+        "--d3dag", "--detailed-summary", "-D", "--containerize", "--unlock", "--cleanup-metadata"}
+    if any(a.split("=")[0] in skip for a in sys.argv[1:]):
+        return None
+    import subprocess
+    import tempfile
+    control = tempfile.mkdtemp(prefix="panagram-umaps-")
+    os.environ["PANAGRAM_UMAPS_CONTROL"] = control
+    try:
+        proc = subprocess.Popen([sys.executable, "-m", "panagram._umaps_job", "--early", control],
+            stdout=open(os.path.join(control, "log.txt"), "w"), stderr=subprocess.STDOUT)
+        with open(os.path.join(control, "pid"), "w") as f:
+            f.write(str(proc.pid))
+    except Exception:
+        return None
+
+    def _cleanup():
+        # Whatever way snakemake ends (nothing to do, an error, success), the head-start
+        # must not outlive it or leave its control directory behind.
+        import shutil
+        if proc.poll() is None:
+            proc.terminate()
+        shutil.rmtree(control, ignore_errors=True)
+
+    import atexit
+    atexit.register(_cleanup)
+    return control
+
+_UMAPS_CONTROL = _start_umaps_early()
+
 import pandas as pd
+from snakemake.exceptions import WorkflowError
 from panagram.index import Index
 from panagram.index import EXTRA_DIR
 
@@ -7,6 +48,7 @@ configfile: "config.yaml"
 index = Index(".", mode="w")
 index.load_config()
 
+UMAP_GENOMES = list(dict.fromkeys(index.anchor_genomes))
 SAMPLES = index.samples #pd.read_table(config["samples"]).set_index("name")
 
 TMPDIR = f"tmp/"
@@ -45,7 +87,26 @@ rule anchor:
     resources:
         mem_mb=get_anchor_mb,
     run:
-        index[wildcards.sample].run_anchor(index.bitvec_prefixes, log.log)
+        failed = f"anchor/{wildcards.sample}/failed"
+        if os.path.exists(failed):
+            os.remove(failed)
+        try:
+            index[wildcards.sample].run_anchor(index.bitvec_prefixes, log.log, umaps=False)
+        except BaseException:
+            open(failed, "w").close()
+            raise
+        if os.path.exists(failed):
+            os.remove(failed)
+
+rule umaps:
+    input:
+        expand("anchor/{sample}/chrs.tsv", sample=UMAP_GENOMES),
+    output:
+        expand("anchor/{sample}/chrom_umaps.csv", sample=UMAP_GENOMES),
+        expand("anchor/{sample}/genome_umap.csv", sample=UMAP_GENOMES),
+    threads: 0
+    shell:
+        f'"{sys.executable}" -m panagram._umaps_job --attach'
 
 def get_bitvec_mb(wc,input):
     dbsize = input.size_mb #max([d.size_mb for d in input.dbs])
@@ -53,10 +114,12 @@ def get_bitvec_mb(wc,input):
 
 rule kmc_bitvec:
     input:
-        opdef="kmc/opdef{i}.txt",
         dbs=expand("kmc/{sample}.onehot.{ext}", sample=list(SAMPLES.index), ext=KMC_EXTS)
     output:
-        expand("kmc/bitvec{{i}}.{ext}", ext=KMC_EXTS)
+        expand("kmc/bitvec{{i}}.{ext}", ext=KMC_EXTS),
+        opdef="kmc/opdef{i}.txt"
+    params:
+        opdef_text=lambda wc: shlex.quote(index.opdef_texts()[int(wc.i)])
     log:
         "logs/kmc.bitvec{i}.log.txt"
     benchmark:
@@ -65,18 +128,17 @@ rule kmc_bitvec:
         mem_mb=get_bitvec_mb,
     threads: 2
     shell:
-        f"{EXTRA_DIR}/kmc_tools complex {{input.opdef}} > {{log}} 2>&1"
-        #kmc/opdef{{wildcards.i}}.txt
+        f"printf '%s' {{params.opdef_text}} > {{output.opdef}}; "
+        f"{EXTRA_DIR}/kmc_tools complex {{output.opdef}} > {{log}} 2>&1"
 
-rule opdefs:
-    input:
-        expand("kmc/{sample}.onehot.{ext}", sample=list(SAMPLES.index), ext=KMC_EXTS)
-    output:
-        expand("kmc/opdef{i}.txt", i=range(index.kmc_bitvec_count))
-    benchmark:
-        "logs/kmc.opdef.benchmark.txt"
-    run:
-        index.init_opdefs()
+def get_kmc_threads():
+    # workflow.cores raises when snakemake got no --cores (--unlock, or a run it will refuse
+    # after parsing); the threads value is then the configured one, as before.
+    try:
+        cores = workflow.cores
+    except WorkflowError:
+        return config["kmc"]["threads"]
+    return max(1, min(config["kmc"]["threads"], cores // max(1, len(SAMPLES))))
 
 rule kmc_count:
     input:
@@ -91,7 +153,7 @@ rule kmc_count:
         "logs/kmc.{sample}.txt"
     benchmark:
         "logs/kmc.{sample}.benchmark.txt"
-    threads : config["kmc"]["threads"]
+    threads: get_kmc_threads()
     resources:
         mem_mb=500+config["kmc"]["memory"]*1000,
     shell:
@@ -151,4 +213,13 @@ rule mash_triangle:
 rule all:
     input:
         "genome_dist.tsv",
-        expand("anchor/{sample}/chrs.tsv", sample=index.anchor_genomes)
+        expand("anchor/{sample}/chrs.tsv", sample=index.anchor_genomes),
+        expand("anchor/{sample}/chrom_umaps.csv", sample=index.anchor_genomes),
+        expand("anchor/{sample}/genome_umap.csv", sample=index.anchor_genomes)
+
+if _UMAPS_CONTROL:
+    # Snakefile parsed: release the head-start process, so its UMAPs overlap the anchor jobs.
+    try:
+        open(os.path.join(_UMAPS_CONTROL, "go"), "w").close()
+    except OSError:
+        pass

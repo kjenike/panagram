@@ -16,8 +16,7 @@ import shutil
 import snakemake.cli
 import re
 import logging
-import umap
-from sklearn.cluster import DBSCAN
+import importlib.util
 import dataclasses
 from simple_parsing import field
 from simple_parsing.helpers import Serializable
@@ -25,6 +24,25 @@ from typing import List
 import argparse
 
 logger = logging.getLogger(__name__)
+
+
+def _lazy_import(name):
+    spec = importlib.util.find_spec(name)
+    spec.loader = importlib.util.LazyLoader(spec.loader)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+# umap pulls in numba, pynndescent and sklearn; only anchor jobs call it
+umap = _lazy_import("umap")
+
+
+def DBSCAN(*args, **kwargs):
+    from sklearn.cluster import DBSCAN as _DBSCAN
+
+    return _DBSCAN(*args, **kwargs)
 
 
 def init_logger(logfile):
@@ -404,7 +422,7 @@ class Index(Serializable):
     def steps(self):
         return (1, self.lowres_step)
 
-    def init_opdefs(self):
+    def opdef_texts(self):
         genome_dbs = [list()]
         i = 0
         for name, fasta in self.samples["fasta"].items():
@@ -414,16 +432,22 @@ class Index(Serializable):
             genome_dbs[-1].append((name, self.kmc_prefix(name, "onehot")))
             i += 1
 
-        for i, fname in enumerate(self.opdef_filenames):
+        texts = []
+        for i in range(self.kmc_bitvec_count):
             bitvec_fname = self.kmc_prefix(f"bitvec{i}")
+            text = "INPUT:\n"
+            for name, db in genome_dbs[i]:
+                text += f"{name} = {db}\n"
+            text += f"OUTPUT:\n{bitvec_fname} = {genome_dbs[i][0][0]}"
+            for name, _ in genome_dbs[i][1:]:
+                text += f" + {name}"
+            texts.append(text + "\n-ocsum\n")
+        return texts
+
+    def init_opdefs(self):
+        for fname, text in zip(self.opdef_filenames, self.opdef_texts()):
             with open(fname, "w") as opdefs:
-                opdefs.write("INPUT:\n")
-                for name, db in genome_dbs[i]:
-                    opdefs.write(f"{name} = {db}\n")
-                opdefs.write(f"OUTPUT:\n{bitvec_fname} = {genome_dbs[i][0][0]}")
-                for name, _ in genome_dbs[i][1:]:
-                    opdefs.write(f" + {name}")
-                opdefs.write("\n-ocsum\n")
+                opdefs.write(text)
 
     def get_anchor_filenames(self, name):
         return self.genomes[name].anchor_filenames
@@ -1009,7 +1033,7 @@ class Genome:
             gene_tabix = gene_df.reset_index()[self.gene_tabix_cols]
             self._write_tabix(gene_tabix, "gene")
 
-    def run_anchor(self, bitvecs, logfile=None):
+    def run_anchor(self, bitvecs, logfile=None, umaps=True):
         logging.basicConfig(
             filename=logfile,
             level=logging.INFO,
@@ -1027,6 +1051,8 @@ class Genome:
         if self.annotated:
             gene_df = self.init_gff()  # .groupby("chr")
             chr_genes = gene_df.index.get_level_values(0).value_counts()
+            gene_cols = gene_df.columns.get_indexer(self.bitsum_index)
+            gene_counts = np.zeros((len(gene_df), self.ngenomes + 1), dtype=np.int64)
             logger.info("Annotation pre-processed")
         else:
             chr_genes = pd.Series([0])
@@ -1053,14 +1079,34 @@ class Genome:
             logger.info(f"Anchored {chrom}")
 
             if self.annotated and chrom in chr_genes:
-                for _, start, end in gene_df.loc[[chrom]].index:
-                    if end <= start or start < 0 or end > len(bitsum):
+                rows = gene_df.index.get_locs([chrom])
+                starts = gene_df.index.get_level_values("start")[rows].to_numpy()
+                ends = gene_df.index.get_level_values("end")[rows].to_numpy()
+
+                # Rows sharing (chr, start, end) were each incremented once per
+                # duplicate by the original per-gene .loc update, so scale by the
+                # duplicate count.
+                _, inverse, dup = np.unique(
+                    np.stack([starts, ends], axis=1),
+                    axis=0,
+                    return_inverse=True,
+                    return_counts=True,
+                )
+                dup = dup[inverse.reshape(-1)]
+
+                nbitsum = len(bitsum)
+                for j in range(len(rows)):
+                    start, end = starts[j], ends[j]
+                    if end <= start or start < 0 or end > nbitsum:
                         logger.warning(
                             f"Skipping gene at {chrom}:{start}-{end}, coordinates out-of-bounds"
                         )
                         continue
-                    occ, counts = np.unique(bitsum[start:end], return_counts=True)
-                    gene_df.loc[(chrom, start, end), occ] += counts
+                    gene_counts[rows[j]] += dup[j] * np.bincount(
+                        bitsum[start:end], minlength=self.ngenomes + 1
+                    )
+
+                gene_df.iloc[rows, gene_cols] = gene_counts[rows]
                 logger.info(f"Annotated {chrom}")
 
             t = time()
@@ -1094,7 +1140,8 @@ class Genome:
             )
 
         self.init_read()
-        self.write_umaps()
+        if umaps:
+            self.write_umaps()
 
     @property
     def chrom_umaps_filename(self):
@@ -1104,7 +1151,12 @@ class Genome:
     def genome_umap_filename(self):
         return os.path.join(self.prefix, "genome_umap.csv")
 
-    def write_umaps(self):
+    def write_umaps(self, outdir=None):
+        """Write chrom_umaps.csv and genome_umap.csv into `outdir` (default: the genome's anchor directory)."""
+        chrom_file, genome_file = self.chrom_umaps_filename, self.genome_umap_filename
+        if outdir is not None:
+            chrom_file = os.path.join(outdir, os.path.basename(chrom_file))
+            genome_file = os.path.join(outdir, os.path.basename(genome_file))
         genome_paircounts = {}
         chrom_umaps = list()
         for chrom in self.chrs.index:
@@ -1120,12 +1172,48 @@ class Genome:
             ).T.fillna(0)
 
         self.chrom_umaps = pd.concat(chrom_umaps).set_index("chrom")
-        self.chrom_umaps.to_csv(self.chrom_umaps_filename)
+        self.chrom_umaps.to_csv(chrom_file)
 
         self.genome_umap = self.run_umap(
             pd.concat(genome_paircounts, names=["chrom", "start"]), self.index.genome_umap
         )
-        self.genome_umap.to_csv(self.genome_umap_filename, index=False)
+        self.genome_umap.to_csv(genome_file, index=False)
+
+    @staticmethod
+    def _umap_knn(reducer, x, n):
+        """Give `reducer` the exact k-nearest-neighbour table umap builds itself for under 4096 rows.
+
+        umap takes sklearn's pairwise distances and a stable argsort of each row, in a numba kernel
+        that is slow to compile; numpy's stable argsort gives the same table.
+        """
+        if x.shape[0] >= 4096 or x.shape[0] <= n:
+            return
+        from sklearn.metrics import pairwise_distances
+        from umap.distances import euclidean, pairwise_special_metric
+
+        x32 = np.ascontiguousarray(x, dtype=np.float32)
+        try:
+            dmat = pairwise_distances(x32, metric=euclidean)
+        except (ValueError, TypeError):
+            dmat = pairwise_special_metric(x32, metric=euclidean, kwds={})
+        indices = np.argsort(dmat, axis=1, kind="stable")[:, : n + 1]
+        nearest = np.take_along_axis(dmat, indices, axis=1)
+        if (nearest[:, 1:] == nearest[:, :-1]).any():
+            return  # tied distances: leave the fit to umap's own path
+        indices = indices[:, :n].astype(np.int32)
+        reducer.precomputed_knn = (indices, nearest[:, :n], None)
+
+    @staticmethod
+    def warm_umap(index):
+        """Compile umap's numba kernels with a small fit shaped like run_umap's input."""
+        rng = np.random.default_rng(0)
+        x = np.asfortranarray(rng.random((50, 50)))
+        reducer = umap.UMAP(
+            n_neighbors=index.chrom_umap.neighbors, min_dist=index.chrom_umap.dist,
+            n_components=2, n_jobs=1, random_state=42,
+        )
+        Genome._umap_knn(reducer, x, index.chrom_umap.neighbors)
+        reducer.fit_transform(x)
 
     def run_umap(self, paircounts, args):
         if len(paircounts) <= args.neighbors:
@@ -1137,7 +1225,9 @@ class Genome:
                 n_neighbors=args.neighbors, min_dist=args.dist, n_components=2, n_jobs=1, random_state=42
             )
             try:
-                embedding = reducer.fit_transform(paircounts.to_numpy())
+                x = paircounts.to_numpy()
+                Genome._umap_knn(reducer, x, args.neighbors)
+                embedding = reducer.fit_transform(x)
             except Exception as e:
                 logger.warning(f"{self.name} UMAP failed for at least one chromosome.")
                 logger.error(f"Error: {e}")
