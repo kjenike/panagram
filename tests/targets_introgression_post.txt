@@ -1,0 +1,84 @@
+# Targets: introgression post-processing, visualization, heatmap, bed_to_txt, runner
+# status: T = tested with a value check, - = not covered (reason after #)
+
+## panagram/introgressions/postprocess_introgressions.py
+function read_fasta_generator
+function read_fasta
+function extract_bed_region
+function bed_file_is_empty
+function read_bed_file
+function merge_centromere_regions
+function align_assemblies
+function liftover_coordinates
+function run_alignments
+function run_liftovers
+function get_intro_df_template
+function bed_to_bins
+function fill_gaps
+function remove_small_regions
+function get_bed_pieces
+function postprocess_introgressions
+option --bed
+option --idx
+option --out
+option --act
+option --ref
+option --map
+option --threads
+option --paf
+option --bin
+option --min
+option --gap
+
+## panagram/introgressions/visualize_introgressions.py
+function create_heatmap
+function create_heatmap_runner
+function calculate_pr_auc
+function create_mcc_curve
+function create_pr_curve
+function create_pr_curve_accessions
+function create_pr_curve_chromosomes
+function create_scored_heatmap_collage
+function main
+option -v
+option --dir
+option --grp
+option --thresholds
+
+## panagram/introgressions/create_heatmap.py
+function panagram_heatmap_general
+function main
+option --index-dir
+option --anchor
+option --groups
+option --bitmap-step
+option --bin-size
+option --rmf
+option --gnm
+
+## panagram/introgressions/bed_to_txt.py
+function bed_to_text
+option --gt_bed_file
+option --index_dir
+option --ref
+option --wild_type
+option --wild_type_group
+option --bin_size
+
+## panagram/introgressions/introgression_runner.py
+function parse_config
+function run_introgression_pipeline
+function main
+option <config.yaml> (argv[1])
+option --sweep (argv[2])
+
+## run_example.sh
+script run_example.sh  # not tested: needs the `panagram` console command on PATH and 30 Mb real data; not run here
+
+## Not covered
+function merge_centromere_regions via `--act fcen` in postprocess_introgressions()  # fcen first raises UnboundLocalError (bin_size, line 773), and its output carries extra columns; only the function is tested
+visualize_introgressions.py `-v mcc` alone  # raises UnboundLocalError (intro_types, line 520)
+bed_to_txt.py empty ground-truth BED branch  # read_bed_file returns None, so `.empty` (line 64) raises AttributeError
+create_heatmap.py --rmf  # store_true with default True: the flag cannot change the value; default value is tested
+visualize_introgressions.py `-v shtmp` through main() with 18 thresholds  # the collage function is tested directly with 18 thresholds
+run_example.sh  # needs the `panagram` command on PATH and real A. thaliana data; not run
